@@ -1,0 +1,173 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import { usePlayer } from "@/components/player/store";
+
+function fmt(sec: number) {
+  if (!Number.isFinite(sec) || sec < 0) return "0:00";
+  const s = Math.floor(sec);
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${m}:${String(r).padStart(2, "0")}`;
+}
+
+export function PlayerBar() {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const {
+    queue,
+    index,
+    playing,
+    setQueue,
+    play,
+    pause,
+    next,
+    prev,
+  } = usePlayer() as any;
+
+  const hasQueue = Array.isArray(queue) && queue.length > 0;
+  const currentTrack = hasQueue ? queue[index] : null;
+
+  const src = currentTrack?.url || "";
+
+  const [current, setCurrent] = useState(0);
+  const [duration, setDuration] = useState(0);
+
+  // Keep audio element in sync with src + playing
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    if (!src) {
+      audio.removeAttribute("src");
+      setCurrent(0);
+      setDuration(0);
+      return;
+    }
+
+    audio.src = src;
+    audio.load();
+    setCurrent(0);
+
+    if (playing) {
+      audio.play().catch((err) => {
+        console.error("play() blocked/failed:", err);
+      });
+    }
+  }, [src, playing]);
+
+  // If user pauses/plays without changing src
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    if (!src) return;
+
+    if (playing) {
+      audio.play().catch((err) => console.error("play() blocked/failed:", err));
+    } else {
+      audio.pause();
+    }
+  }, [playing, src]);
+
+  function onScrub(e: React.ChangeEvent<HTMLInputElement>) {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const v = Number(e.target.value);
+    audio.currentTime = v;
+    setCurrent(v);
+  }
+
+  const title = useMemo(() => {
+    if (!currentTrack) return "—";
+    return currentTrack.track ? `${currentTrack.track}. ${currentTrack.title}` : currentTrack.title;
+  }, [currentTrack]);
+
+  return (
+    <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-white/10 bg-black/80 backdrop-blur">
+      <div className="mx-auto flex max-w-3xl items-center gap-3 p-3">
+        {/* Hidden audio element */}
+        <audio
+          ref={audioRef}
+          onTimeUpdate={(e) => setCurrent((e.target as HTMLAudioElement).currentTime)}
+          onLoadedMetadata={(e) => setDuration((e.target as HTMLAudioElement).duration || 0)}
+          onEnded={() => next?.()}
+          onError={() => {
+            const a = audioRef.current;
+            console.error("AUDIO ERROR", a?.error, a?.src);
+          }}
+        />
+
+        {/* Controls */}
+        <button
+          className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm hover:bg-white/10 disabled:opacity-40"
+          onClick={() => prev?.()}
+          disabled={!hasQueue}
+          title="Previous"
+        >
+          ◀◀
+        </button>
+
+        {playing ? (
+          <button
+            className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm hover:bg-white/10 disabled:opacity-40"
+            onClick={() => pause?.()}
+            disabled={!hasQueue}
+            title="Pause"
+          >
+            ❚❚
+          </button>
+        ) : (
+          <button
+            className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm hover:bg-white/10 disabled:opacity-40"
+            onClick={() => play?.()}
+            disabled={!hasQueue}
+            title="Play"
+          >
+            ▶
+          </button>
+        )}
+
+        <button
+          className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm hover:bg-white/10 disabled:opacity-40"
+          onClick={() => next?.()}
+          disabled={!hasQueue}
+          title="Next"
+        >
+          ▶▶
+        </button>
+
+        {/* Track + Scrubber */}
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-medium">{title}</div>
+          <div className="mt-1 flex items-center gap-3">
+            <div className="w-12 text-xs text-white/60 tabular-nums">{fmt(current)}</div>
+
+            <input
+              type="range"
+              min={0}
+              max={duration || 0}
+              step={0.1}
+              value={Math.min(current, duration || 0)}
+              onChange={onScrub}
+              disabled={!hasQueue || !duration}
+              className="w-full accent-fuchsia-400 disabled:opacity-40"
+            />
+
+            <div className="w-12 text-right text-xs text-white/60 tabular-nums">{fmt(duration)}</div>
+          </div>
+        </div>
+
+        {/* Clear queue (optional) */}
+        <button
+          className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm hover:bg-white/10 disabled:opacity-40"
+          onClick={() => setQueue?.([], 0)}
+          disabled={!hasQueue}
+          title="Clear"
+        >
+          ✕
+        </button>
+      </div>
+    </div>
+  );
+}
