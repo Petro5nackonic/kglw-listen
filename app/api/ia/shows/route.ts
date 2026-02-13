@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 type Doc = { identifier: string; title?: string; date?: string };
 
 function extractDate(doc: Doc): string | null {
-  const idMatch = doc.identifier?.match(/\d{4}-\d{2}-\d{2}/);
+  const idMatch = doc.identifier?.match(/\b(19|20)\d{2}-\d{2}-\d{2}\b/);
   if (idMatch) return idMatch[0];
 
   const title = doc.title || "";
@@ -19,71 +19,51 @@ function extractDate(doc: Doc): string | null {
   return null;
 }
 
-async function fetchArchivePage(page: number, rows: number) {
+export async function GET(req: NextRequest) {
+  const sp = req.nextUrl.searchParams;
+  const appPage = Math.max(1, Number(sp.get("page") || "1"));
+
+  const APP_PAGE_SIZE = 25;
+
+  // If this grows later, we’ll add caching/indexing,
+  // but for now numFound is small (you saw 140).
+  const MAX_FETCH = 2000;
+
   const q = `identifier:(kglw*) AND mediatype:(audio)`;
+
   const url =
     `https://archive.org/advancedsearch.php` +
     `?q=${encodeURIComponent(q)}` +
     `&fl[]=identifier&fl[]=title&fl[]=date` +
-    `&rows=${rows}` +
-    `&page=${page}` +
+    `&sort[]=${encodeURIComponent("identifier desc")}` + // any sort, we'll re-sort ourselves
+    `&rows=${MAX_FETCH}` +
+    `&page=1` +
     `&output=json`;
 
   const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) throw new Error("Archive request failed");
+  if (!res.ok) {
+    return Response.json(
+      { page: appPage, items: [], hasMore: false, error: "Archive request failed" },
+      { status: 502 }
+    );
+  }
 
   const data: any = await res.json();
   const docs = (data?.response?.docs || []) as Doc[];
   const numFound = Number(data?.response?.numFound || 0);
 
-  return { docs, numFound };
-}
+  // Build list with showDate
+  let all = docs.map((d) => ({
+    identifier: d.identifier,
+    title: d.title,
+    date: d.date,
+    showDate: extractDate(d),
+  }));
 
-export async function GET(req: NextRequest) {
-  const sp = req.nextUrl.searchParams;
-
-  // This is YOUR app page for infinite scroll (logical page)
-  const appPage = Math.max(1, Number(sp.get("page") || "1"));
-
-  // How many cards you want to return per app page
-  const APP_PAGE_SIZE = 25;
-
-  // We’ll pull more from Archive than we need, then sort + slice.
-  // Increase this if you still see gaps.
-  const ARCHIVE_ROWS = 200;
-  const ARCHIVE_PAGES_PER_REQUEST = 3; // pulls up to 600 docs per API call
-
-  // Start pulling Archive pages based on appPage, so later scrolls continue
-  const startArchivePage = (appPage - 1) * ARCHIVE_PAGES_PER_REQUEST + 1;
-
-  let all: Array<{
-    identifier: string;
-    title?: string;
-    date?: string;
-    showDate: string | null;
-  }> = [];
-
-  let numFound = 0;
-
-  for (let i = 0; i < ARCHIVE_PAGES_PER_REQUEST; i++) {
-    const archivePage = startArchivePage + i;
-    const { docs, numFound: nf } = await fetchArchivePage(archivePage, ARCHIVE_ROWS);
-    numFound = nf;
-
-    all.push(
-      ...docs.map((d) => ({
-        identifier: d.identifier,
-        title: d.title,
-        date: d.date,
-        showDate: extractDate(d),
-      }))
-    );
-  }
-
-  // Optional: push unknown dates to bottom (recommended)
+  // Keep only items with a showDate (recommended)
   all = all.filter((x) => x.showDate);
 
-  // Dedupe by identifier
+  // Dedupe by identifier (just in case)
   const seen = new Set<string>();
   all = all.filter((x) => {
     if (seen.has(x.identifier)) return false;
@@ -91,24 +71,23 @@ export async function GET(req: NextRequest) {
     return true;
   });
 
-  // Global sort newest -> oldest
+  // Sort newest -> oldest by computed showDate
   all.sort((a, b) => Date.parse(b.showDate!) - Date.parse(a.showDate!));
 
-  // Now take one logical app page
-  const items = all.slice(0, APP_PAGE_SIZE);
+  // App paging slice
+  const start = (appPage - 1) * APP_PAGE_SIZE;
+  const items = all.slice(start, start + APP_PAGE_SIZE);
 
-  // We can’t perfectly know "hasMore" without more state,
-  // but this works well enough for infinite scroll:
-  const hasMore = (startArchivePage + ARCHIVE_PAGES_PER_REQUEST) * ARCHIVE_ROWS < numFound;
+  const hasMore = start + APP_PAGE_SIZE < all.length;
 
   return Response.json({
     page: appPage,
     items,
     hasMore,
     debug: {
-      startArchivePage,
-      archivePagesPulled: ARCHIVE_PAGES_PER_REQUEST,
-      archiveRows: ARCHIVE_ROWS,
+      numFound,
+      fetched: docs.length,
+      usableWithShowDate: all.length,
       returned: items.length,
     },
   });
