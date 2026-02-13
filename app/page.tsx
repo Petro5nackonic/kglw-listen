@@ -1,158 +1,192 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-type Item = { identifier: string; title: string; showDate?: string | null; date?: string };
+type ShowItem = {
+  showKey: string;
+  showDate: string; // YYYY-MM-DD
+  title: string;
+  defaultId: string;
+  sourcesCount: number;
+  artwork?: string;
+};
 
-function archiveThumb(identifier: string) {
-  return `https://archive.org/services/img/${encodeURIComponent(identifier)}`;
-}
-
-function showDateFromIdentifier(identifier: string) {
-  const m = identifier.match(/\d{4}-\d{2}-\d{2}/);
-  return m ? m[0] : "Unknown date";
+function yearFromShowDate(showDate: string) {
+  const m = showDate?.match(/^(\d{4})-/);
+  return m ? m[1] : null;
 }
 
 export default function HomePage() {
-  const [items, setItems] = useState<Item[]>([]);
+  const [items, setItems] = useState<ShowItem[]>([]);
+  const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const pageRef = useRef(1);
-  const seenRef = useRef(new Set<string>());
+  const [yearFilter, setYearFilter] = useState<string>("All");
 
-  // refs so our scroll handler always sees current values
-  const loadingRef = useRef(false);
-  const hasMoreRef = useRef(true);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  const loadPage = useCallback(
+    async (p: number) => {
+      if (loading) return;
+      setLoading(true);
+      setError(null);
+
+      try {
+        const res = await fetch(`/api/ia/shows?page=${p}`, { cache: "no-store" });
+        if (!res.ok) throw new Error(`Shows API failed: ${res.status}`);
+        const data = await res.json();
+
+        const next: ShowItem[] = Array.isArray(data.items) ? data.items : [];
+
+        setItems((prev) => {
+          const map = new Map(prev.map((x) => [x.showKey, x]));
+          for (const it of next) map.set(it.showKey, it);
+          return Array.from(map.values());
+        });
+
+        setHasMore(Boolean(data.hasMore));
+        setPage(p);
+      } catch (e: any) {
+        setError(e?.message ?? "Failed to load shows");
+        setHasMore(false);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [loading]
+  );
 
   useEffect(() => {
-    loadingRef.current = loading;
-  }, [loading]);
+    loadPage(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
-    hasMoreRef.current = hasMore;
-  }, [hasMore]);
+    const el = sentinelRef.current;
+    if (!el) return;
 
-  async function loadNext() {
-    if (loadingRef.current || !hasMoreRef.current) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        const first = entries[0];
+        if (!first?.isIntersecting) return;
+        if (loading) return;
+        if (!hasMore) return;
+        loadPage(page + 1);
+      },
+      { root: null, rootMargin: "900px 0px", threshold: 0 }
+    );
 
-    setLoading(true);
-    setError(null);
+    io.observe(el);
+    return () => io.disconnect();
+  }, [hasMore, loadPage, loading, page]);
 
-    const p = pageRef.current;
+  const sorted = useMemo(() => {
+    return [...items].sort((a, b) => Date.parse(b.showDate) - Date.parse(a.showDate));
+  }, [items]);
 
-    try {
-      const res = await fetch(`/api/ia/shows?page=${p}`, { cache: "no-store" });
-      const data = await res.json();
-
-      const incoming: Item[] = data.items || [];
-      const deduped = incoming.filter((it) => {
-        if (seenRef.current.has(it.identifier)) return false;
-        seenRef.current.add(it.identifier);
-        return true;
-      });
-
-      setItems((prev) => [...prev, ...deduped]);
-      setHasMore(Boolean(data.hasMore));
-
-      pageRef.current = p + 1;
-    } catch (e: any) {
-      setError(e?.message || "Failed to load shows");
-    } finally {
-      setLoading(false);
+  const yearOptions = useMemo(() => {
+    const years = new Set<number>();
+    for (const it of sorted) {
+      const y = yearFromShowDate(it.showDate);
+      if (y) years.add(Number(y));
     }
-  }
+    const arr = Array.from(years).filter(Number.isFinite).sort((a, b) => b - a);
+    return ["All", ...arr.map(String)];
+  }, [sorted]);
 
-  // initial load
-  useEffect(() => {
-    loadNext();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // scroll-based infinite load
-  useEffect(() => {
-    let ticking = false;
-
-    const onScroll = () => {
-      if (ticking) return;
-      ticking = true;
-
-      requestAnimationFrame(() => {
-        ticking = false;
-
-        // distance from bottom
-        const scrollY = window.scrollY || window.pageYOffset;
-        const viewport = window.innerHeight;
-        const full = document.documentElement.scrollHeight;
-
-        const nearBottom = scrollY + viewport >= full - 900; // 900px threshold
-        if (nearBottom) loadNext();
-      });
-    };
-
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const filtered = useMemo(() => {
+    if (yearFilter === "All") return sorted;
+    return sorted.filter((it) => yearFromShowDate(it.showDate) === yearFilter);
+  }, [sorted, yearFilter]);
 
   return (
-    <div className="min-h-[calc(100vh-6rem)] pb-28">
-      {/* Background */}
-      <div className="fixed inset-0 -z-10 bg-[radial-gradient(ellipse_at_top,_rgba(168,85,247,0.25),_transparent_55%),radial-gradient(ellipse_at_bottom,_rgba(79,70,229,0.25),_transparent_55%),linear-gradient(180deg,_#05010b,_#05010b)]" />
-
-      <div className="flex items-center justify-between py-3">
-        <div className="text-2xl font-bold tracking-tight text-white">Shows</div>
+    <div className="mx-auto max-w-3xl">
+      <div className="mb-4 flex items-baseline justify-between">
+        <h1 className="text-3xl font-semibold text-white">Shows</h1>
         <div className="text-sm text-white/60">Newest → Oldest</div>
       </div>
 
-      <div className="space-y-3 pb-6">
-        {items.map((it) => (
-          <Link key={it.identifier} href={`/show/${encodeURIComponent(it.identifier)}`} className="group block">
-            <div className="flex gap-3 rounded-2xl border border-white/10 bg-white/5 p-3 backdrop-blur hover:bg-white/10 transition">
-              <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-white/5">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={archiveThumb(it.identifier)} alt="" className="h-full w-full object-cover" />
-              </div>
-
-              <div className="min-w-0 flex-1">
-                <div className="text-xs text-white/60">King Gizzard &amp; The Lizard Wizard</div>
-<div className="truncate text-lg font-semibold text-white">
-  {it.showDate || "Unknown date"}
-</div>
-                <div className="truncate text-sm text-white/60">{it.title}</div>
-              </div>
-
-              <div className="self-center text-white/40 group-hover:text-white/60 transition">→</div>
-            </div>
-          </Link>
-        ))}
+      {/* Quick filter pills */}
+      <div className="mb-4">
+        <div className="mb-2 text-xs font-medium text-white/60">Quick Filter:</div>
+        <div className="flex gap-2 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {yearOptions.map((y) => {
+            const active = yearFilter === y;
+            return (
+              <button
+                key={y}
+                onClick={() => setYearFilter(y)}
+                className={[
+                  "whitespace-nowrap rounded-full px-3 py-1 text-sm border transition",
+                  active
+                    ? "bg-white/20 text-white border-white/20"
+                    : "bg-white/5 text-white/70 border-white/10 hover:bg-white/10 hover:text-white",
+                ].join(" ")}
+              >
+                {y}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {error && (
-        <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
+        <div className="mb-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
           {error}
         </div>
       )}
 
-      {loading && <div className="py-6 text-center text-sm text-white/60">Loading…</div>}
+      <div className="space-y-3">
+        {filtered.map((it) => {
+          const thumb = it.artwork || `https://archive.org/services/img/${encodeURIComponent(it.defaultId)}`;
 
-      {!hasMore && !loading && items.length > 0 && (
-        <div className="py-6 text-center text-sm text-white/40">You’ve reached the end.</div>
-      )}
+          return (
+            <Link
+              key={it.showKey}
+              href={`/show/${encodeURIComponent(it.showKey)}`}
+              className="group block rounded-2xl border border-white/10 bg-white/5 p-3 backdrop-blur hover:bg-white/10"
+            >
+              <div className="flex gap-3">
+                <div className="h-14 w-14 overflow-hidden rounded-xl border border-white/10 bg-black/30">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={thumb} alt="" className="h-full w-full object-cover" />
+                </div>
 
-      {/* Optional manual fallback button */}
-      {hasMore && !loading && (
-        <div className="py-6 text-center">
-          <button
-            onClick={loadNext}
-            className="rounded-xl border border-white/15 bg-white/10 px-4 py-2 text-sm text-white hover:bg-white/15"
-          >
-            Load more
-          </button>
-        </div>
-      )}
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs text-white/60">King Gizzard &amp; The Lizard Wizard</div>
+                  <div className="text-xl font-semibold text-white">{it.showDate}</div>
+                  <div className="truncate text-sm text-white/70">{it.title}</div>
+                  <div className="mt-1 text-xs text-white/50">
+                    {it.sourcesCount} source{it.sourcesCount === 1 ? "" : "s"}
+                  </div>
+                </div>
+
+                <div className="flex items-center text-white/50 group-hover:text-white">→</div>
+              </div>
+            </Link>
+          );
+        })}
+      </div>
+
+      {/* Sentinel (infinite scroll) */}
+      <div ref={sentinelRef} className="h-10" />
+
+      <div className="py-6 text-center text-sm text-white/60">
+        {yearFilter !== "All"
+          ? hasMore
+            ? loading
+              ? "Loading…"
+              : "Tip: switch back to All to keep infinite scrolling."
+            : "You’ve reached the end."
+          : loading
+          ? "Loading…"
+          : hasMore
+          ? ""
+          : "You’ve reached the end."}
+      </div>
     </div>
   );
 }
