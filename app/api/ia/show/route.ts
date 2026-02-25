@@ -34,8 +34,27 @@ function scoreSource(doc: IaDoc): number {
   const downloads = parseNum(doc.downloads);
   const avg = parseNum(doc.avg_rating);
   const reviews = parseNum(doc.num_reviews);
-  const hintBonus = hint === "SBD" ? 3 : hint === "MATRIX" ? 1 : 0;
+  // Strongly prefer soundboard when available.
+  const hintBonus = hint === "SBD" ? 100 : hint === "MATRIX" ? 30 : 0;
   return Math.log10(downloads + 1) * 10 + avg * 2 + Math.log10(reviews + 1) + hintBonus;
+}
+
+// Tolerant venue matching so we don't accidentally exclude valid sources,
+// but we also don't include every recording from that date.
+function venueMatches(hay: string, venueSlug: string): boolean {
+  if (!venueSlug || venueSlug === "unknown") return true;
+
+  // Split slug into tokens; ignore tiny tokens (too noisy)
+  const tokens = venueSlug
+    .toLowerCase()
+    .split("-")
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 4);
+
+  if (tokens.length === 0) return true;
+
+  // Pass if ANY meaningful token matches in identifier/title
+  return tokens.some((t) => hay.includes(t));
 }
 
 export async function GET(req: NextRequest) {
@@ -46,12 +65,12 @@ export async function GET(req: NextRequest) {
   const showDate = extractShowDateFromKey(key);
   if (!showDate) return Response.json({ error: "Invalid key" }, { status: 400 });
 
-  // KGLW only
+  // KGLW only + only items that contain the date in identifier or title
   const q =
     `(collection:(KingGizzardAndTheLizardWizard)` +
     ` OR creator:("King Gizzard & The Lizard Wizard")` +
     ` OR creator:("King Gizzard And The Lizard Wizard"))` +
-    ` AND mediatype:(audio)` +
+    ` AND mediatype:(audio OR etree)` +
     ` AND (identifier:(*${showDate}*) OR title:(*${showDate}*))`;
 
   const fields = ["identifier", "title", "date", "downloads", "avg_rating", "num_reviews"];
@@ -70,13 +89,12 @@ export async function GET(req: NextRequest) {
   const data: any = await res.json();
   const docs: IaDoc[] = data?.response?.docs || [];
 
-  // Filter down to only sources that match our showKey’s venue slug approximately
-  // (we keep it simple: if the showKey venue part appears in identifier or title)
-  const venueSlug = key.split("|")[1] || "";
+  const venueSlug = (key.split("|")[1] || "").toLowerCase();
+
   const sources = docs
     .filter((d) => {
       const hay = `${d.identifier} ${d.title || ""}`.toLowerCase();
-      return venueSlug ? hay.includes(venueSlug) || true : true; // keep tolerant
+      return venueMatches(hay, venueSlug);
     })
     .map((d) => {
       const hint = sourceHint(d.identifier, d.title);
