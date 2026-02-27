@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
+import { usePlayer } from "@/components/player/store";
+import { AddToPlaylistMenu } from "@/components/playlists/AddToPlaylistMenu";
 
 type Source = {
   identifier: string;
@@ -49,7 +51,13 @@ function safeDecode(input: string) {
 
 function isAudioFile(name: string) {
   const n = name.toLowerCase();
-  return n.endsWith(".mp3") || n.endsWith(".flac") || n.endsWith(".ogg") || n.endsWith(".m4a") || n.endsWith(".wav");
+  return (
+    n.endsWith(".mp3") ||
+    n.endsWith(".flac") ||
+    n.endsWith(".ogg") ||
+    n.endsWith(".m4a") ||
+    n.endsWith(".wav")
+  );
 }
 
 function audioExtRank(name: string): number {
@@ -70,12 +78,23 @@ function trackSetRank(fileName: string): number {
   if (n.includes("stereo")) return 2;
 
   // Neutral/default.
-  if (n.includes("audience") || n.includes("matrix") || n.includes("soundboard")) return 3;
+  if (
+    n.includes("audience") ||
+    n.includes("matrix") ||
+    n.includes("soundboard")
+  )
+    return 3;
 
   // De-prioritize raw/original multi-channel captures.
   if (n.includes("og")) return 10;
   if (n.includes("original")) return 11;
-  if (n.includes("4ch") || n.includes("4-ch") || n.includes("4 channel") || n.includes("4-channel")) return 12;
+  if (
+    n.includes("4ch") ||
+    n.includes("4-ch") ||
+    n.includes("4 channel") ||
+    n.includes("4-channel")
+  )
+    return 12;
 
   return 5;
 }
@@ -86,8 +105,20 @@ function parseTrackNum(t?: string) {
   return m ? Number(m[1]) : Number.POSITIVE_INFINITY;
 }
 
-export default function ShowPage({ params }: { params: Record<string, string | string[] | undefined> }) {
+export default function ShowPage({
+  params,
+}: {
+  params: Record<string, string | string[] | undefined>;
+}) {
   const pathname = usePathname();
+
+  const {
+    queue,
+    index: playingIndex,
+    playing,
+    setQueue,
+    setPlaying,
+  } = usePlayer();
 
   // Primary: params.key (ideal)
   // Fallback: last segment of the URL (/show/<segment>)
@@ -110,9 +141,6 @@ export default function ShowPage({ params }: { params: Record<string, string | s
 
   const [meta, setMeta] = useState<IaMetadataResponse | null>(null);
 
-  const [nowPlayingUrl, setNowPlayingUrl] = useState<string | null>(null);
-  const [nowPlayingTitle, setNowPlayingTitle] = useState<string>("");
-
   useEffect(() => {
     let alive = true;
 
@@ -122,8 +150,6 @@ export default function ShowPage({ params }: { params: Record<string, string | s
       setShow(null);
       setSelectedId(null);
       setMeta(null);
-      setNowPlayingUrl(null);
-      setNowPlayingTitle("");
 
       // Guard: if we still don't have a key, show a real error instead of calling API with undefined
       if (!showKey || showKey === "undefined") {
@@ -133,7 +159,10 @@ export default function ShowPage({ params }: { params: Record<string, string | s
       }
 
       try {
-        const res = await fetch(`/api/ia/show?key=${encodeURIComponent(showKey)}`, { cache: "no-store" });
+        const res = await fetch(
+          `/api/ia/show?key=${encodeURIComponent(showKey)}`,
+          { cache: "no-store" },
+        );
         if (!res.ok) throw new Error(`GET /api/ia/show failed: ${res.status}`);
         const data = (await res.json()) as ShowApiResponse;
 
@@ -164,8 +193,12 @@ export default function ShowPage({ params }: { params: Record<string, string | s
       setMeta(null);
 
       try {
-        const res = await fetch(`https://archive.org/metadata/${encodeURIComponent(selectedId)}`, { cache: "no-store" });
-        if (!res.ok) throw new Error(`GET archive metadata failed: ${res.status}`);
+        const res = await fetch(
+          `https://archive.org/metadata/${encodeURIComponent(selectedId)}`,
+          { cache: "no-store" },
+        );
+        if (!res.ok)
+          throw new Error(`GET archive metadata failed: ${res.status}`);
         const data = (await res.json()) as IaMetadataResponse;
 
         if (!alive) return;
@@ -191,7 +224,9 @@ export default function ShowPage({ params }: { params: Record<string, string | s
 
     // Pick a single track set (e.g., Edited vs OG) to avoid duplicates.
     const bestSetRank = Math.min(...audioAll.map((f) => trackSetRank(f.name)));
-    const audioSet = audioAll.filter((f) => trackSetRank(f.name) === bestSetRank);
+    const audioSet = audioAll.filter(
+      (f) => trackSetRank(f.name) === bestSetRank,
+    );
 
     // Prefer a single format (FLAC > MP3 > ...), since IA often includes multiple encodes.
     const bestExtRank = Math.min(...audioSet.map((f) => audioExtRank(f.name)));
@@ -231,7 +266,9 @@ export default function ShowPage({ params }: { params: Record<string, string | s
         <div className="mt-3">
           <div className="text-sm text-white/70">{showDate || "(no date)"}</div>
           <h1 className="mt-1 text-xl font-semibold tracking-tight">
-            {meta?.metadata?.title || show?.sources?.find((s) => s.identifier === selectedId)?.title || showKey}
+            {meta?.metadata?.title ||
+              show?.sources?.find((s) => s.identifier === selectedId)?.title ||
+              showKey}
           </h1>
         </div>
       </header>
@@ -243,7 +280,8 @@ export default function ShowPage({ params }: { params: Record<string, string | s
           {error}
           <div className="mt-2 text-xs text-white/60">
             Debug: pathname = <span className="text-white/80">{pathname}</span>
-            {"\n"}Debug: showKey = <span className="text-white/80">{showKey}</span>
+            {"\n"}Debug: showKey ={" "}
+            <span className="text-white/80">{showKey}</span>
           </div>
         </div>
       ) : !show ? (
@@ -253,7 +291,8 @@ export default function ShowPage({ params }: { params: Record<string, string | s
           No sources found for this show.
           <div className="mt-2 text-xs text-white/60">
             Debug: pathname = <span className="text-white/80">{pathname}</span>
-            {"\n"}Debug: showKey = <span className="text-white/80">{showKey}</span>
+            {"\n"}Debug: showKey ={" "}
+            <span className="text-white/80">{showKey}</span>
           </div>
         </div>
       ) : (
@@ -262,7 +301,9 @@ export default function ShowPage({ params }: { params: Record<string, string | s
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <div className="text-sm text-white/70">Source</div>
-                <div className="text-xs text-white/50">{show.sources.length} source(s)</div>
+                <div className="text-xs text-white/50">
+                  {show.sources.length} source(s)
+                </div>
               </div>
 
               <select
@@ -270,56 +311,102 @@ export default function ShowPage({ params }: { params: Record<string, string | s
                 value={selectedId ?? ""}
                 onChange={(e) => {
                   setSelectedId(e.target.value);
-                  setNowPlayingUrl(null);
-                  setNowPlayingTitle("");
                 }}
               >
                 {show.sources.map((s) => (
                   <option key={s.identifier} value={s.identifier}>
-                    {s.hint} • {s.downloads.toLocaleString()} dl • {s.title.slice(0, 60)}
+                    {s.hint} • {s.downloads.toLocaleString()} dl •{" "}
+                    {s.title.slice(0, 60)}
                   </option>
                 ))}
               </select>
             </div>
           </section>
 
-          <section className="mb-6 rounded-xl border border-white/10 bg-white/5 p-4">
-            <div className="text-sm text-white/70">Now playing</div>
-            <div className="mt-1 text-sm">{nowPlayingTitle || "Pick a track below."}</div>
-            <div className="mt-3">
-              <audio key={nowPlayingUrl || "none"} controls className="w-full" src={nowPlayingUrl || undefined} />
-            </div>
-          </section>
-
           <section className="rounded-xl border border-white/10 bg-white/5">
             <div className="border-b border-white/10 p-4">
               <div className="text-sm text-white/70">Tracks</div>
-              <div className="text-xs text-white/50">{meta ? `${tracks.length} track(s)` : "Loading track list…"}</div>
+              <div className="text-xs text-white/50">
+                {meta ? `${tracks.length} track(s)` : "Loading track list…"}
+              </div>
             </div>
 
             <div className="divide-y divide-white/10">
-              {tracks.map((t, idx) => (
-                <button
-                  key={t.url}
-                  onClick={() => {
-                    setNowPlayingUrl(t.url);
-                    setNowPlayingTitle(t.title);
-                  }}
-                  className="w-full text-left p-4 hover:bg-white/5 transition flex items-center justify-between gap-4"
-                >
-                  <div className="min-w-0">
-                    <div className="text-sm">
-                      <span className="text-white/50 mr-2">{String(idx + 1).padStart(2, "0")}.</span>
-                      <span className="truncate inline-block max-w-[65ch] align-bottom">{t.title}</span>
+              {tracks.map((t, idx) => {
+                const currentUrl = queue?.[playingIndex]?.url;
+                const isCurrent = Boolean(currentUrl && currentUrl === t.url);
+                const rightLabel = isCurrent
+                  ? playing
+                    ? "Playing"
+                    : "Paused"
+                  : "Play";
+
+                const trackForPlaylist = {
+                  title: t.title,
+                  url: t.url,
+                  length: t.length,
+                  track: String(idx + 1),
+                };
+
+                return (
+                  <div
+                    key={t.url}
+                    className={`w-full p-4 transition flex items-center justify-between gap-3 ${
+                      isCurrent ? "bg-white/5" : "hover:bg-white/5"
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        // Always set the full show as the queue so it can auto-advance.
+                        setQueue(
+                          tracks.map((x, i) => ({
+                            title: x.title,
+                            url: x.url,
+                            length: x.length,
+                            track: String(i + 1),
+                          })),
+                          idx,
+                        );
+
+                        // If user clicked the currently playing track, treat as toggle.
+                        // (Queue replace above keeps behavior consistent across sources.)
+                        if (isCurrent) setPlaying(!playing);
+                      }}
+                      className="flex min-w-0 flex-1 items-center justify-between gap-4 text-left"
+                    >
+                      <div className="min-w-0">
+                        <div className="text-sm">
+                          <span className="text-white/50 mr-2">
+                            {String(idx + 1).padStart(2, "0")}.
+                          </span>
+                          <span className="truncate inline-block max-w-[65ch] align-bottom">
+                            {t.title}
+                          </span>
+                        </div>
+                        {t.length ? (
+                          <div className="mt-1 text-xs text-white/50">
+                            {t.length}
+                          </div>
+                        ) : null}
+                      </div>
+
+                      <div className="text-xs text-white/60 shrink-0">
+                        {rightLabel}
+                      </div>
+                    </button>
+
+                    <div className="shrink-0">
+                      <AddToPlaylistMenu track={trackForPlaylist} />
                     </div>
-                    {t.length ? <div className="mt-1 text-xs text-white/50">{t.length}</div> : null}
                   </div>
-                  <div className="text-xs text-white/60 shrink-0">Play</div>
-                </button>
-              ))}
+                );
+              })}
 
               {meta && tracks.length === 0 && (
-                <div className="p-4 text-sm text-white/70">No audio tracks found for this source.</div>
+                <div className="p-4 text-sm text-white/70">
+                  No audio tracks found for this source.
+                </div>
               )}
             </div>
           </section>

@@ -3,7 +3,14 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-type Continent = "North America" | "South America" | "Europe" | "Asia" | "Africa" | "Oceania" | "Unknown";
+type Continent =
+  | "North America"
+  | "South America"
+  | "Europe"
+  | "Asia"
+  | "Africa"
+  | "Oceania"
+  | "Unknown";
 
 type ShowItem = {
   showKey: string;
@@ -77,7 +84,10 @@ function MultiSelectDropdown(props: {
   const full = value.join(", ") || "All";
 
   return (
-    <div ref={containerRef} className={`relative ${minWidthClass || ""}`.trim()}>
+    <div
+      ref={containerRef}
+      className={`relative ${minWidthClass || ""}`.trim()}
+    >
       <label htmlFor={id} className="mb-2 block text-sm text-white/70">
         {label}
       </label>
@@ -130,21 +140,26 @@ function MultiSelectDropdown(props: {
                   className="flex items-center justify-between gap-3 px-3 py-2 text-sm hover:bg-white/5 cursor-pointer"
                 >
                   <span className="flex items-center gap-2 min-w-0">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4"
-                    checked={checked}
-                    onChange={(e) => {
-                      const nextChecked = e.target.checked;
-                      setDraft((prev) => {
-                        if (nextChecked) return prev.includes(opt.value) ? prev : prev.concat(opt.value);
-                        return prev.filter((v) => v !== opt.value);
-                      });
-                    }}
-                  />
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4"
+                      checked={checked}
+                      onChange={(e) => {
+                        const nextChecked = e.target.checked;
+                        setDraft((prev) => {
+                          if (nextChecked)
+                            return prev.includes(opt.value)
+                              ? prev
+                              : prev.concat(opt.value);
+                          return prev.filter((v) => v !== opt.value);
+                        });
+                      }}
+                    />
                     <span className="truncate">{opt.value}</span>
                   </span>
-                  {typeof opt.count === "number" ? <span className="text-xs text-white/50">{opt.count}</span> : null}
+                  {typeof opt.count === "number" ? (
+                    <span className="text-xs text-white/50">{opt.count}</span>
+                  ) : null}
                 </label>
               );
             })}
@@ -192,8 +207,12 @@ export default function HomePage() {
 
   const [years, setYears] = useState<string[]>([]);
   const [continents, setContinents] = useState<string[]>([]);
-  const [yearFacet, setYearFacet] = useState<{ value: string; count: number }[]>([]);
-  const [continentFacet, setContinentFacet] = useState<{ value: string; count: number }[]>([]);
+  const [yearFacet, setYearFacet] = useState<
+    { value: string; count: number }[]
+  >([]);
+  const [continentFacet, setContinentFacet] = useState<
+    { value: string; count: number }[]
+  >([]);
   const [query, setQuery] = useState<string>("");
   const [debouncedQuery, setDebouncedQuery] = useState<string>("");
   const [sort, setSort] = useState<string>("newest");
@@ -278,7 +297,7 @@ export default function HomePage() {
         if (!hasMore) return;
         loadPage(page + 1, "append");
       },
-      { root: null, rootMargin: "600px", threshold: 0 }
+      { root: null, rootMargin: "600px", threshold: 0 },
     );
 
     obs.observe(el);
@@ -307,9 +326,20 @@ export default function HomePage() {
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-6">
-      <header className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">kglw-listen</h1>
-        <p className="text-white/70">Browse King Gizzard live shows from Archive.org</p>
+      <header className="mb-6 flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">kglw-listen</h1>
+          <p className="text-white/70">
+            Browse King Gizzard live shows from Archive.org
+          </p>
+        </div>
+
+        <Link
+          href="/playlists"
+          className="shrink-0 rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-sm text-white/80 hover:border-white/25 hover:text-white transition"
+        >
+          Playlists
+        </Link>
       </header>
 
       <section className="mb-6 space-y-4">
@@ -329,7 +359,9 @@ export default function HomePage() {
       </section>
 
       {error && (
-        <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">{error}</div>
+        <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
+          {error}
+        </div>
       )}
 
       <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -381,14 +413,20 @@ export default function HomePage() {
             <div className="flex items-start gap-3">
               <div className="h-14 w-14 overflow-hidden rounded-lg bg-black/20 shrink-0">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={s.artwork} alt="" className="h-full w-full object-cover" />
+                <img
+                  src={s.artwork}
+                  alt=""
+                  className="h-full w-full object-cover"
+                />
               </div>
 
               <div className="min-w-0">
                 <div className="text-sm text-white/70">{s.showDate}</div>
                 <div className="mt-0.5 line-clamp-2 font-medium">{s.title}</div>
                 <div className="mt-1 text-xs text-white/60 flex flex-wrap gap-x-2 gap-y-1">
-                  {s.continent && s.continent !== "Unknown" && <span>{s.continent}</span>}
+                  {s.continent && s.continent !== "Unknown" && (
+                    <span>{s.continent}</span>
+                  )}
                   <span>•</span>
                   <span>
                     {s.sourcesCount} source{s.sourcesCount === 1 ? "" : "s"}
@@ -402,7 +440,9 @@ export default function HomePage() {
 
       <div className="py-8">
         {loading && <div className="text-sm text-white/60">Loading…</div>}
-        {!hasMore && !loading && <div className="text-sm text-white/60">End of list.</div>}
+        {!hasMore && !loading && (
+          <div className="text-sm text-white/60">End of list.</div>
+        )}
         <div ref={sentinelRef} />
       </div>
     </main>
