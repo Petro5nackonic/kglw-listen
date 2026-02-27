@@ -529,7 +529,7 @@ async function fetchSongMatchInfo(
       `https://archive.org/metadata/${encodeURIComponent(identifier)}`,
       { cache: "no-store", signal: controller.signal },
     );
-    if (!res.ok) return null;
+    if (!res.ok) return { seconds: null, title: null, length: null, url: null };
     const data: any = await res.json();
     const files: any[] = Array.isArray(data?.files) ? data.files : [];
 
