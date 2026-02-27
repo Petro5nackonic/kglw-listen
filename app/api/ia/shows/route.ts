@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { formatDuration } from "@/utils/formatDuration";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -543,7 +544,7 @@ async function fetchSongMatchInfo(
 
       const sec = parseLengthToSeconds(f?.length);
       if (sec == null) continue;
-      const length = String(f?.length || "").trim() || null;
+      const length = formatDuration(String(f?.length || "").trim() || null) || null;
       const url = `https://archive.org/download/${encodeURIComponent(identifier)}/${encodeURIComponent(name)}`;
       if (!best || sec > best.seconds) {
         best = {

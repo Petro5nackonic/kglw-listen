@@ -89,7 +89,7 @@ export function PlayerBar() {
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-white/10 bg-black/80 backdrop-blur">
-      <div className="mx-auto flex max-w-3xl items-center gap-3 p-3">
+      <div className="mx-auto max-w-3xl p-3">
         {/* Hidden audio element */}
         <audio
           ref={audioRef}
@@ -102,75 +102,80 @@ export function PlayerBar() {
           }}
         />
 
-        {/* Controls */}
-        <button
-          className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm hover:bg-white/10 disabled:opacity-40"
-          onClick={() => prev?.()}
-          disabled={!hasQueue}
-          title="Previous"
-        >
-          ◀◀
-        </button>
+        {/* Full-width scrubber row (mobile friendly) */}
+        <div className="mb-2 flex items-center gap-3 px-1">
+          <div className="w-12 text-xs text-white/60 tabular-nums">{fmt(current)}</div>
 
-        {playing ? (
-          <button
-            className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm hover:bg-white/10 disabled:opacity-40"
-            onClick={() => pause?.()}
-            disabled={!hasQueue}
-            title="Pause"
-          >
-            ❚❚
-          </button>
-        ) : (
-          <button
-            className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm hover:bg-white/10 disabled:opacity-40"
-            onClick={() => play?.()}
-            disabled={!hasQueue}
-            title="Play"
-          >
-            ▶
-          </button>
-        )}
+          <input
+            type="range"
+            min={0}
+            max={duration || 0}
+            step={0.1}
+            value={Math.min(current, duration || 0)}
+            onChange={onScrub}
+            disabled={!hasQueue || !duration}
+            className="w-full accent-fuchsia-400 disabled:opacity-40"
+          />
 
-        <button
-          className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm hover:bg-white/10 disabled:opacity-40"
-          onClick={() => next?.()}
-          disabled={!hasQueue}
-          title="Next"
-        >
-          ▶▶
-        </button>
-
-        {/* Track + Scrubber */}
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-medium">{title}</div>
-          <div className="mt-1 flex items-center gap-3">
-            <div className="w-12 text-xs text-white/60 tabular-nums">{fmt(current)}</div>
-
-            <input
-              type="range"
-              min={0}
-              max={duration || 0}
-              step={0.1}
-              value={Math.min(current, duration || 0)}
-              onChange={onScrub}
-              disabled={!hasQueue || !duration}
-              className="w-full accent-fuchsia-400 disabled:opacity-40"
-            />
-
-            <div className="w-12 text-right text-xs text-white/60 tabular-nums">{fmt(duration)}</div>
+          <div className="w-12 text-right text-xs text-white/60 tabular-nums">
+            {fmt(duration)}
           </div>
         </div>
 
-        {/* Clear queue (optional) */}
-        <button
-          className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm hover:bg-white/10 disabled:opacity-40"
-          onClick={() => setQueue?.([], 0)}
-          disabled={!hasQueue}
-          title="Clear"
-        >
-          ✕
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm hover:bg-white/10 disabled:opacity-40"
+            onClick={() => prev?.()}
+            disabled={!hasQueue}
+            title="Previous"
+          >
+            ◀◀
+          </button>
+
+          {playing ? (
+            <button
+              className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm hover:bg-white/10 disabled:opacity-40"
+              onClick={() => pause?.()}
+              disabled={!hasQueue}
+              title="Pause"
+            >
+              ❚❚
+            </button>
+          ) : (
+            <button
+              className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm hover:bg-white/10 disabled:opacity-40"
+              onClick={() => play?.()}
+              disabled={!hasQueue}
+              title="Play"
+            >
+              ▶
+            </button>
+          )}
+
+          <button
+            className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm hover:bg-white/10 disabled:opacity-40"
+            onClick={() => next?.()}
+            disabled={!hasQueue}
+            title="Next"
+          >
+            ▶▶
+          </button>
+
+          {/* Track title */}
+          <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-medium">{title}</div>
+          </div>
+
+          {/* Clear queue (optional) */}
+          <button
+            className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm hover:bg-white/10 disabled:opacity-40"
+            onClick={() => setQueue?.([], 0)}
+            disabled={!hasQueue}
+            title="Clear"
+          >
+            ✕
+          </button>
+        </div>
       </div>
     </div>
   );

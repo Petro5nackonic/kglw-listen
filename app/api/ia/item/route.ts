@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { formatDuration } from "@/utils/formatDuration";
 
 const PLAYABLE_FORMATS = new Set([
   "VBR MP3",
@@ -31,7 +32,7 @@ export async function GET(req: NextRequest) {
       name: f.name,
       title: f.title || f.name,
       track: f.track,
-      length: f.length,
+      length: formatDuration(f.length),
       format: f.format,
       source: f.source,
       url: `https://archive.org/download/${encodeURIComponent(id)}/${encodeURIComponent(f.name)}`,

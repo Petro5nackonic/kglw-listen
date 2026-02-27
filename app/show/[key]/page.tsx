@@ -6,6 +6,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { usePlayer } from "@/components/player/store";
 import { AddToPlaylistMenu } from "@/components/playlists/AddToPlaylistMenu";
 import { toDisplayTitle, toDisplayTrackTitle } from "@/utils/displayTitle";
+import { formatDuration } from "@/utils/formatDuration";
 
 type Source = {
   identifier: string;
@@ -252,7 +253,7 @@ export default function ShowPage({
       if (seen.has(key)) continue;
       seen.add(key);
       const url = `https://archive.org/download/${encodeURIComponent(selectedId)}/${encodeURIComponent(f.name)}`;
-      out.push({ title, length: f.length, url });
+      out.push({ title, length: formatDuration(f.length), url });
     }
 
     return out;
