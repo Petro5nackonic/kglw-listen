@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 
 import { usePlayer } from "@/components/player/store";
 import { usePlaylists } from "@/components/playlists/store";
+import { toDisplayTrackTitle } from "@/utils/displayTitle";
 
 export default function PlaylistDetailPage({
   params,
@@ -163,7 +164,7 @@ export default function PlaylistDetailPage({
                     <span className="text-white/50 mr-2">
                       {String(idx + 1).padStart(2, "0")}.
                     </span>
-                    {pt.track.title}
+                    {toDisplayTrackTitle(pt.track.title)}
                   </div>
                   {pt.track.length ? (
                     <div className="mt-1 text-xs text-white/50">

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePlayer } from "@/components/player/store";
+import { toDisplayTrackTitle } from "@/utils/displayTitle";
 
 function fmt(sec: number) {
   if (!Number.isFinite(sec) || sec < 0) return "0:00";
@@ -80,7 +81,10 @@ export function PlayerBar() {
 
   const title = useMemo(() => {
     if (!currentTrack) return "—";
-    return currentTrack.track ? `${currentTrack.track}. ${currentTrack.title}` : currentTrack.title;
+    const baseTitle = toDisplayTrackTitle(currentTrack.title);
+    return currentTrack.track
+      ? `${currentTrack.track}. ${baseTitle}`
+      : baseTitle;
   }, [currentTrack]);
 
   return (

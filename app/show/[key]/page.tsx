@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { usePathname } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
 import { usePlayer } from "@/components/player/store";
 import { AddToPlaylistMenu } from "@/components/playlists/AddToPlaylistMenu";
+import { toDisplayTitle, toDisplayTrackTitle } from "@/utils/displayTitle";
 
 type Source = {
   identifier: string;
@@ -111,6 +112,7 @@ export default function ShowPage({
   params: Record<string, string | string[] | undefined>;
 }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   const {
     queue,
@@ -140,6 +142,8 @@ export default function ShowPage({
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const [meta, setMeta] = useState<IaMetadataResponse | null>(null);
+  const [focusedTrackIdx, setFocusedTrackIdx] = useState<number | null>(null);
+  const trackRefs = useRef<Record<number, HTMLDivElement | null>>({});
 
   useEffect(() => {
     let alive = true;
@@ -254,6 +258,39 @@ export default function ShowPage({
     return out;
   }, [meta, selectedId]);
 
+  const requestedSong = useMemo(() => {
+    return (searchParams?.get("song") || "").trim().toLowerCase();
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (!requestedSong) return;
+    if (tracks.length === 0) return;
+
+    const normalize = (v: string) =>
+      v
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    const needle = normalize(requestedSong);
+    if (!needle) return;
+
+    const idx = tracks.findIndex((t) => normalize(t.title).includes(needle));
+    if (idx < 0) return;
+
+    setFocusedTrackIdx(idx);
+    const el = trackRefs.current[idx];
+    if (el) {
+      requestAnimationFrame(() => {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+    }
+
+    const timer = setTimeout(() => setFocusedTrackIdx(null), 4000);
+    return () => clearTimeout(timer);
+  }, [requestedSong, tracks]);
+
   const showDate = show?.showDate || showKey.split("|")[0] || "";
 
   return (
@@ -266,9 +303,11 @@ export default function ShowPage({
         <div className="mt-3">
           <div className="text-sm text-white/70">{showDate || "(no date)"}</div>
           <h1 className="mt-1 text-xl font-semibold tracking-tight">
-            {meta?.metadata?.title ||
-              show?.sources?.find((s) => s.identifier === selectedId)?.title ||
-              showKey}
+            {toDisplayTitle(
+              meta?.metadata?.title ||
+                show?.sources?.find((s) => s.identifier === selectedId)?.title ||
+                showKey,
+            )}
           </h1>
         </div>
       </header>
@@ -316,7 +355,7 @@ export default function ShowPage({
                 {show.sources.map((s) => (
                   <option key={s.identifier} value={s.identifier}>
                     {s.hint} • {s.downloads.toLocaleString()} dl •{" "}
-                    {s.title.slice(0, 60)}
+                    {toDisplayTitle(s.title).slice(0, 60)}
                   </option>
                 ))}
               </select>
@@ -342,7 +381,7 @@ export default function ShowPage({
                   : "Play";
 
                 const trackForPlaylist = {
-                  title: t.title,
+                  title: toDisplayTrackTitle(t.title),
                   url: t.url,
                   length: t.length,
                   track: String(idx + 1),
@@ -351,8 +390,15 @@ export default function ShowPage({
                 return (
                   <div
                     key={t.url}
+                    ref={(el) => {
+                      trackRefs.current[idx] = el;
+                    }}
                     className={`w-full p-4 transition flex items-center justify-between gap-3 ${
                       isCurrent ? "bg-white/5" : "hover:bg-white/5"
+                    } ${
+                      focusedTrackIdx === idx
+                        ? "bg-fuchsia-500/10 ring-1 ring-fuchsia-400/60 ring-inset"
+                        : ""
                     }`}
                   >
                     <button
@@ -361,7 +407,7 @@ export default function ShowPage({
                         // Always set the full show as the queue so it can auto-advance.
                         setQueue(
                           tracks.map((x, i) => ({
-                            title: x.title,
+                            title: toDisplayTrackTitle(x.title),
                             url: x.url,
                             length: x.length,
                             track: String(i + 1),
@@ -381,7 +427,7 @@ export default function ShowPage({
                             {String(idx + 1).padStart(2, "0")}.
                           </span>
                           <span className="truncate inline-block max-w-[65ch] align-bottom">
-                            {t.title}
+                            {toDisplayTrackTitle(t.title)}
                           </span>
                         </div>
                         {t.length ? (

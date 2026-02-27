@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from "react";
 
 import type { Track } from "@/components/player/store";
 import { usePlaylists } from "@/components/playlists/store";
+import { toDisplayTrackTitle } from "@/utils/displayTitle";
 
 export function AddToPlaylistMenu(props: { track: Track }) {
   const { track } = props;
@@ -19,7 +20,8 @@ export function AddToPlaylistMenu(props: { track: Track }) {
   const hasPlaylists = playlists.length > 0;
 
   const title = useMemo(() => {
-    const base = track.track ? `${track.track}. ${track.title}` : track.title;
+    const displayTitle = toDisplayTrackTitle(track.title);
+    const base = track.track ? `${track.track}. ${displayTitle}` : displayTitle;
     return base || "Track";
   }, [track]);
 

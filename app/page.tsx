@@ -2,6 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { usePlayer } from "@/components/player/store";
+import { toDisplayTitle, toDisplayTrackTitle } from "@/utils/displayTitle";
 
 type Continent =
   | "North America"
@@ -21,12 +24,22 @@ type ShowItem = {
   artwork: string;
   continent: Continent;
   plays: number;
+  matchedSongSeconds?: number | null;
+  matchedSongTitle?: string | null;
+  matchedSongLength?: string | null;
+  matchedSongUrl?: string | null;
 };
 
 type ShowsResponse = {
   page: number;
   items: ShowItem[];
   hasMore: boolean;
+  venueTotal?: number;
+  song?: {
+    query: string;
+    total: number;
+    items: ShowItem[];
+  };
   facets?: {
     years: { value: string; count: number }[];
     continents: { value: string; count: number }[];
@@ -38,6 +51,23 @@ function summarizeSelection(values: string[]) {
   if (values.length === 1) return values[0];
   if (values.length === 2) return `${values[0]}, ${values[1]}`;
   return `${values[0]}, ${values[1]} +${values.length - 2}`;
+}
+
+function fmtSongLen(sec?: number | null): string {
+  if (typeof sec !== "number" || !Number.isFinite(sec) || sec < 0) return "n/a";
+  const s = Math.floor(sec);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const r = s % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}`;
+  return `${m}:${String(r).padStart(2, "0")}`;
+}
+
+function displaySongLength(raw?: string | null, sec?: number | null): string {
+  const v = (raw || "").trim();
+  if (v && /^\d+(\.\d+)?$/.test(v)) return fmtSongLen(Number(v));
+  if (v) return v;
+  return fmtSongLen(sec);
 }
 
 function MultiSelectDropdown(props: {
@@ -199,7 +229,15 @@ function MultiSelectDropdown(props: {
 }
 
 export default function HomePage() {
+  const router = useRouter();
+  const setQueue = usePlayer((s) => s.setQueue);
+
   const [shows, setShows] = useState<ShowItem[]>([]);
+  const [songShows, setSongShows] = useState<ShowItem[]>([]);
+  const [songTotal, setSongTotal] = useState(0);
+  const [venueTotal, setVenueTotal] = useState(0);
+  const [resultFilter, setResultFilter] = useState<"shows" | "venues">("venues");
+  const [songLengthSort, setSongLengthSort] = useState<"desc" | "asc">("desc");
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -241,6 +279,11 @@ export default function HomePage() {
 
       if (data.facets?.years) setYearFacet(data.facets.years);
       if (data.facets?.continents) setContinentFacet(data.facets.continents);
+      if (mode === "replace") {
+        setSongShows(data.song?.items || []);
+        setSongTotal(data.song?.total || 0);
+        setVenueTotal(data.venueTotal || 0);
+      }
 
       setShows((prev) => {
         if (mode === "replace") return data.items;
@@ -279,11 +322,22 @@ export default function HomePage() {
 
   useEffect(() => {
     setShows([]);
+    setSongShows([]);
+    setSongTotal(0);
+    setVenueTotal(0);
     setHasMore(true);
     setPage(1);
     loadPage(1, "replace");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [years.join("|"), continents.join("|"), debouncedQuery, sort]);
+
+  useEffect(() => {
+    if (!debouncedQuery) {
+      setResultFilter("venues");
+      return;
+    }
+    setResultFilter(songTotal > 0 ? "shows" : "venues");
+  }, [debouncedQuery, songTotal]);
 
   useEffect(() => {
     const el = sentinelRef.current;
@@ -295,6 +349,7 @@ export default function HomePage() {
         if (!first?.isIntersecting) return;
         if (loading) return;
         if (!hasMore) return;
+        if (debouncedQuery && resultFilter === "shows") return;
         loadPage(page + 1, "append");
       },
       { root: null, rootMargin: "600px", threshold: 0 },
@@ -302,7 +357,7 @@ export default function HomePage() {
 
     obs.observe(el);
     return () => obs.disconnect();
-  }, [hasMore, loading, page]);
+  }, [hasMore, loading, page, debouncedQuery, resultFilter]);
 
   const availableYears = useMemo(() => {
     const map = new Map<string, number>();
@@ -323,6 +378,17 @@ export default function HomePage() {
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([value, count]) => ({ value, count }));
   }, [continentFacet, continents]);
+
+  const sortedSongShows = useMemo(() => {
+    const arr = songShows.slice();
+    arr.sort((a, b) => {
+      const av = typeof a.matchedSongSeconds === "number" ? a.matchedSongSeconds : -1;
+      const bv = typeof b.matchedSongSeconds === "number" ? b.matchedSongSeconds : -1;
+      if (songLengthSort === "asc") return av - bv;
+      return bv - av;
+    });
+    return arr;
+  }, [songShows, songLengthSort]);
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-6">
@@ -351,7 +417,7 @@ export default function HomePage() {
             id="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search title, date, continent…"
+            placeholder="Search songs, venues, dates, continents…"
             className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/40 outline-none transition focus:border-white/30"
             autoComplete="off"
           />
@@ -399,11 +465,157 @@ export default function HomePage() {
             <option value="oldest">Oldest</option>
             <option value="most_played">Most played</option>
             <option value="least_played">Least played</option>
+            <option value="show_length_longest">Show length - longest</option>
+            <option value="show_length_shortest">Show length - shortest</option>
           </select>
         </div>
       </div>
 
-      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {debouncedQuery && (
+        <section className="mb-4 rounded-xl border border-white/10 bg-white/5 p-3">
+          <div className="text-sm font-medium text-white/90">Search results</div>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setResultFilter("venues")}
+              className={`rounded-full border px-3 py-1.5 text-xs transition ${
+                resultFilter === "venues"
+                  ? "border-white/35 bg-white/15 text-white"
+                  : "border-white/15 bg-black/20 text-white/75 hover:border-white/25 hover:text-white"
+              }`}
+            >
+              Venues {venueTotal}
+            </button>
+            <button
+              type="button"
+              onClick={() => setResultFilter("shows")}
+              className={`rounded-full border px-3 py-1.5 text-xs transition ${
+                resultFilter === "shows"
+                  ? "border-white/35 bg-white/15 text-white"
+                  : "border-white/15 bg-black/20 text-white/75 hover:border-white/25 hover:text-white"
+              }`}
+            >
+              Shows {songTotal}
+            </button>
+
+            {resultFilter === "shows" && (
+              <button
+                type="button"
+                onClick={() =>
+                  setSongLengthSort((v) => (v === "desc" ? "asc" : "desc"))
+                }
+                className="ml-auto rounded-full border border-white/15 bg-black/20 px-3 py-1.5 text-xs text-white/80 hover:border-white/25 hover:text-white transition"
+              >
+                {songLengthSort === "desc"
+                  ? "Longest version first"
+                  : "Shortest version first"}
+              </button>
+            )}
+          </div>
+        </section>
+      )}
+
+      {debouncedQuery && resultFilter === "shows" && (
+        <>
+          <div className="mb-2 text-sm font-medium text-white/85">
+            {debouncedQuery} appears in {songTotal} show
+            {songTotal === 1 ? "" : "s"}
+          </div>
+          <section className="mb-5 rounded-xl border border-white/10 bg-white/5 divide-y divide-white/10 overflow-hidden">
+            {sortedSongShows.map((s) => (
+              <div
+                key={`song-${s.showKey}`}
+                className="group relative flex items-center gap-3 px-3 py-2.5 hover:bg-white/10 transition cursor-pointer"
+                onClick={() => {
+                  router.push(`/show/${encodeURIComponent(s.showKey)}`);
+                }}
+              >
+                <div className="h-10 w-10 overflow-hidden rounded bg-black/20 shrink-0">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={s.artwork}
+                    alt=""
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+
+                <div className="min-w-0 flex-1 pr-16">
+                  <div className="truncate text-sm font-medium">
+                    {toDisplayTrackTitle(s.matchedSongTitle || debouncedQuery)}
+                  </div>
+                  <div className="mt-0.5 truncate text-xs text-white/60">
+                    {toDisplayTitle(s.title)} • {s.showDate}
+                  </div>
+                </div>
+
+                <div className="shrink-0 text-xs text-white/70">
+                  {displaySongLength(s.matchedSongLength, s.matchedSongSeconds)}
+                </div>
+
+                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition">
+                  <button
+                    type="button"
+                    className="rounded-full border border-white/20 bg-black/70 px-2.5 py-1 text-xs text-white"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!s.matchedSongUrl) return;
+                      setQueue(
+                        [
+                          {
+                            title: toDisplayTrackTitle(
+                              s.matchedSongTitle || debouncedQuery,
+                            ),
+                            url: s.matchedSongUrl,
+                            length: displaySongLength(
+                              s.matchedSongLength,
+                              s.matchedSongSeconds,
+                            ),
+                          },
+                        ],
+                        0,
+                      );
+                    }}
+                    disabled={!s.matchedSongUrl}
+                    title={s.matchedSongUrl ? "Play song" : "Song preview unavailable"}
+                  >
+                    Play
+                  </button>
+
+                  <button
+                    type="button"
+                    className="rounded-full border border-white/20 bg-black/70 px-2.5 py-1 text-xs text-white"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const song = toDisplayTrackTitle(
+                        s.matchedSongTitle || debouncedQuery || "",
+                      ).trim();
+                      const params = new URLSearchParams();
+                      if (song) params.set("song", song);
+                      const suffix = params.toString() ? `?${params.toString()}` : "";
+                      router.push(`/show/${encodeURIComponent(s.showKey)}${suffix}`);
+                    }}
+                    title="Go to show and focus this song"
+                  >
+                    Go to show
+                  </button>
+                </div>
+              </div>
+            ))}
+            {sortedSongShows.length === 0 && (
+              <div className="px-3 py-4 text-sm text-white/65">
+                No song matches found.
+              </div>
+            )}
+          </section>
+        </>
+      )}
+
+      {debouncedQuery && resultFilter === "venues" && (
+        <div className="mb-2 text-sm font-medium text-white/85">Venues</div>
+      )}
+
+      {(!debouncedQuery || resultFilter === "venues") && (
+        <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {shows.map((s) => (
           <Link
             key={s.showKey}
@@ -422,7 +634,9 @@ export default function HomePage() {
 
               <div className="min-w-0">
                 <div className="text-sm text-white/70">{s.showDate}</div>
-                <div className="mt-0.5 line-clamp-2 font-medium">{s.title}</div>
+                <div className="mt-0.5 line-clamp-2 font-medium">
+                  {toDisplayTitle(s.title)}
+                </div>
                 <div className="mt-1 text-xs text-white/60 flex flex-wrap gap-x-2 gap-y-1">
                   {s.continent && s.continent !== "Unknown" && (
                     <span>{s.continent}</span>
@@ -436,7 +650,8 @@ export default function HomePage() {
             </div>
           </Link>
         ))}
-      </section>
+        </section>
+      )}
 
       <div className="py-8">
         {loading && <div className="text-sm text-white/60">Loading…</div>}
