@@ -4,7 +4,9 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
+import type { Track } from "@/components/player/store";
 import { usePlayer } from "@/components/player/store";
+import type { PlaylistSlot } from "@/components/playlists/types";
 import { usePlaylists } from "@/components/playlists/store";
 import { toDisplayTrackTitle } from "@/utils/displayTitle";
 
@@ -31,6 +33,7 @@ export default function PlaylistDetailPage() {
 
   const [draftName, setDraftName] = useState(playlist?.name || "");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  type PlayableSlot = { slot: PlaylistSlot; track: Track };
 
   useEffect(() => {
     if (!playlist) return;
@@ -38,12 +41,9 @@ export default function PlaylistDetailPage() {
   }, [playlist?.id, playlist?.name]);
 
   const playableSlots = useMemo(() => {
-    if (!playlist) return [] as Array<{ slot: (typeof playlist.slots)[number]; track: NonNullable<(typeof playlist.slots)[number]["variants"][number]>["track"] }>;
+    if (!playlist) return [] as PlayableSlot[];
 
-    const out: Array<{
-      slot: (typeof playlist.slots)[number];
-      track: NonNullable<(typeof playlist.slots)[number]["variants"][number]>["track"];
-    }> = [];
+    const out: PlayableSlot[] = [];
 
     for (const slot of playlist.slots) {
       const variants = Array.isArray(slot.variants) ? slot.variants : [];
