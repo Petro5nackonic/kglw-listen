@@ -19,6 +19,7 @@ type PlaylistsState = {
   moveTrack: (playlistId: string, fromIndex: number, toIndex: number) => void;
   linkWithNext: (playlistId: string, slotId: string) => void;
   unlinkSlot: (playlistId: string, slotId: string) => void;
+  setChain: (playlistId: string, slotIds: string[]) => void;
 };
 
 function normalizeName(name: string) {
@@ -355,6 +356,56 @@ export const usePlaylists = create<PlaylistsState>()(
                   };
                 }
               }
+            }
+
+            return { ...p, updatedAt: now, slots: nextSlots };
+          }),
+        });
+      },
+
+      setChain: (playlistId, slotIds) => {
+        const unique = Array.from(new Set(slotIds.filter(Boolean)));
+        if (unique.length < 2) return;
+
+        set({
+          playlists: get().playlists.map((p) => {
+            if (p.id !== playlistId) return p;
+
+            const now = Date.now();
+            const selected = new Set(unique);
+            const nextSlots = p.slots.slice();
+            const affectedGroups = new Set<string>();
+
+            // Detach selected slots from any existing chains first.
+            for (let i = 0; i < nextSlots.length; i++) {
+              const slot = nextSlots[i];
+              if (!selected.has(slot.id)) continue;
+              if (slot.linkGroupId) affectedGroups.add(slot.linkGroupId);
+              nextSlots[i] = { ...slot, linkGroupId: undefined, updatedAt: now };
+            }
+
+            // Clean up orphaned single-slot chains in affected groups.
+            for (const groupId of affectedGroups) {
+              const remainingIdx = nextSlots
+                .map((slot, idx) => ({ slot, idx }))
+                .filter((x) => x.slot.linkGroupId === groupId)
+                .map((x) => x.idx);
+
+              if (remainingIdx.length <= 1) {
+                for (const idx of remainingIdx) {
+                  nextSlots[idx] = {
+                    ...nextSlots[idx],
+                    linkGroupId: undefined,
+                    updatedAt: now,
+                  };
+                }
+              }
+            }
+
+            const groupId = safeUUID();
+            for (let i = 0; i < nextSlots.length; i++) {
+              if (!selected.has(nextSlots[i].id)) continue;
+              nextSlots[i] = { ...nextSlots[i], linkGroupId: groupId, updatedAt: now };
             }
 
             return { ...p, updatedAt: now, slots: nextSlots };

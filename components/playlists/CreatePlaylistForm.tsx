@@ -22,11 +22,11 @@ export function CreatePlaylistForm(props: {
         value={name}
         onChange={(e) => setName(e.target.value)}
         placeholder="Playlist name"
-        className="w-full rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-white/40"
+        className="w-full rounded-xl border border-white/20 bg-black/30 px-3 py-2.5 text-sm text-white placeholder:text-white/40 outline-none focus:border-white/30"
       />
       <button
         type="submit"
-        className="shrink-0 rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-sm text-white hover:bg-white/15 transition"
+        className="shrink-0 rounded-xl border border-white/20 bg-white/10 px-3 py-2.5 text-sm text-white hover:bg-white/15 transition"
       >
         {buttonLabel || "Create"}
       </button>
