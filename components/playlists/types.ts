@@ -1,9 +1,18 @@
 import type { Track } from "@/components/player/store";
 
-export type PlaylistTrack = {
+export type PlaylistTrackVariant = {
   id: string;
   addedAt: number;
   track: Track;
+};
+
+export type PlaylistSlot = {
+  id: string;
+  canonicalTitle: string;
+  addedAt: number;
+  updatedAt: number;
+  linkGroupId?: string;
+  variants: PlaylistTrackVariant[];
 };
 
 export type Playlist = {
@@ -11,5 +20,5 @@ export type Playlist = {
   name: string;
   createdAt: number;
   updatedAt: number;
-  tracks: PlaylistTrack[];
+  slots: PlaylistSlot[];
 };

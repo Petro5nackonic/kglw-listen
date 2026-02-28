@@ -87,6 +87,8 @@ export function PlayerBar() {
       : baseTitle;
   }, [currentTrack]);
 
+  if (!hasQueue) return null;
+
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-white/10 bg-black/80 backdrop-blur">
       <div className="mx-auto max-w-3xl p-3">

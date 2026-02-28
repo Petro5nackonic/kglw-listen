@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { usePlayer } from "@/components/player/store";
-import { AddToPlaylistMenu } from "@/components/playlists/AddToPlaylistMenu";
+import { usePlaylists } from "@/components/playlists/store";
 import { toDisplayTitle, toDisplayTrackTitle } from "@/utils/displayTitle";
 import { formatDuration } from "@/utils/formatDuration";
 
@@ -107,11 +107,40 @@ function parseTrackNum(t?: string) {
   return m ? Number(m[1]) : Number.POSITIVE_INFINITY;
 }
 
+function lengthToSeconds(v?: string): number {
+  if (!v) return 0;
+  const raw = String(v).trim();
+  if (!raw) return 0;
+  if (/^\d+(\.\d+)?$/.test(raw)) return Math.max(0, Math.floor(Number(raw)));
+  const parts = raw.split(":").map((p) => Number(p));
+  if (parts.some((x) => !Number.isFinite(x) || x < 0)) return 0;
+  if (parts.length === 2) return parts[0] * 60 + parts[1];
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  return 0;
+}
+
+function compactDuration(totalSeconds: number): string {
+  if (!Number.isFinite(totalSeconds) || totalSeconds <= 0) return "0m";
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  if (h > 0) return `${h}h${String(m).padStart(2, "0")}m`;
+  return `${m}m`;
+}
+
+function venueFromTitle(title?: string): string {
+  const t = String(title || "");
+  const m = t.match(
+    /live\s+(?:at|in)\s+(.+?)(?:\s+on\s+(?:19|20)\d{2}[-/.]\d{1,2}[-/.]\d{1,2}|\(|$)/i,
+  );
+  return m?.[1]?.trim() || "";
+}
+
 export default function ShowPage({
   params,
 }: {
   params: Record<string, string | string[] | undefined>;
 }) {
+  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
@@ -122,6 +151,9 @@ export default function ShowPage({
     setQueue,
     setPlaying,
   } = usePlayer();
+  const playlists = usePlaylists((s) => s.playlists);
+  const addTrackToPlaylist = usePlaylists((s) => s.addTrack);
+  const createPlaylist = usePlaylists((s) => s.createPlaylist);
 
   // Primary: params.key (ideal)
   // Fallback: last segment of the URL (/show/<segment>)
@@ -145,6 +177,31 @@ export default function ShowPage({
   const [meta, setMeta] = useState<IaMetadataResponse | null>(null);
   const [focusedTrackIdx, setFocusedTrackIdx] = useState<number | null>(null);
   const trackRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const [sheetTrack, setSheetTrack] = useState<{
+    title: string;
+    url: string;
+    length?: string;
+    track: string;
+  } | null>(null);
+  const [showPlaylistPicker, setShowPlaylistPicker] = useState(false);
+  const [newPlaylistName, setNewPlaylistName] = useState("");
+  const [favoriteUrls, setFavoriteUrls] = useState<string[]>([]);
+  const [shareState, setShareState] = useState<"idle" | "copied" | "error">(
+    "idle",
+  );
+  const [playlistActionState, setPlaylistActionState] = useState<
+    Record<string, "added" | "exists" | undefined>
+  >({});
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("kglw.favorites.v1");
+      const parsed = raw ? (JSON.parse(raw) as string[]) : [];
+      setFavoriteUrls(Array.isArray(parsed) ? parsed : []);
+    } catch {
+      setFavoriteUrls([]);
+    }
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -293,61 +350,135 @@ export default function ShowPage({
   }, [requestedSong, tracks]);
 
   const showDate = show?.showDate || showKey.split("|")[0] || "";
+  const selectedSource = show?.sources?.find((s) => s.identifier === selectedId) || null;
+  const heroImage = selectedId
+    ? `https://archive.org/services/img/${encodeURIComponent(selectedId)}`
+    : "";
+  const rawShowTitle =
+    meta?.metadata?.title || selectedSource?.title || showKey || "";
+  const venueText =
+    meta?.metadata?.venue ||
+    venueFromTitle(rawShowTitle) ||
+    venueFromTitle(selectedSource?.title) ||
+    "Unknown venue";
+  const totalSeconds = useMemo(
+    () => tracks.reduce((sum, t) => sum + lengthToSeconds(t.length), 0),
+    [tracks],
+  );
+  const taperText = String(meta?.metadata?.description || "")
+    .match(/taper(?:s)?\s*:\s*([^\n<]+)/i)?.[1]
+    ?.trim();
+  const sourceLine = selectedSource?.hint || "UNKNOWN";
+  const isFavorite = Boolean(
+    sheetTrack && favoriteUrls.includes(sheetTrack.url),
+  );
+
+  function closeSheet() {
+    setSheetTrack(null);
+    setShowPlaylistPicker(false);
+    setNewPlaylistName("");
+    setShareState("idle");
+    setPlaylistActionState({});
+  }
+
+  function persistFavorites(next: string[]) {
+    setFavoriteUrls(next);
+    try {
+      localStorage.setItem("kglw.favorites.v1", JSON.stringify(next));
+    } catch {
+      // ignore storage failures
+    }
+  }
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-6">
-      <header className="mb-5">
-        <Link href="/" className="text-sm text-white/70 hover:text-white">
-          ← Back
-        </Link>
+    <main className="min-h-screen bg-[#080017] text-white">
+      <div className="relative h-[190px] w-full overflow-hidden">
+        {heroImage ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={heroImage}
+            alt=""
+            className="h-full w-full object-cover opacity-35"
+          />
+        ) : null}
+        <div className="absolute inset-0 bg-gradient-to-b from-[#120028]/60 via-[#100020]/75 to-[#080017]" />
 
-        <div className="mt-3">
-          <div className="text-sm text-white/70">{showDate || "(no date)"}</div>
-          <h1 className="mt-1 text-xl font-semibold tracking-tight">
-            {toDisplayTitle(
-              meta?.metadata?.title ||
-                show?.sources?.find((s) => s.identifier === selectedId)?.title ||
-                showKey,
-            )}
-          </h1>
+        <div className="absolute inset-x-0 top-0 mx-auto w-full max-w-md px-6 pt-8">
+          <div className="flex items-center justify-between">
+            <Link href="/" className="text-white/80 hover:text-white text-lg">
+              ←
+            </Link>
+            <span className="text-sm text-white/60">⋮</span>
+          </div>
+
+          <div className="mt-4 text-center">
+            <div className="text-2xl font-medium tracking-tight">
+              {showDate || "(no date)"}
+            </div>
+            <div className="mt-1 text-sm text-white/70">{venueText}</div>
+            <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-black/35 px-3 py-1 text-sm">
+              <span className="h-2 w-2 rounded-full bg-fuchsia-400" />
+              Bootleg Gizzard
+            </div>
+          </div>
         </div>
-      </header>
+      </div>
 
       {loading ? (
-        <div className="text-sm text-white/60">Loading show…</div>
+        <div className="mx-auto max-w-md px-6 py-8 text-sm text-white/60">
+          Loading show…
+        </div>
       ) : error ? (
-        <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200 whitespace-pre-wrap">
+        <div className="mx-auto mt-6 max-w-md rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200 whitespace-pre-wrap">
           {error}
-          <div className="mt-2 text-xs text-white/60">
-            Debug: pathname = <span className="text-white/80">{pathname}</span>
-            {"\n"}Debug: showKey ={" "}
-            <span className="text-white/80">{showKey}</span>
-          </div>
         </div>
       ) : !show ? (
-        <div className="text-sm text-white/60">No show data returned.</div>
+        <div className="mx-auto max-w-md px-6 py-8 text-sm text-white/60">
+          No show data returned.
+        </div>
       ) : show.sources.length === 0 ? (
-        <div className="rounded-lg border border-white/10 bg-white/5 p-4 text-sm text-white/70 whitespace-pre-wrap">
+        <div className="mx-auto mt-6 max-w-md rounded-lg border border-white/10 bg-white/5 p-4 text-sm text-white/70 whitespace-pre-wrap">
           No sources found for this show.
-          <div className="mt-2 text-xs text-white/60">
-            Debug: pathname = <span className="text-white/80">{pathname}</span>
-            {"\n"}Debug: showKey ={" "}
-            <span className="text-white/80">{showKey}</span>
-          </div>
         </div>
       ) : (
-        <>
-          <section className="mb-6 rounded-xl border border-white/10 bg-white/5 p-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mx-auto -mt-2 max-w-md px-6 pb-8">
+          <section className="rounded-2xl border border-white/20 bg-white/[0.06] p-4 backdrop-blur mb-3">
+            <div className="flex items-start justify-between gap-3">
               <div>
-                <div className="text-sm text-white/70">Source</div>
-                <div className="text-xs text-white/50">
-                  {show.sources.length} source(s)
+                <div className="text-[22px] font-medium leading-none">
+                  {showDate}
+                </div>
+                <div className="mt-2 text-base text-white/85 tracking-wide">
+                  {venueText}
+                </div>
+                <div className="mt-2 text-sm text-white/65">
+                  {tracks.length} Tracks • {compactDuration(totalSeconds)}
                 </div>
               </div>
+              <div className="text-white/70">♡</div>
+            </div>
+          </section>
 
+          <section className="rounded-2xl border border-white/20 bg-white/[0.03] p-4 backdrop-blur mb-5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                {taperText ? (
+                  <div className="truncate text-sm text-white/70">
+                    <span className="text-white/55">Taper(s): </span>
+                    {taperText}
+                  </div>
+                ) : null}
+                <div className="mt-1 text-sm text-white/70">
+                  <span className="text-white/55">Source: </span>
+                  {sourceLine}
+                </div>
+              </div>
+              <span className="text-white/60">⋮</span>
+            </div>
+
+            <div className="mt-3">
               <select
-                className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm"
+                className="w-full rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-sm"
                 value={selectedId ?? ""}
                 onChange={(e) => {
                   setSelectedId(e.target.value);
@@ -363,15 +494,7 @@ export default function ShowPage({
             </div>
           </section>
 
-          <section className="rounded-xl border border-white/10 bg-white/5">
-            <div className="border-b border-white/10 p-4">
-              <div className="text-sm text-white/70">Tracks</div>
-              <div className="text-xs text-white/50">
-                {meta ? `${tracks.length} track(s)` : "Loading track list…"}
-              </div>
-            </div>
-
-            <div className="divide-y divide-white/10">
+          <section className="space-y-2">
               {tracks.map((t, idx) => {
                 const currentUrl = queue?.[playingIndex]?.url;
                 const isCurrent = Boolean(currentUrl && currentUrl === t.url);
@@ -394,13 +517,13 @@ export default function ShowPage({
                     ref={(el) => {
                       trackRefs.current[idx] = el;
                     }}
-                    className={`w-full p-4 transition flex items-center justify-between gap-3 ${
-                      isCurrent ? "bg-white/5" : "hover:bg-white/5"
+                    className={`w-full transition flex items-center justify-between gap-3 ${
+                      isCurrent ? "bg-white/8" : "hover:bg-white/5"
                     } ${
                       focusedTrackIdx === idx
                         ? "bg-fuchsia-500/10 ring-1 ring-fuchsia-400/60 ring-inset"
                         : ""
-                    }`}
+                    } rounded-xl px-2 py-1`}
                   >
                     <button
                       type="button"
@@ -420,32 +543,39 @@ export default function ShowPage({
                         // (Queue replace above keeps behavior consistent across sources.)
                         if (isCurrent) setPlaying(!playing);
                       }}
-                      className="flex min-w-0 flex-1 items-center justify-between gap-4 text-left"
+                      className="flex min-w-0 flex-1 items-center justify-between gap-4 text-left rounded-xl px-2 py-2"
                     >
-                      <div className="min-w-0">
-                        <div className="text-sm">
-                          <span className="text-white/50 mr-2">
-                            {String(idx + 1).padStart(2, "0")}.
-                          </span>
-                          <span className="truncate inline-block max-w-[65ch] align-bottom">
-                            {toDisplayTrackTitle(t.title)}
-                          </span>
-                        </div>
-                        {t.length ? (
-                          <div className="mt-1 text-xs text-white/50">
-                            {t.length}
-                          </div>
-                        ) : null}
+                      <div className="min-w-0 flex flex-1 items-center gap-3">
+                        <span className="shrink-0 text-sm text-white/45 w-5 text-right">
+                          {idx + 1}
+                        </span>
+                        <span className="truncate text-[16px]">
+                          {toDisplayTrackTitle(t.title)}
+                        </span>
                       </div>
 
-                      <div className="text-xs text-white/60 shrink-0">
-                        {rightLabel}
+                      <div className="flex items-center gap-2 shrink-0">
+                        {t.length ? (
+                          <span className="text-sm text-white/75 tracking-wide">
+                            {t.length}
+                          </span>
+                        ) : null}
                       </div>
                     </button>
 
-                    <div className="shrink-0">
-                      <AddToPlaylistMenu track={trackForPlaylist} />
-                    </div>
+                    <button
+                      type="button"
+                      className="shrink-0 rounded-md px-2 py-1 text-white/55 hover:text-white hover:bg-white/10 transition"
+                      title="Track options"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSheetTrack(trackForPlaylist);
+                        setShowPlaylistPicker(false);
+                        setShareState("idle");
+                      }}
+                    >
+                      ⋮
+                    </button>
                   </div>
                 );
               })}
@@ -455,9 +585,230 @@ export default function ShowPage({
                   No audio tracks found for this source.
                 </div>
               )}
-            </div>
           </section>
-        </>
+        </div>
+      )}
+
+      {sheetTrack && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50"
+          onClick={() => closeSheet()}
+        >
+          <div
+            className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-[393px] rounded-t-2xl border border-white/15 bg-[#080017] px-6 pb-10 pt-6 shadow-[0_-4px_16px_rgba(0,0,0,0.4)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {!showPlaylistPicker ? (
+              <>
+                <div className="mb-6 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="truncate text-[22px] leading-none">
+                      {toDisplayTrackTitle(sheetTrack.title)}
+                    </div>
+                    <div className="text-sm text-white/85">
+                      {sheetTrack.length || "—"}
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between text-sm text-white/45">
+                    <div className="min-w-0 truncate">
+                      pin {venueText}
+                    </div>
+                    <div className="shrink-0">{showDate}</div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      className="flex items-center justify-center gap-2 rounded-xl bg-[rgba(48,26,89,0.25)] px-4 py-4 text-base hover:bg-[rgba(72,36,124,0.35)] transition"
+                      onClick={() => {
+                        if (!sheetTrack) return;
+                        if (favoriteUrls.includes(sheetTrack.url)) {
+                          persistFavorites(
+                            favoriteUrls.filter((u) => u !== sheetTrack.url),
+                          );
+                        } else {
+                          persistFavorites([...favoriteUrls, sheetTrack.url]);
+                        }
+                      }}
+                    >
+                      <span>{isFavorite ? "★" : "♡"}</span>
+                      <span>Favorite</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="flex items-center justify-center gap-2 rounded-xl bg-[rgba(48,26,89,0.25)] px-4 py-4 text-base hover:bg-[rgba(72,36,124,0.35)] transition"
+                      onClick={async () => {
+                        try {
+                          const songName = toDisplayTrackTitle(sheetTrack.title);
+                          const songUrl = `${window.location.origin}/show/${encodeURIComponent(showKey)}?song=${encodeURIComponent(songName)}`;
+                          await navigator.clipboard.writeText(songUrl);
+                          setShareState("copied");
+                          setTimeout(() => setShareState("idle"), 1500);
+                        } catch {
+                          setShareState("error");
+                          setTimeout(() => setShareState("idle"), 1500);
+                        }
+                      }}
+                    >
+                      <span>➤</span>
+                      <span>
+                        Share
+                        {shareState === "copied" ? " • copied" : ""}
+                        {shareState === "error" ? " • failed" : ""}
+                      </span>
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="w-full rounded-xl bg-[rgba(48,26,89,0.25)] px-4 py-4 text-base hover:bg-[rgba(72,36,124,0.35)] transition"
+                    onClick={() => setShowPlaylistPicker(true)}
+                  >
+                    + Add to playlist(s)
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  className="mt-5 w-full text-center text-[20px] text-white/90 hover:text-white transition"
+                  onClick={() => closeSheet()}
+                >
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="mb-6 flex items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    className="text-base text-white/70 hover:text-white"
+                    onClick={() => setShowPlaylistPicker(false)}
+                  >
+                    ←
+                  </button>
+                  <div className="min-w-0 text-center flex-1">
+                    <div className="truncate text-base font-medium">
+                      {toDisplayTrackTitle(sheetTrack.title)}
+                    </div>
+                    <div className="truncate text-xs text-white/50">{venueText}</div>
+                  </div>
+                  <button
+                    type="button"
+                    className="text-base text-white/70 hover:text-white"
+                    onClick={() => closeSheet()}
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="mb-2 flex items-center justify-between">
+                  <div className="mx-auto text-sm text-white/75">Select playlist(s)</div>
+                  <button
+                    type="button"
+                    className="rounded-lg border border-white/15 bg-white/10 px-2.5 py-1 text-xs hover:bg-white/15 transition"
+                    onClick={() => {
+                      const id = createPlaylist(newPlaylistName || "New playlist");
+                      addTrackToPlaylist(id, sheetTrack);
+                      setPlaylistActionState((prev) => ({ ...prev, [id]: "added" }));
+                      closeSheet();
+                      router.push(`/playlists/${id}`);
+                    }}
+                  >
+                    New +
+                  </button>
+                </div>
+
+                <div className="rounded-xl border border-white/10 bg-black/20 p-2">
+                  {playlists.length > 0 ? (
+                    <div className="mb-2 max-h-56 space-y-2 overflow-auto">
+                      {playlists.map((p) => {
+                        const canonical = toDisplayTrackTitle(
+                          sheetTrack.title,
+                        ).toLowerCase();
+                        const slot = p.slots.find(
+                          (s) => s.canonicalTitle === canonical,
+                        );
+                        const alreadyExact = Boolean(
+                          slot?.variants.some((v) => v.track.url === sheetTrack.url),
+                        );
+                        const actionState = playlistActionState[p.id];
+                        const tracksCount = p.slots.length;
+                        const versionsCount = p.slots.reduce(
+                          (sum, s) => sum + s.variants.length,
+                          0,
+                        );
+                        const linksCount = p.slots.filter(
+                          (s) => s.variants.length > 1,
+                        ).length;
+                        return (
+                          <div
+                            key={p.id}
+                            className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5"
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="truncate text-sm">{p.name}</div>
+                                <div className="mt-0.5 text-[11px] text-white/50">
+                                  {tracksCount} Tracks • {versionsCount} Versions •{" "}
+                                  {linksCount} Links
+                                </div>
+                              </div>
+
+                              {alreadyExact ? (
+                                <span className="text-xs text-emerald-300">
+                                  Added!
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="rounded-lg border border-white/15 bg-white/10 px-2.5 py-1 text-xs hover:bg-white/15 transition"
+                                  onClick={() => {
+                                    const out = addTrackToPlaylist(
+                                      p.id,
+                                      sheetTrack,
+                                    );
+                                    setPlaylistActionState((prev) => ({
+                                      ...prev,
+                                      [p.id]: out === "exists" ? "exists" : "added",
+                                    }));
+                                  }}
+                                >
+                                  {actionState === "added" ? "Added!" : "Add"}
+                                </button>
+                              )}
+                            </div>
+
+                            {slot && !alreadyExact && (
+                              <div className="mt-1 text-[11px] text-white/50">
+                                {toDisplayTrackTitle(sheetTrack.title)} is already on
+                                this playlist. Add will merge versions.
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="px-2 py-1 text-xs text-white/60">
+                      No playlists yet. Create one:
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  className="mt-5 w-full text-center text-[20px] text-white/90 hover:text-white transition"
+                  onClick={() => setShowPlaylistPicker(false)}
+                >
+                  Done
+                </button>
+              </>
+            )}
+          </div>
+        </div>
       )}
     </main>
   );

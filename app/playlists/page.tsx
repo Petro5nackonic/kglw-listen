@@ -11,6 +11,7 @@ export default function PlaylistsPage() {
 
   const playlists = usePlaylists((s) => s.playlists);
   const createPlaylist = usePlaylists((s) => s.createPlaylist);
+  const createDemoPlaylist = usePlaylists((s) => s.createDemoPlaylist);
   const deletePlaylist = usePlaylists((s) => s.deletePlaylist);
 
   return (
@@ -31,6 +32,16 @@ export default function PlaylistsPage() {
               router.push(`/playlists/${id}`);
             }}
           />
+          <button
+            type="button"
+            className="mt-3 rounded-lg border border-fuchsia-400/40 bg-fuchsia-500/10 px-3 py-2 text-sm text-fuchsia-100 hover:bg-fuchsia-500/20 transition"
+            onClick={() => {
+              const id = createDemoPlaylist();
+              router.push(`/playlists/${id}`);
+            }}
+          >
+            Create demo fused playlist
+          </button>
         </div>
       </section>
 
@@ -57,7 +68,8 @@ export default function PlaylistsPage() {
                     {p.name}
                   </Link>
                   <div className="mt-1 text-xs text-white/50">
-                    {p.tracks.length} track(s)
+                    {p.slots.length} track(s) •{" "}
+                    {p.slots.reduce((sum, s) => sum + s.variants.length, 0)} version(s)
                   </div>
                 </div>
 
