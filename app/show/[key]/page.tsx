@@ -7,6 +7,7 @@ import { usePlayer } from "@/components/player/store";
 import { usePlaylists } from "@/components/playlists/store";
 import { toDisplayTitle, toDisplayTrackTitle } from "@/utils/displayTitle";
 import { formatDuration } from "@/utils/formatDuration";
+import { shouldUseDefaultArtwork } from "@/utils/archiveArtwork";
 
 type Source = {
   identifier: string;
@@ -44,6 +45,7 @@ type IaMetadataResponse = {
 };
 
 const FAVORITE_SHOWS_KEY = "kglw.favoriteShows.v1";
+const DEFAULT_ARTWORK_SRC = "/api/default-artwork";
 
 function safeDecode(input: string) {
   try {
@@ -356,6 +358,9 @@ export default function ShowPage({
   const heroImage = selectedId
     ? `https://archive.org/services/img/${encodeURIComponent(selectedId)}`
     : "";
+  const heroImageSrc = shouldUseDefaultArtwork(selectedId)
+    ? DEFAULT_ARTWORK_SRC
+    : heroImage;
   const rawShowTitle =
     meta?.metadata?.title || selectedSource?.title || showKey || "";
   const venueText =
@@ -392,35 +397,33 @@ export default function ShowPage({
 
   return (
     <main className="min-h-screen bg-[#080017] text-white [font-family:var(--font-roboto)]">
-      <div className="relative h-[220px] w-full overflow-hidden">
+      <div className="relative h-[250px] w-full overflow-hidden">
         {heroImage ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={heroImage}
+            src={heroImageSrc}
             alt=""
-            className="h-full w-full object-cover opacity-35"
+            className="h-full w-full object-cover opacity-12"
+            onError={(e) => {
+              const img = e.currentTarget;
+              if (img.src.endsWith(DEFAULT_ARTWORK_SRC)) return;
+              img.src = DEFAULT_ARTWORK_SRC;
+            }}
           />
         ) : null}
-        <div className="absolute inset-0 bg-linear-to-b from-[#120028]/60 via-[#100020]/75 to-[#080017]" />
+        <div className="absolute inset-0 bg-linear-to-b from-[#080017]/0 via-[#080017]/35 to-[#080017]" />
 
-        <div className="absolute inset-x-0 top-0 mx-auto w-full max-w-md px-6 pt-8">
+        <div className="absolute inset-x-0 top-0 mx-auto w-full max-w-[393px] px-6 pt-[67px]">
           <div className="flex items-center justify-between">
-            <Link href="/" className="text-white/80 hover:text-white text-lg">
+            <Link href="/" className="text-white/90 hover:text-white text-[28px] leading-none">
               ←
             </Link>
-            <span className="text-sm text-white/60">⋮</span>
+            <button type="button" className="text-[20px] text-white/75">
+              ⋮
+            </button>
           </div>
 
-          <div className="mt-7 text-center [font-family:var(--font-roboto-condensed)]">
-            <div className="text-[36px] leading-none font-medium tracking-tight">
-              {showDate || "(no date)"}
-            </div>
-            <div className="mt-1 text-[14px] text-white/70">{venueText}</div>
-            <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-black/35 px-3 py-1 text-[12px] [font-family:var(--font-roboto)]">
-              <span className="h-2 w-2 rounded-full bg-fuchsia-400" />
-              Bootleg Gizzard
-            </div>
-          </div>
+          <div className="mt-3 text-center" />
         </div>
       </div>
 
@@ -441,58 +444,55 @@ export default function ShowPage({
           No sources found for this show.
         </div>
       ) : (
-        <div className="mx-auto -mt-8 max-w-md px-6 pb-8">
-          <section className="mb-3 rounded-2xl border border-white/20 bg-white/6 p-4 backdrop-blur">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-[28px] leading-none font-medium [font-family:var(--font-roboto-condensed)]">
-                  {showDate}
-                </div>
-                <div className="mt-2 text-[15px] text-white/85 tracking-wide">
-                  {venueText}
-                </div>
-                <div className="mt-2 text-[12px] text-white/65">
-                  {tracks.length} Tracks • {compactDuration(totalSeconds)}
-                </div>
-              </div>
-              <button
-                type="button"
-                className={`text-xl ${isFavoriteShow ? "text-fuchsia-400" : "text-white/70"}`}
-                onClick={() => {
-                  if (isFavoriteShow) {
-                    persistFavoriteShows(favoriteShows.filter((k) => k !== showKey));
-                  } else {
-                    persistFavoriteShows([showKey, ...favoriteShows].slice(0, 400));
-                  }
-                }}
-                aria-label={isFavoriteShow ? "Unfavorite show" : "Favorite show"}
-                title={isFavoriteShow ? "Unfavorite show" : "Favorite show"}
-              >
-                ♥
-              </button>
-            </div>
-          </section>
-
-          <section className="mb-5 rounded-2xl border border-white/20 bg-white/3 p-4 backdrop-blur">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                {taperText ? (
-                  <div className="truncate text-sm text-white/70">
-                    <span className="text-white/55">Taper(s): </span>
-                    {taperText}
+        <div className="mx-auto -mt-[112px] w-full max-w-[393px] px-6 pb-8">
+          <section className="mb-5">
+            <div className="relative z-[2] rounded-2xl border border-white/20 bg-white/5 p-4 backdrop-blur-[6px]">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-[13px] text-white/90">{showDate}</div>
+                  <div className="mt-1 text-[28px] leading-none font-medium [font-family:var(--font-roboto-condensed)]">
+                    {toDisplayTitle(rawShowTitle)}
                   </div>
-                ) : null}
-                <div className="mt-1 text-sm text-white/70">
-                  <span className="text-white/55">Source: </span>
-                  {sourceLine}
                 </div>
+                <button
+                  type="button"
+                  className={`inline-flex h-6 w-6 items-center justify-center ${isFavoriteShow ? "text-fuchsia-300" : "text-white/75"}`}
+                  onClick={() => {
+                    if (isFavoriteShow) {
+                      persistFavoriteShows(favoriteShows.filter((k) => k !== showKey));
+                    } else {
+                      persistFavoriteShows([showKey, ...favoriteShows].slice(0, 400));
+                    }
+                  }}
+                  aria-label={isFavoriteShow ? "Unfavorite show" : "Favorite show"}
+                  title={isFavoriteShow ? "Unfavorite show" : "Favorite show"}
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-6 w-6"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    aria-hidden="true"
+                  >
+                    <path d="M7 3.5h10a1.5 1.5 0 0 1 1.5 1.5v16.5l-6.5-4-6.5 4V5A1.5 1.5 0 0 1 7 3.5Z" />
+                  </svg>
+                </button>
               </div>
-              <span className="text-white/60">⋮</span>
+
+              <div className="mt-3 text-[16px] tracking-[0.02em] text-white/95 [font-family:var(--font-roboto-condensed)]">
+                {venueText}
+              </div>
+              <div className="mt-1 flex items-center gap-2 text-[16px] text-white/85 [font-family:var(--font-roboto-condensed)]">
+                <span>{tracks.length} Tracks</span>
+                <span className="inline-block size-[4px] rounded-full bg-white/80" />
+                <span>{compactDuration(totalSeconds)}</span>
+              </div>
             </div>
 
-            <div className="mt-3">
+            <div className="-mt-4 rounded-b-2xl border border-white/20 border-t-0 px-4 pb-3 pt-7">
               <select
-                className="w-full rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-sm"
+                className="w-full rounded-xl bg-black/30 py-2 pr-3 text-sm"
                 value={selectedId ?? ""}
                 onChange={(e) => {
                   setSelectedId(e.target.value);
@@ -501,104 +501,86 @@ export default function ShowPage({
                 {show.sources.map((s) => (
                   <option key={s.identifier} value={s.identifier}>
                     {s.hint} • {s.downloads.toLocaleString()} dl •{" "}
-                    {toDisplayTitle(s.title).slice(0, 60)}
+                    {(() => {
+                      const v = toDisplayTitle(s.title);
+                      return v.length > 60 ? `${v.slice(0, 57).trimEnd()}...` : v;
+                    })()}
                   </option>
                 ))}
               </select>
             </div>
           </section>
 
-          <section className="space-y-2">
-              {tracks.map((t, idx) => {
-                const currentUrl = queue?.[playingIndex]?.url;
-                const isCurrent = Boolean(currentUrl && currentUrl === t.url);
-                const rightLabel = isCurrent
-                  ? playing
-                    ? "Playing"
-                    : "Paused"
-                  : "Play";
+          <section className="space-y-1.5">
+            {tracks.map((t, idx) => {
+              const currentUrl = queue?.[playingIndex]?.url;
+              const isCurrent = Boolean(currentUrl && currentUrl === t.url);
 
-                const trackForPlaylist = {
-                  title: toDisplayTrackTitle(t.title),
-                  url: t.url,
-                  length: t.length,
-                  track: String(idx + 1),
-                };
+              const trackForPlaylist = {
+                title: toDisplayTrackTitle(t.title),
+                url: t.url,
+                length: t.length,
+                track: String(idx + 1),
+              };
 
-                return (
-                  <div
-                    key={t.url}
-                    ref={(el) => {
-                      trackRefs.current[idx] = el;
+              return (
+                <div
+                  key={t.url}
+                  ref={(el) => {
+                    trackRefs.current[idx] = el;
+                  }}
+                  className={`flex items-center justify-between gap-2 rounded-lg px-1 py-1 transition ${
+                    isCurrent ? "bg-white/10" : "hover:bg-white/6"
+                  } ${focusedTrackIdx === idx ? "bg-fuchsia-500/10 ring-1 ring-fuchsia-400/50" : ""}`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQueue(
+                        tracks.map((x, i) => ({
+                          title: toDisplayTrackTitle(x.title),
+                          url: x.url,
+                          length: x.length,
+                          track: String(i + 1),
+                        })),
+                        idx,
+                      );
+                      if (isCurrent) setPlaying(!playing);
                     }}
-                    className={`w-full transition flex items-center justify-between gap-3 rounded-2xl border border-white/14 px-2 py-1 ${
-                      isCurrent ? "bg-white/10 border-fuchsia-300/40" : "bg-white/4 hover:bg-white/7"
-                    } ${
-                      focusedTrackIdx === idx
-                        ? "bg-fuchsia-500/10 ring-1 ring-fuchsia-400/60 ring-inset"
-                        : ""
-                    }`}
+                    className="flex min-w-0 flex-1 items-center justify-between gap-3 px-1 py-1 text-left"
                   >
-                    <button
-                      type="button"
-                      onClick={() => {
-                        // Always set the full show as the queue so it can auto-advance.
-                        setQueue(
-                          tracks.map((x, i) => ({
-                            title: toDisplayTrackTitle(x.title),
-                            url: x.url,
-                            length: x.length,
-                            track: String(i + 1),
-                          })),
-                          idx,
-                        );
+                    <span className="truncate text-[24px] leading-none [font-family:var(--font-roboto-condensed)]">
+                      {toDisplayTrackTitle(t.title)}
+                    </span>
+                    {t.length ? (
+                      <span className="shrink-0 text-[14px] tracking-[0.04em] text-white/85 [font-family:var(--font-roboto-condensed)]">
+                        {t.length}
+                      </span>
+                    ) : null}
+                  </button>
 
-                        // If user clicked the currently playing track, treat as toggle.
-                        // (Queue replace above keeps behavior consistent across sources.)
-                        if (isCurrent) setPlaying(!playing);
-                      }}
-                      className="flex min-w-0 flex-1 items-center justify-between gap-4 text-left rounded-xl px-2 py-2.5"
-                    >
-                      <div className="min-w-0 flex flex-1 items-center gap-3">
-                        <span className="shrink-0 text-sm text-white/45 w-5 text-right">
-                          {idx + 1}
-                        </span>
-                        <span className="truncate text-[20px] leading-none [font-family:var(--font-roboto-condensed)]">
-                          {toDisplayTrackTitle(t.title)}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-2 shrink-0">
-                        {t.length ? (
-                          <span className="text-[13px] text-white/75 tracking-wide">
-                            {t.length}
-                          </span>
-                        ) : null}
-                      </div>
-                    </button>
-
-                    <button
-                      type="button"
-                      className="shrink-0 rounded-md px-2 py-1 text-white/55 hover:text-white hover:bg-white/10 transition"
-                      title="Track options"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSheetTrack(trackForPlaylist);
-                        setShowPlaylistPicker(false);
-                        setShareState("idle");
-                      }}
-                    >
-                      ⋮
-                    </button>
-                  </div>
-                );
-              })}
-
-              {meta && tracks.length === 0 && (
-                <div className="p-4 text-sm text-white/70">
-                  No audio tracks found for this source.
+                  <button
+                    type="button"
+                    className="shrink-0 rounded-md p-1 text-white/60 hover:bg-white/10 hover:text-white"
+                    title="Track options"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSheetTrack(trackForPlaylist);
+                      setShowPlaylistPicker(false);
+                      setShareState("idle");
+                    }}
+                  >
+                    ⋮
+                  </button>
                 </div>
-              )}
+              );
+            })}
+
+            {meta && tracks.length === 0 && (
+              <div className="p-4 text-sm text-white/70">
+                No audio tracks found for this source.
+              </div>
+            )}
           </section>
         </div>
       )}

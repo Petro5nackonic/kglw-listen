@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { usePlayer } from "@/components/player/store";
 import { usePlaylists } from "@/components/playlists/store";
 import { toDisplayTitle, toDisplayTrackTitle } from "@/utils/displayTitle";
+import { shouldUseDefaultArtwork } from "@/utils/archiveArtwork";
 
 type Continent =
   | "North America"
@@ -20,6 +21,7 @@ type ShowItem = {
   showKey: string;
   showDate: string;
   title: string;
+  city?: string;
   defaultId: string;
   sourcesCount: number;
   artwork: string;
@@ -30,10 +32,25 @@ type ShowItem = {
   matchedSongLength?: string | null;
   matchedSongUrl?: string | null;
   showLengthSeconds?: number | null;
+  showTrackCount?: number | null;
+  specialTag?: "ORCHESTRA" | "RAVE" | "ACOUSTIC";
 };
+
+type ShowPlaybackStats = {
+  showLengthSeconds: number | null;
+  showTrackCount: number | null;
+};
+
+const SHOW_TYPE_OPTIONS = [
+  { value: "Acoustic" },
+  { value: "Rave" },
+  { value: "Orchestra" },
+  { value: "Standard" },
+];
 
 const FAVORITE_SHOWS_KEY = "kglw.favoriteShows.v1";
 const RECENT_SHOWS_KEY = "kglw.recentShows.v1";
+const DEFAULT_ARTWORK_SRC = "/api/default-artwork";
 
 function getArchiveIdentifier(url?: string): string {
   if (!url) return "";
@@ -48,6 +65,130 @@ function formatShowLength(sec?: number | null): string {
   const m = Math.floor((total % 3600) / 60);
   if (h <= 0) return `${m}m`;
   return `${h}h${String(m).padStart(2, "0")}m`;
+}
+
+function isAudioName(name: string): boolean {
+  const n = name.toLowerCase();
+  return (
+    n.endsWith(".mp3") ||
+    n.endsWith(".flac") ||
+    n.endsWith(".ogg") ||
+    n.endsWith(".m4a") ||
+    n.endsWith(".wav")
+  );
+}
+
+function audioExtRank(name: string): number {
+  const n = name.toLowerCase();
+  if (n.endsWith(".flac")) return 1;
+  if (n.endsWith(".mp3")) return 2;
+  if (n.endsWith(".m4a")) return 3;
+  if (n.endsWith(".ogg")) return 4;
+  if (n.endsWith(".wav")) return 5;
+  return 999;
+}
+
+function trackSetRank(fileName: string): number {
+  const n = fileName.toLowerCase();
+  if (n.includes("edited")) return 1;
+  if (n.includes("stereo")) return 2;
+  if (n.includes("audience") || n.includes("matrix") || n.includes("soundboard")) return 3;
+  if (n.includes("og")) return 10;
+  if (n.includes("original")) return 11;
+  if (n.includes("4ch") || n.includes("4-ch") || n.includes("4 channel") || n.includes("4-channel")) return 12;
+  return 5;
+}
+
+function parseTrackNum(t?: string): number {
+  if (!t) return Number.POSITIVE_INFINITY;
+  const m = String(t).match(/^(\d+)/);
+  return m ? Number(m[1]) : Number.POSITIVE_INFINITY;
+}
+
+function parseLengthToSeconds(raw: unknown): number | null {
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+  if (/^\d+(\.\d+)?$/.test(s)) {
+    const n = Number(s);
+    if (Number.isFinite(n) && n >= 0) return Math.floor(n);
+  }
+  const parts = s.split(":").map((p) => p.trim());
+  if (parts.some((p) => p === "" || !/^\d+$/.test(p))) return null;
+  if (parts.length === 2) return Number(parts[0]) * 60 + Number(parts[1]);
+  if (parts.length === 3) {
+    return Number(parts[0]) * 3600 + Number(parts[1]) * 60 + Number(parts[2]);
+  }
+  return null;
+}
+
+async function fetchShowPlaybackStatsClient(identifier: string): Promise<ShowPlaybackStats> {
+  try {
+    const res = await fetch(`/api/ia/show-stats?identifier=${encodeURIComponent(identifier)}`, {
+      cache: "no-store",
+    });
+    if (!res.ok) return { showLengthSeconds: null, showTrackCount: null };
+    const data = (await res.json()) as ShowPlaybackStats;
+    return {
+      showLengthSeconds:
+        typeof data?.showLengthSeconds === "number" ? data.showLengthSeconds : null,
+      showTrackCount:
+        typeof data?.showTrackCount === "number" ? data.showTrackCount : null,
+    };
+  } catch {
+    return { showLengthSeconds: null, showTrackCount: null };
+  }
+}
+
+function formatCardDate(input: string): string {
+  const m = input.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return input;
+  const yy = m[1].slice(2);
+  const mm = String(Number(m[2]));
+  const dd = String(Number(m[3]));
+  return `${mm}-${dd}-${yy}`;
+}
+
+function truncateWithEllipsis(input: string, maxChars = 34): string {
+  const text = input.trim();
+  if (text.length <= maxChars) return text;
+  return `${text.slice(0, Math.max(0, maxChars - 3)).trimEnd()}...`;
+}
+
+function showCardVariant(tag?: "ORCHESTRA" | "RAVE" | "ACOUSTIC") {
+  switch (tag) {
+    case "ACOUSTIC":
+      return {
+        cardClass:
+          "bg-linear-to-br from-[rgba(209,234,141,0.2)] to-[rgba(42,122,140,0.2)]",
+        badgeClass:
+          "bg-linear-to-br from-[rgb(209,234,141)] to-[rgb(42,122,140)] text-white",
+        badgeText: "ACOUSTIC",
+      };
+    case "ORCHESTRA":
+      return {
+        cardClass:
+          "bg-linear-to-br from-[rgba(227,85,140,0.2)] to-[rgba(244,158,102,0.2)]",
+        badgeClass:
+          "bg-linear-to-br from-[rgb(227,85,140)] to-[rgb(244,158,102)] text-white",
+        badgeText: "Orchestra",
+      };
+    case "RAVE":
+      return {
+        cardClass:
+          "bg-linear-to-br from-[rgba(197,16,243,0.2)] to-[rgba(28,47,143,0.2)]",
+        badgeClass:
+          "bg-linear-to-br from-[rgb(197,16,243)] to-[rgb(28,47,143)] text-white",
+        badgeText: "Rave",
+      };
+    default:
+      return {
+        cardClass:
+          "bg-linear-to-br from-[rgba(83,113,157,0.2)] to-[rgba(70,70,70,0.2)]",
+        badgeClass: "",
+        badgeText: "",
+      };
+  }
 }
 
 function labelFromShowKey(showKey: string): string {
@@ -76,8 +217,8 @@ type ShowsResponse = {
   };
 };
 
-function summarizeSelection(values: string[]) {
-  if (values.length === 0) return "All";
+function summarizeSelection(values: string[], emptyLabel = "All") {
+  if (values.length === 0) return emptyLabel;
   if (values.length === 1) return values[0];
   if (values.length === 2) return `${values[0]}, ${values[1]}`;
   return `${values[0]}, ${values[1]} +${values.length - 2}`;
@@ -107,8 +248,9 @@ function MultiSelectDropdown(props: {
   value: string[];
   onChange: (next: string[]) => void;
   minWidthClass?: string;
+  emptyLabel?: string;
 }) {
-  const { id, label, options, value, onChange, minWidthClass } = props;
+  const { id, label, options, value, onChange, minWidthClass, emptyLabel } = props;
 
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<string[]>(value);
@@ -140,8 +282,8 @@ function MultiSelectDropdown(props: {
     };
   }, [open, value]);
 
-  const summary = summarizeSelection(value);
-  const full = value.join(", ") || "All";
+  const summary = summarizeSelection(value, emptyLabel || "All");
+  const full = value.join(", ") || (emptyLabel || "All");
 
   return (
     <div
@@ -276,6 +418,7 @@ export default function HomePage() {
 
   const [years, setYears] = useState<string[]>([]);
   const [continents, setContinents] = useState<string[]>([]);
+  const [showTypes, setShowTypes] = useState<string[]>([]);
   const [yearFacet, setYearFacet] = useState<
     { value: string; count: number }[]
   >([]);
@@ -289,6 +432,7 @@ export default function HomePage() {
   const [favoriteShows, setFavoriteShows] = useState<string[]>([]);
   const [recentShows, setRecentShows] = useState<string[]>([]);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [statsById, setStatsById] = useState<Record<string, ShowPlaybackStats>>({});
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
@@ -297,6 +441,7 @@ export default function HomePage() {
     params.set("page", String(p));
     for (const y of years) params.append("year", y);
     for (const c of continents) params.append("continent", c);
+    for (const t of showTypes) params.append("showType", t);
     params.set("query", debouncedQuery);
     params.set("sort", sort);
     return `/api/ia/shows?${params.toString()}`; // IMPORTANT: use /api/ia/shows
@@ -378,7 +523,7 @@ export default function HomePage() {
     setPage(1);
     loadPage(1, "replace");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [years.join("|"), continents.join("|"), debouncedQuery, sort]);
+  }, [years.join("|"), continents.join("|"), showTypes.join("|"), debouncedQuery, sort]);
 
   useEffect(() => {
     if (!debouncedQuery) {
@@ -387,6 +532,8 @@ export default function HomePage() {
     }
     setResultFilter(songTotal > 0 ? "shows" : "venues");
   }, [debouncedQuery, songTotal]);
+
+  const canInfiniteLoad = !(debouncedQuery && resultFilter === "shows");
 
   useEffect(() => {
     const el = sentinelRef.current;
@@ -398,7 +545,7 @@ export default function HomePage() {
         if (!first?.isIntersecting) return;
         if (loading) return;
         if (!hasMore) return;
-        if (debouncedQuery && resultFilter === "shows") return;
+        if (!canInfiniteLoad) return;
         loadPage(page + 1, "append");
       },
       { root: null, rootMargin: "600px", threshold: 0 },
@@ -406,7 +553,7 @@ export default function HomePage() {
 
     obs.observe(el);
     return () => obs.disconnect();
-  }, [hasMore, loading, page, debouncedQuery, resultFilter]);
+  }, [hasMore, loading, page, canInfiniteLoad]);
 
   const availableYears = useMemo(() => {
     const map = new Map<string, number>();
@@ -456,6 +603,45 @@ export default function HomePage() {
   }, [shows, showTab, favoriteSet, recentSet, recentShows]);
   const featuredPlaylists = useMemo(() => playlists.slice(0, 10), [playlists]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const unresolved = venueShows
+      .filter(
+        (s) =>
+          (!Number.isFinite(s.showTrackCount ?? NaN) ||
+            !Number.isFinite(s.showLengthSeconds ?? NaN)) &&
+          !statsById[s.defaultId],
+      )
+      .slice(0, 32);
+    if (unresolved.length === 0) return;
+
+    async function run() {
+      const queue = unresolved.slice();
+      const workers = Array.from(
+        { length: Math.min(4, queue.length) },
+        async () => {
+          while (queue.length > 0) {
+            const next = queue.shift();
+            if (!next) return;
+            const stats = await fetchShowPlaybackStatsClient(next.defaultId);
+            if (cancelled) return;
+            if (stats.showTrackCount == null && stats.showLengthSeconds == null) continue;
+            setStatsById((prev) => {
+              if (prev[next.defaultId]) return prev;
+              return { ...prev, [next.defaultId]: stats };
+            });
+          }
+        },
+      );
+      await Promise.all(workers);
+    }
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [venueShows, statsById]);
+
   function persistFavorites(next: string[]) {
     setFavoriteShows(next);
     localStorage.setItem(FAVORITE_SHOWS_KEY, JSON.stringify(next));
@@ -476,245 +662,344 @@ export default function HomePage() {
   }
 
   return (
-    <main className="min-h-screen bg-linear-to-b from-[#13002e] via-[#09001f] to-[#050013] text-white">
-      <div className="mx-auto max-w-3xl px-4 pb-28 pt-4">
-        <div className="pb-4 text-center text-[11px] text-white/65">SetlistAppName</div>
-
-        <section className="mb-6">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-[34px] leading-none font-medium tracking-tight [font-family:var(--font-roboto-condensed)]">
-              Playlists
-            </h2>
-            <Link
-              href="/playlists"
-              className="rounded-full border border-fuchsia-400/50 bg-fuchsia-500/10 px-3 py-1.5 text-xs text-fuchsia-100"
-            >
-              See All ↗
-            </Link>
+    <main className="min-h-screen bg-[#080017] text-white">
+      <header className="fixed inset-x-0 top-0 z-40 border-b border-white/10 bg-[rgba(13,2,33,0.8)] backdrop-blur-[34px]">
+        <div className="mx-auto flex h-[58px] w-full max-w-[1140px] items-end px-4 pb-4 md:px-6">
+          <div className="text-[16px] font-light [font-family:var(--font-roboto-condensed)]">
+            SetlistAppName
           </div>
+        </div>
+      </header>
 
-          <div className="-mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-1">
-            {featuredPlaylists.length === 0 ? (
+      <div className="mx-auto w-full max-w-[1140px] px-4 pb-28 pt-[74px] md:px-6">
+        <div className="space-y-10">
+          <section>
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-[34px] leading-none font-semibold">Playlists</h2>
               <Link
                 href="/playlists"
-                className="min-w-[170px] rounded-2xl border border-white/15 bg-white/5 p-3"
+                className="inline-flex items-center gap-2 rounded-full border-2 border-[#5a22c9] px-4 py-2 text-sm"
               >
-                <div className="mb-2 h-[96px] rounded-xl bg-linear-to-br from-[#200040] to-[#4f1f9f]" />
-                <div className="truncate text-sm">Create your first playlist</div>
-                <div className="mt-1 text-xs text-white/60">Tap to get started</div>
+                <span>See All</span>
+                <span className="text-[13px]">›</span>
               </Link>
-            ) : (
-              featuredPlaylists.map((p) => {
-                const firstUrl = p.slots[0]?.variants[0]?.track?.url;
-                const identifier = getArchiveIdentifier(firstUrl);
-                const art = identifier
-                  ? `https://archive.org/services/img/${encodeURIComponent(identifier)}`
-                  : "";
-                const versions = p.slots.reduce((sum, slot) => sum + slot.variants.length, 0);
-                return (
-                  <Link
-                    key={p.id}
-                    href={`/playlists/${p.id}`}
-                    className="min-w-[170px] snap-start rounded-2xl border border-white/15 bg-white/5 p-3"
-                  >
-                    <div className="mb-2 h-[96px] overflow-hidden rounded-xl bg-linear-to-br from-[#200040] to-[#4f1f9f]">
-                      {art ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={art} alt="" className="h-full w-full object-cover" />
-                      ) : (
-                        <div className="flex h-full items-center justify-center text-3xl text-white/40">
-                          ♪
-                        </div>
-                      )}
-                    </div>
-                    <div className="line-clamp-2 text-sm leading-tight">{p.name}</div>
-                    <div className="mt-1 text-xs text-white/60">
-                      {p.slots.length} Tracks • {versions} Versions
-                    </div>
-                  </Link>
-                );
-              })
-            )}
-          </div>
-        </section>
-
-        <section>
-          <div className="mb-2 flex items-center justify-between">
-            <h2 className="text-[34px] leading-none font-medium tracking-tight [font-family:var(--font-roboto-condensed)]">
-              Shows
-            </h2>
-            <button
-              type="button"
-              aria-label="Toggle search"
-              className="rounded-full p-2 text-white/85"
-              onClick={() => setSearchOpen((v) => !v)}
-            >
-              ⌕
-            </button>
-          </div>
-
-          {searchOpen && (
-            <div className="mb-3">
-              <input
-                id="search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search songs, venues, dates..."
-                className="w-full rounded-xl border border-white/15 bg-black/35 px-3 py-2 text-sm text-white placeholder:text-white/45 outline-none focus:border-fuchsia-300/45"
-                autoComplete="off"
-              />
             </div>
-          )}
 
-          <div className="mb-3 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setShowTab("all")}
-              className={`rounded-full px-3 py-1.5 text-xs ${
-                showTab === "all"
-                  ? "bg-fuchsia-500/45 text-white"
-                  : "bg-white/10 text-white/80"
-              }`}
-            >
-              All
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowTab("recent")}
-              className={`rounded-full px-3 py-1.5 text-xs ${
-                showTab === "recent"
-                  ? "bg-fuchsia-500/45 text-white"
-                  : "bg-white/10 text-white/80"
-              }`}
-            >
-              Recently Played
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowTab("favorites")}
-              className={`rounded-full px-3 py-1.5 text-xs ${
-                showTab === "favorites"
-                  ? "bg-fuchsia-500/45 text-white"
-                  : "bg-white/10 text-white/80"
-              }`}
-            >
-              Favorites
-            </button>
-          </div>
-
-          <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-            <div>
-              <div className="mb-1 text-[11px] text-white/60">Sort By</div>
-              <select
-                id="sort"
-                className="w-full rounded-full border border-white/20 bg-black/35 px-3 py-2 text-sm"
-                value={sort}
-                onChange={(e) => setSort(e.target.value)}
-              >
-                <option value="newest">Recent</option>
-                <option value="oldest">Oldest</option>
-                <option value="most_played">Most played</option>
-                <option value="least_played">Least played</option>
-                <option value="show_length_longest">Longest show</option>
-                <option value="show_length_shortest">Shortest show</option>
-              </select>
-            </div>
-            <MultiSelectDropdown
-              id="years"
-              label="Filters"
-              options={availableYears}
-              value={years}
-              onChange={setYears}
-            />
-            <MultiSelectDropdown
-              id="continents"
-              label=" "
-              options={availableContinents}
-              value={continents}
-              onChange={setContinents}
-            />
-          </div>
-
-          {error && (
-            <div className="mb-3 rounded-xl border border-red-400/30 bg-red-600/15 p-3 text-sm text-red-100">
-              {error}
-            </div>
-          )}
-
-          <div className="space-y-2">
-            {venueShows.map((s) => {
-              const isFav = favoriteSet.has(s.showKey);
-              const detailsText = `${s.sourcesCount} Tracks${s.showLengthSeconds ? ` • ${formatShowLength(s.showLengthSeconds)}` : ""}`;
-              return (
-                <div
-                  key={s.showKey}
-                  className="group relative rounded-2xl border border-white/20 bg-white/8 p-2.5"
+            <div className="-mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-1">
+              {featuredPlaylists.length === 0 ? (
+                <Link
+                  href="/playlists"
+                  className="min-w-[176px] snap-start rounded-2xl border border-[#de78e5] bg-linear-to-br from-[rgba(223,119,229,0.1)] to-[rgba(26,157,177,0.1)] p-3"
                 >
-                  <button
-                    type="button"
-                    className="flex w-full items-start gap-3 text-left"
-                    onClick={() => {
-                      rememberRecentShow(s.showKey);
-                      router.push(`/show/${encodeURIComponent(s.showKey)}`);
-                    }}
-                  >
-                    <div className="h-[74px] w-[74px] shrink-0 overflow-hidden rounded-lg bg-black/30">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={s.artwork} alt="" className="h-full w-full object-cover" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="text-[11px] text-white/75">{detailsText}</div>
-                      <div className="mt-0.5 line-clamp-2 text-[25px] leading-[1.02] [font-family:var(--font-roboto-condensed)]">
-                        {toDisplayTitle(s.title)}
+                  <div className="mb-3 flex h-[135px] items-center justify-center rounded-md bg-linear-to-br from-[#6d24a4] to-[#2a0f53] text-4xl text-white/60">
+                    ♪
+                  </div>
+                  <div className="line-clamp-2 text-[16px] leading-[1.1] font-semibold">
+                    Create your first playlist
+                  </div>
+                  <div className="mt-2 text-sm text-white/80">Tap to get started</div>
+                </Link>
+              ) : (
+                featuredPlaylists.map((p) => {
+                  const firstUrl = p.slots[0]?.variants[0]?.track?.url;
+                  const identifier = getArchiveIdentifier(firstUrl);
+                  const art = identifier
+                    ? `https://archive.org/services/img/${encodeURIComponent(identifier)}`
+                    : "";
+                  const imageSrc =
+                    art && !shouldUseDefaultArtwork(identifier)
+                      ? art
+                      : DEFAULT_ARTWORK_SRC;
+                  const versions = p.slots.reduce(
+                    (sum, slot) => sum + slot.variants.length,
+                    0,
+                  );
+                  return (
+                    <Link
+                      key={p.id}
+                      href={`/playlists/${p.id}`}
+                      className="min-w-[176px] snap-start rounded-2xl border border-[#de78e5] bg-linear-to-br from-[rgba(223,119,229,0.1)] to-[rgba(26,157,177,0.1)] p-3"
+                    >
+                      <div className="mb-3 h-[135px] overflow-hidden rounded-md bg-linear-to-br from-[#6d24a4] to-[#2a0f53]">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={imageSrc}
+                          alt=""
+                          className="h-full w-full object-cover"
+                          onError={(e) => {
+                            const img = e.currentTarget;
+                            if (img.src.endsWith(DEFAULT_ARTWORK_SRC)) return;
+                            img.src = DEFAULT_ARTWORK_SRC;
+                          }}
+                        />
                       </div>
-                      <div className="mt-1 text-xs text-white/80">{s.showDate}</div>
-                      <div className="mt-1 truncate text-xs text-white/65">
-                        {labelFromShowKey(s.showKey)}
+                      <div className="line-clamp-2 text-[16px] leading-[1.1] font-semibold">
+                        {p.name}
                       </div>
-                    </div>
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={isFav ? "Remove favorite show" : "Favorite show"}
-                    className={`absolute right-3 top-3 text-sm ${
-                      isFav ? "text-fuchsia-400" : "text-white/50"
-                    }`}
-                    onClick={() => toggleFavoriteShow(s.showKey)}
-                    title={isFav ? "Unfavorite show" : "Favorite show"}
+                      <div className="mt-2 text-sm text-white/80">
+                        {p.slots.length} Tracks • {versions} Versions
+                      </div>
+                      <div className="mt-1 text-[16px] text-white/90">Jackthe5nack</div>
+                    </Link>
+                  );
+                })
+              )}
+            </div>
+          </section>
+
+          <section>
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-[34px] leading-none font-semibold">Shows</h2>
+              <button
+                type="button"
+                aria-label="Toggle search"
+                className="rounded-full p-1.5 text-white/90"
+                onClick={() => setSearchOpen((v) => !v)}
+              >
+                ⌕
+              </button>
+            </div>
+
+            {searchOpen && (
+              <div className="mb-3">
+                <input
+                  id="search"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search songs, venues, dates..."
+                  className="w-full rounded-xl border border-white/20 bg-black/35 px-3 py-2 text-sm text-white placeholder:text-white/45 outline-none focus:border-fuchsia-300/45"
+                  autoComplete="off"
+                />
+              </div>
+            )}
+
+            <div className="mb-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setShowTab("all")}
+                className={`rounded-full px-4 py-2 text-[13px] ${
+                  showTab === "all" ? "bg-[#5a22c9]" : "bg-white/10 text-white/90"
+                }`}
+              >
+                All
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowTab("recent")}
+                className={`rounded-full px-4 py-2 text-[13px] ${
+                  showTab === "recent"
+                    ? "bg-[#5a22c9]"
+                    : "bg-white/10 text-white/90"
+                }`}
+              >
+                Recently Played
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowTab("favorites")}
+                className={`rounded-full px-4 py-2 text-[13px] ${
+                  showTab === "favorites"
+                    ? "bg-[#5a22c9]"
+                    : "bg-white/10 text-white/90"
+                }`}
+              >
+                Favorites
+              </button>
+            </div>
+
+            <div className="mb-4">
+              <div className="grid grid-cols-2 gap-2 md:flex md:items-end">
+                <div>
+                  <div className="mb-1 text-[12px] text-white/70">Sort By:</div>
+                  <select
+                    id="sort"
+                    className="w-full rounded-full border border-white/90 bg-transparent px-3 py-2 text-sm"
+                    value={sort}
+                    onChange={(e) => setSort(e.target.value)}
                   >
-                    ♥
-                  </button>
+                    <option value="newest">Newest</option>
+                    <option value="oldest">Oldest</option>
+                    <option value="most_played">Most played</option>
+                    <option value="least_played">Least played</option>
+                    <option value="show_length_longest">Longest show</option>
+                    <option value="show_length_shortest">Shortest show</option>
+                  </select>
                 </div>
-              );
-            })}
+
+                <div className="col-span-1">
+                  <div className="mb-1 text-[12px] text-white/70">Filters:</div>
+                  <div className="flex gap-2">
+                    <MultiSelectDropdown
+                      id="years"
+                      label=""
+                      options={availableYears}
+                      value={years}
+                      onChange={setYears}
+                      minWidthClass="min-w-[110px]"
+                      emptyLabel="Years"
+                    />
+                    <MultiSelectDropdown
+                      id="continents"
+                      label=""
+                      options={availableContinents}
+                      value={continents}
+                      onChange={setContinents}
+                      minWidthClass="min-w-[124px]"
+                      emptyLabel="Continent"
+                    />
+                    <MultiSelectDropdown
+                      id="showTypes"
+                      label=""
+                      options={SHOW_TYPE_OPTIONS}
+                      value={showTypes}
+                      onChange={setShowTypes}
+                      minWidthClass="min-w-[132px]"
+                      emptyLabel="Show Type"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {error && (
+              <div className="mb-3 rounded-xl border border-red-400/30 bg-red-600/15 p-3 text-sm text-red-100">
+                {error}
+              </div>
+            )}
+
+            <div className="grid w-full grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
+              {venueShows.map((s) => {
+                const isFav = favoriteSet.has(s.showKey);
+                const clientStats = statsById[s.defaultId];
+                const showLengthSeconds =
+                  s.showLengthSeconds ?? clientStats?.showLengthSeconds ?? null;
+                const showTrackCount =
+                  s.showTrackCount ?? clientStats?.showTrackCount ?? null;
+                const lengthText = formatShowLength(showLengthSeconds);
+                const trackCount = Number.isFinite(showTrackCount ?? NaN)
+                  ? Math.max(0, Number(showTrackCount))
+                  : null;
+                const specialTag = s.specialTag || null;
+                const variant = showCardVariant(specialTag || undefined);
+                const displayTitle = truncateWithEllipsis(toDisplayTitle(s.title), 38);
+                const imageSrc = shouldUseDefaultArtwork(s.defaultId)
+                  ? DEFAULT_ARTWORK_SRC
+                  : s.artwork;
+                return (
+                  <div
+                    key={s.showKey}
+                    className={`relative flex h-full flex-col rounded-2xl p-3 ${variant.cardClass}`}
+                  >
+                    <button
+                      type="button"
+                      className="flex w-full flex-1 flex-col text-center"
+                      onClick={() => {
+                        rememberRecentShow(s.showKey);
+                        router.push(`/show/${encodeURIComponent(s.showKey)}`);
+                      }}
+                    >
+                      <div className="relative h-[144px] w-full overflow-hidden rounded-lg bg-black/30">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={imageSrc}
+                          alt=""
+                          className="h-full w-full object-cover"
+                          onError={(e) => {
+                            const img = e.currentTarget;
+                            if (img.src.endsWith(DEFAULT_ARTWORK_SRC)) return;
+                            img.src = DEFAULT_ARTWORK_SRC;
+                          }}
+                        />
+                        {specialTag ? (
+                          <span
+                            className={`absolute bottom-2 left-1/2 -translate-x-1/2 rounded-[6px] px-3 py-[3px] text-[12px] leading-none font-medium tracking-[0.2px] ${variant.badgeClass}`}
+                          >
+                            {variant.badgeText}
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="mt-2 text-[13px] text-white [font-family:var(--font-roboto-condensed)]">
+                        {formatCardDate(s.showDate)}
+                      </div>
+                      <div className="line-clamp-2 text-[14px] leading-[1.15] font-semibold tracking-[0.3px] [font-family:var(--font-roboto-condensed)]">
+                        {displayTitle}
+                      </div>
+                      {s.city ? (
+                        <div className="mt-1 text-[12px] leading-[1.1] font-light text-white/80 [font-family:var(--font-roboto-condensed)]">
+                          {s.city}
+                        </div>
+                      ) : null}
+                      <div className="mt-1 flex items-center justify-center gap-[6px] text-[12px] text-white/90 [font-family:var(--font-roboto-condensed)]">
+                        <span>{trackCount ?? "—"} Tracks</span>
+                        {lengthText ? (
+                          <>
+                            <span className="inline-block size-[3px] rounded-full bg-white/90" />
+                            <span>{lengthText}</span>
+                          </>
+                        ) : null}
+                      </div>
+                    </button>
+
+                    <div className="mt-auto flex justify-center pt-3">
+                      <div className="inline-flex h-[31px] items-center justify-center gap-[10px] rounded-[8px] border border-black/20 bg-black/20 px-3">
+                        <button
+                          type="button"
+                          aria-label={isFav ? "Remove favorite show" : "Favorite show"}
+                          className={`inline-flex h-[15px] w-[16px] items-center justify-center ${isFav ? "text-fuchsia-300" : "text-white"}`}
+                          onClick={() => toggleFavoriteShow(s.showKey)}
+                          title={isFav ? "Unfavorite show" : "Favorite show"}
+                        >
+                          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                            <path d="M7 3.5h10a1.5 1.5 0 0 1 1.5 1.5v16.5l-6.5-4-6.5 4V5A1.5 1.5 0 0 1 7 3.5Z" />
+                          </svg>
+                        </button>
+                        <span className="h-[29px] w-px bg-black/30" />
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 text-[12px] text-white [font-family:var(--font-roboto-condensed)]"
+                          onClick={() => {
+                            rememberRecentShow(s.showKey);
+                            router.push(`/show/${encodeURIComponent(s.showKey)}`);
+                          }}
+                        >
+                          <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                            <path d="M8 6v12l10-6-10-6Z" />
+                          </svg>
+                          <span>Play</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
 
             {venueShows.length === 0 && (
-              <div className="rounded-xl border border-white/15 bg-white/5 p-4 text-sm text-white/70">
+              <div className="mt-3 rounded-xl border border-white/15 bg-white/5 p-4 text-sm text-white/70">
                 No shows found for this filter.
               </div>
             )}
-          </div>
 
-          <div className="py-8">
-            {loading && <div className="text-sm text-white/65">Loading…</div>}
-            {!hasMore && !loading && (
-              <div className="text-sm text-white/50">End of list.</div>
-            )}
-            <div ref={sentinelRef} />
-          </div>
-        </section>
+            <div className="py-8">
+              {loading && <div className="text-sm text-white/65">Loading…</div>}
+              {!loading && hasMore && canInfiniteLoad && (
+                <button
+                  type="button"
+                  className="mb-3 rounded-full border border-white/20 bg-white/5 px-4 py-2 text-sm text-white/90 hover:bg-white/10"
+                  onClick={() => loadPage(page + 1, "append")}
+                >
+                  Load more
+                </button>
+              )}
+              {!hasMore && !loading && (
+                <div className="text-sm text-white/50">End of list.</div>
+              )}
+              <div ref={sentinelRef} />
+            </div>
+          </section>
+        </div>
       </div>
 
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-[#080015]/95 backdrop-blur">
-        <div className="mx-auto grid max-w-3xl grid-cols-4 px-4 py-3 text-center text-[10px] text-white/80">
-          <Link href="/" className="text-fuchsia-300">
-            HOME
-          </Link>
-          <Link href="/playlists">LIBRARY</Link>
-          <Link href="/">BROWSE</Link>
-          <Link href="/">PROFILE</Link>
-        </div>
-      </nav>
     </main>
   );
 }

@@ -24,6 +24,8 @@ export function toDisplayTitle(title?: string | null): string {
     .replace(/\s*[-:|–—]+\s*/g, " - ")
     .replace(/(?:\s-\s){2,}/g, " - ")
     .replace(/^\s*-\s*|\s*-\s*$/g, "")
+    // Some IA titles end with dangling "on" after date removal ("Live at ... on").
+    .replace(/\bon\s*$/i, "")
     .replace(/\s{2,}/g, " ")
     .trim();
 

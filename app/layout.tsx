@@ -25,7 +25,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body
         className={`${roboto.variable} ${robotoCondensed.variable} min-h-screen bg-black text-white`}
       >
-        <div className="mx-auto max-w-3xl p-4 pb-28">{children}</div>
+        <div className="w-full pb-28">{children}</div>
         <PlayerBar />
       </body>
     </html>

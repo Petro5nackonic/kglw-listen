@@ -44,7 +44,9 @@ export function PlayerBar() {
   const [current, setCurrent] = useState(0);
   const [duration, setDuration] = useState(0);
 
-  // Keep audio element in sync with src + playing
+  // Keep audio element in sync when source changes.
+  // Important: do not depend on `playing` here, or pause/play toggles
+  // will reload the source and reset currentTime to 0.
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -66,7 +68,7 @@ export function PlayerBar() {
         console.error("play() blocked/failed:", err);
       });
     }
-  }, [src, playing]);
+  }, [src]);
 
   // If user pauses/plays without changing src
   useEffect(() => {

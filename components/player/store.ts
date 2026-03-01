@@ -14,6 +14,8 @@ type PlayerState = {
   playing: boolean;
   setQueue: (queue: Track[], startIndex?: number) => void;
   playIndex: (i: number) => void;
+  play: () => void;
+  pause: () => void;
   setPlaying: (v: boolean) => void;
   next: () => void;
   prev: () => void;
@@ -26,6 +28,8 @@ export const usePlayer = create<PlayerState>((set, get) => ({
 
   setQueue: (queue, startIndex = 0) => set({ queue, index: startIndex, playing: true }),
   playIndex: (i) => set({ index: i, playing: true }),
+  play: () => set({ playing: true }),
+  pause: () => set({ playing: false }),
   setPlaying: (v) => set({ playing: v }),
 
   next: () => {

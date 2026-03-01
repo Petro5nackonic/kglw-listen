@@ -34,6 +34,7 @@ type Recording = {
   title: string;
   showDate: string;
   showKey: string;
+  city?: string;
   continent: Continent;
   artwork: string;
   downloads: number;
@@ -47,6 +48,7 @@ type ShowListItem = {
   showKey: string;
   showDate: string;
   title: string;
+  city?: string;
   defaultId: string;
   sourcesCount: number;
   artwork: string;
@@ -57,7 +59,37 @@ type ShowListItem = {
   matchedSongLength?: string | null;
   matchedSongUrl?: string | null;
   showLengthSeconds?: number | null;
+  showTrackCount?: number | null;
+  specialTag?: "ORCHESTRA" | "RAVE" | "ACOUSTIC";
 };
+
+type SpecialTag = "ORCHESTRA" | "RAVE" | "ACOUSTIC";
+type ShowTypeFilter = "ORCHESTRA" | "RAVE" | "ACOUSTIC" | "STANDARD";
+
+type KglwShowRow = {
+  showdate?: string;
+  showtitle?: string;
+  venuename?: string;
+  location?: string;
+  city?: string;
+  artist_id?: number;
+};
+
+type KglwTagEntry = {
+  tag: SpecialTag;
+  venueCandidates: string[];
+};
+
+const KGLW_API_ROOT = "https://kglw.net/api/v2";
+const KGLW_TAG_TITLES: Record<SpecialTag, string> = {
+  ORCHESTRA: "Orchestra Show",
+  RAVE: "Rave Show",
+  ACOUSTIC: "Acoustic Show",
+};
+const KGLW_TAG_CACHE_TTL_MS = 1000 * 60 * 60 * 12;
+let kglwTagCache:
+  | { expiresAt: number; byDate: Map<string, KglwTagEntry[]> }
+  | null = null;
 
 const VENUE_STOP_WORDS = new Set([
   "live",
@@ -149,6 +181,14 @@ function scoreSource(doc: IaDoc): number {
   return Math.log10(downloads + 1) * 10 + avg * 2 + Math.log10(reviews + 1) + hintBonus;
 }
 
+function specialTagFromShowTitle(showtitle?: string): SpecialTag | null {
+  const t = String(showtitle || "").toLowerCase();
+  if (t.includes("orchestra")) return "ORCHESTRA";
+  if (t.includes("rave")) return "RAVE";
+  if (t.includes("acoustic")) return "ACOUSTIC";
+  return null;
+}
+
 function slugify(s: string): string {
   return s
     .toLowerCase()
@@ -218,6 +258,141 @@ function venueLooksSame(aTitle: string, bTitle: string): boolean {
   return jaccard >= 0.45;
 }
 
+function slugTokenSet(value: string): Set<string> {
+  return new Set(
+    String(value || "")
+      .toLowerCase()
+      .split("-")
+      .map((t) => t.trim())
+      .filter((t) => t.length >= 3 && !VENUE_STOP_WORDS.has(t)),
+  );
+}
+
+function venueSlugMatches(showVenueSlug: string, candidates: string[]): boolean {
+  const showSlug = String(showVenueSlug || "");
+  if (!showSlug) return false;
+
+  for (const c of candidates) {
+    if (!c) continue;
+    if (c === showSlug) return true;
+    if (c.includes(showSlug) || showSlug.includes(c)) return true;
+  }
+
+  const showTokens = slugTokenSet(showSlug);
+  if (showTokens.size === 0) return false;
+  for (const c of candidates) {
+    const cTokens = slugTokenSet(c);
+    if (cTokens.size === 0) continue;
+    let overlap = 0;
+    for (const t of showTokens) if (cTokens.has(t)) overlap++;
+    if (overlap >= 2) return true;
+    if (Math.min(showTokens.size, cTokens.size) <= 2 && overlap >= 1) return true;
+  }
+  return false;
+}
+
+async function fetchKglwShowsForTitle(title: string): Promise<KglwShowRow[]> {
+  const titlePath = encodeURIComponent(title).replace(/%20/g, "+");
+  const url =
+    `${KGLW_API_ROOT}/shows/showtitle/${titlePath}.json` +
+    "?order_by=showdate&direction=asc&limit=2000";
+  const res = await fetch(url, {
+    cache: "no-store",
+    headers: {
+      // KGLW API can return 403 for non-browser default user agents.
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+      Accept: "application/json",
+    },
+  });
+  if (!res.ok) return [];
+  const data = (await res.json()) as { data?: KglwShowRow[] };
+  return Array.isArray(data?.data) ? data.data : [];
+}
+
+async function getKglwSpecialTagsByDate(): Promise<Map<string, KglwTagEntry[]>> {
+  const now = Date.now();
+  if (kglwTagCache && kglwTagCache.expiresAt > now) return kglwTagCache.byDate;
+
+  try {
+    const byDate = new Map<string, KglwTagEntry[]>();
+    const requests = Object.entries(KGLW_TAG_TITLES).map(async ([tag, title]) => {
+      const rows = await fetchKglwShowsForTitle(title);
+      return { tag: tag as SpecialTag, rows };
+    });
+    const results = await Promise.all(requests);
+
+    for (const result of results) {
+      for (const row of result.rows) {
+        if (Number(row.artist_id) !== 1) continue;
+        const date = String(row.showdate || "");
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+
+        const candidates = Array.from(
+          new Set(
+            [row.venuename, row.city, row.location]
+              .map((s) => slugify(String(s || "")))
+              .filter(Boolean),
+          ),
+        );
+        const list = byDate.get(date) || [];
+        list.push({
+          tag: result.tag,
+          venueCandidates: candidates,
+        });
+        byDate.set(date, list);
+      }
+    }
+
+    kglwTagCache = {
+      expiresAt: now + KGLW_TAG_CACHE_TTL_MS,
+      byDate,
+    };
+    return byDate;
+  } catch {
+    return new Map<string, KglwTagEntry[]>();
+  }
+}
+
+function applySpecialTagsToShows(
+  shows: ShowListItem[],
+  byDate: Map<string, KglwTagEntry[]>,
+): ShowListItem[] {
+  return shows.map((s) => {
+    const entries = byDate.get(s.showDate) || [];
+    if (entries.length === 0) return s;
+    if (entries.length === 1) return { ...s, specialTag: entries[0].tag };
+
+    const venueSlug = (s.showKey.split("|")[1] || "").toLowerCase();
+    const match = entries.find((e) => venueSlugMatches(venueSlug, e.venueCandidates));
+    if (!match) return s;
+    return { ...s, specialTag: match.tag };
+  });
+}
+
+function toShowTypeFilter(input: string): ShowTypeFilter | null {
+  const v = String(input || "").trim().toLowerCase();
+  if (v === "orchestra") return "ORCHESTRA";
+  if (v === "rave") return "RAVE";
+  if (v === "acoustic") return "ACOUSTIC";
+  if (v === "standard") return "STANDARD";
+  return null;
+}
+
+function filterByShowTypes(
+  shows: ShowListItem[],
+  filters: ShowTypeFilter[],
+): ShowListItem[] {
+  if (filters.length === 0) return shows;
+  const wanted = new Set(filters);
+  return shows.filter((s) => {
+    if (s.specialTag === "ORCHESTRA") return wanted.has("ORCHESTRA");
+    if (s.specialTag === "RAVE") return wanted.has("RAVE");
+    if (s.specialTag === "ACOUSTIC") return wanted.has("ACOUSTIC");
+    return wanted.has("STANDARD");
+  });
+}
+
 type Continent = "North America" | "South America" | "Europe" | "Asia" | "Africa" | "Oceania" | "Unknown";
 
 function continentFromVenueCoverageTitle(venue?: string, coverage?: string, title?: string): Continent {
@@ -249,6 +424,28 @@ function continentFromVenueCoverageTitle(venue?: string, coverage?: string, titl
   return "Unknown";
 }
 
+function cityFromVenueCoverage(venue?: string, coverage?: string): string {
+  const pickCity = (raw: string): string => {
+    const text = String(raw || "").trim();
+    if (!text) return "";
+    // Common IA shape: "Sydney, Australia"
+    if (text.includes(",")) {
+      const first = text.split(",")[0]?.trim() || "";
+      if (first) return first;
+    }
+    // Some values use separators like "Sydney - Australia".
+    if (text.includes(" - ")) {
+      const first = text.split(" - ")[0]?.trim() || "";
+      if (first) return first;
+    }
+    return text;
+  };
+
+  const fromCoverage = pickCity(String(coverage || ""));
+  if (fromCoverage) return fromCoverage;
+  return pickCity(String(venue || ""));
+}
+
 function buildRecordingsFromDocs(input: IaDoc[], continentFilters: string[]): Recording[] {
   return input
     .map((d) => {
@@ -277,6 +474,7 @@ function buildRecordingsFromDocs(input: IaDoc[], continentFilters: string[]): Re
         title: d.title || d.identifier,
         showDate,
         showKey,
+        city: cityFromVenueCoverage(d.venue, d.coverage),
         continent: showContinent,
         artwork: `https://archive.org/services/img/${encodeURIComponent(
           d.identifier,
@@ -298,6 +496,7 @@ function buildShowsFromRecordings(recordings: Recording[]): ShowListItem[] {
       showKey: string;
       showDate: string;
       title: string;
+      city?: string;
       sources: Recording[];
       continent: Continent;
     }
@@ -310,6 +509,7 @@ function buildShowsFromRecordings(recordings: Recording[]): ShowListItem[] {
         showKey: r.showKey,
         showDate: r.showDate,
         title: r.title,
+        city: r.city,
         sources: [r],
         continent: r.continent,
       });
@@ -317,6 +517,7 @@ function buildShowsFromRecordings(recordings: Recording[]): ShowListItem[] {
     }
     g.sources.push(r);
     if ((g.title?.length || 0) < (r.title?.length || 0)) g.title = r.title;
+    if (!g.city && r.city) g.city = r.city;
     if (g.continent === "Unknown" && r.continent !== "Unknown") {
       g.continent = r.continent;
     }
@@ -358,6 +559,7 @@ function buildShowsFromRecordings(recordings: Recording[]): ShowListItem[] {
       showKey: g.showKey,
       showDate: g.showDate,
       title: g.title,
+      city: g.city || undefined,
       defaultId: best.identifier,
       sourcesCount: sources.length,
       artwork: best.artwork,
@@ -434,7 +636,10 @@ function isAudioName(name: string): boolean {
   );
 }
 
-const showLengthCache = new Map<string, number | null>();
+const showPlaybackStatsCache = new Map<
+  string,
+  { showLengthSeconds: number | null; showTrackCount: number | null }
+>();
 
 function audioExtRank(name: string): number {
   const n = name.toLowerCase();
@@ -463,66 +668,90 @@ function parseTrackNum(t?: string): number {
   return m ? Number(m[1]) : Number.POSITIVE_INFINITY;
 }
 
-async function fetchShowLengthSeconds(identifier: string): Promise<number | null> {
-  if (showLengthCache.has(identifier)) return showLengthCache.get(identifier) ?? null;
+async function fetchShowPlaybackStats(
+  identifier: string,
+): Promise<{ showLengthSeconds: number | null; showTrackCount: number | null }> {
+  const cached = showPlaybackStatsCache.get(identifier);
+  if (cached) return cached;
 
-  let timeout: ReturnType<typeof setTimeout> | null = null;
-  try {
-    const controller = new AbortController();
-    timeout = setTimeout(() => controller.abort(), 1500);
-    const res = await fetch(
-      `https://archive.org/metadata/${encodeURIComponent(identifier)}`,
-      { cache: "no-store", signal: controller.signal },
-    );
-    if (!res.ok) {
-      showLengthCache.set(identifier, null);
+  async function fetchMetadataWithTimeout(timeoutMs: number) {
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    try {
+      const controller = new AbortController();
+      timeout = setTimeout(() => controller.abort(), timeoutMs);
+      const res = await fetch(
+        `https://archive.org/metadata/${encodeURIComponent(identifier)}`,
+        { cache: "no-store", signal: controller.signal },
+      );
+      if (!res.ok) return null;
+      return (await res.json()) as { files?: IaMetadataFile[] };
+    } catch {
       return null;
+    } finally {
+      if (timeout) clearTimeout(timeout);
     }
-
-    const data = (await res.json()) as { files?: IaMetadataFile[] };
-    const files: IaMetadataFile[] = Array.isArray(data?.files) ? data.files : [];
-    const audioAll = files.filter((f) => {
-      const name = String(f?.name || "");
-      return Boolean(name) && isAudioName(name);
-    });
-    if (audioAll.length === 0) {
-      showLengthCache.set(identifier, null);
-      return null;
-    }
-
-    const bestSet = Math.min(...audioAll.map((f) => trackSetRank(String(f?.name || ""))));
-    const inSet = audioAll.filter((f) => trackSetRank(String(f?.name || "")) === bestSet);
-    const bestExt = Math.min(...inSet.map((f) => audioExtRank(String(f?.name || ""))));
-    const picked = inSet.filter((f) => audioExtRank(String(f?.name || "")) === bestExt);
-
-    picked.sort((a, b) => {
-      const ta = parseTrackNum(a?.track);
-      const tb = parseTrackNum(b?.track);
-      if (ta !== tb) return ta - tb;
-      return String(a?.name || "").localeCompare(String(b?.name || ""));
-    });
-
-    const seen = new Set<string>();
-    let total = 0;
-    for (const f of picked) {
-      const title = String(f?.title || f?.name || "");
-      const lenRaw = String(f?.length || "");
-      const key = `${title.toLowerCase()}|${lenRaw}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      const sec = parseLengthToSeconds(f?.length);
-      if (sec != null) total += sec;
-    }
-
-    const out = total > 0 ? total : null;
-    showLengthCache.set(identifier, out);
-    return out;
-  } catch {
-    showLengthCache.set(identifier, null);
-    return null;
-  } finally {
-    if (timeout) clearTimeout(timeout);
   }
+
+  // Archive metadata can be slow/intermittent. Retry once with a longer timeout.
+  const metadata =
+    (await fetchMetadataWithTimeout(3500)) ||
+    (await fetchMetadataWithTimeout(7000));
+  if (!metadata) {
+    return { showLengthSeconds: null, showTrackCount: null };
+  }
+
+  const files: IaMetadataFile[] = Array.isArray(metadata.files)
+    ? metadata.files
+    : [];
+  const audioAll = files.filter((f) => {
+    const name = String(f?.name || "");
+    return Boolean(name) && isAudioName(name);
+  });
+  if (audioAll.length === 0) {
+    return { showLengthSeconds: null, showTrackCount: null };
+  }
+
+  const bestSet = Math.min(
+    ...audioAll.map((f) => trackSetRank(String(f?.name || ""))),
+  );
+  const inSet = audioAll.filter(
+    (f) => trackSetRank(String(f?.name || "")) === bestSet,
+  );
+  const bestExt = Math.min(
+    ...inSet.map((f) => audioExtRank(String(f?.name || ""))),
+  );
+  const picked = inSet.filter(
+    (f) => audioExtRank(String(f?.name || "")) === bestExt,
+  );
+
+  picked.sort((a, b) => {
+    const ta = parseTrackNum(a?.track);
+    const tb = parseTrackNum(b?.track);
+    if (ta !== tb) return ta - tb;
+    return String(a?.name || "").localeCompare(String(b?.name || ""));
+  });
+
+  const seen = new Set<string>();
+  let total = 0;
+  for (const f of picked) {
+    const title = String(f?.title || f?.name || "");
+    const lenRaw = String(f?.length || "");
+    const key = `${title.toLowerCase()}|${lenRaw}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const sec = parseLengthToSeconds(f?.length);
+    if (sec != null) total += sec;
+  }
+
+  const out = {
+    showLengthSeconds: total > 0 ? total : null,
+    showTrackCount: seen.size > 0 ? seen.size : null,
+  };
+  // Cache only computed results to avoid poisoning cache on transient failures.
+  if (out.showTrackCount != null || out.showLengthSeconds != null) {
+    showPlaybackStatsCache.set(identifier, out);
+  }
+  return out;
 }
 
 async function fetchSongMatchInfo(
@@ -611,6 +840,10 @@ export async function GET(req: NextRequest) {
     .getAll("continent")
     .map((c) => c.trim())
     .filter(Boolean);
+  const showTypes = sp
+    .getAll("showType")
+    .map((s) => toShowTypeFilter(s))
+    .filter(Boolean) as ShowTypeFilter[];
   const query = (sp.get("query") || sp.get("q") || "").trim();
   const sort = (sp.get("sort") || "newest").trim().toLowerCase();
 
@@ -691,7 +924,10 @@ export async function GET(req: NextRequest) {
 
   const recordings = buildRecordingsFromDocs(docs, continentFilters);
   const shows = buildShowsFromRecordings(recordings);
-  const sortedShows = sortShows(shows, sort);
+  const kglwSpecialTagsByDate = await getKglwSpecialTagsByDate();
+  const taggedShows = applySpecialTagsToShows(shows, kglwSpecialTagsByDate);
+  const typedShows = filterByShowTypes(taggedShows, showTypes);
+  const sortedShows = sortShows(typedShows, sort);
 
   const qLower = query.toLowerCase();
   const searchedShows = query
@@ -740,7 +976,16 @@ export async function GET(req: NextRequest) {
       }
 
       const songRecordings = buildRecordingsFromDocs(songDocs, continentFilters);
-      songMatchedShows = sortShows(buildShowsFromRecordings(songRecordings), sort);
+      songMatchedShows = sortShows(
+        filterByShowTypes(
+          applySpecialTagsToShows(
+            buildShowsFromRecordings(songRecordings),
+            kglwSpecialTagsByDate,
+          ),
+          showTypes,
+        ),
+        sort,
+      );
 
       // Compute per-show longest matching track length for sort/filter UX.
       const MAX_SONG_LENGTH_LOOKUPS = 20;
@@ -784,13 +1029,19 @@ export async function GET(req: NextRequest) {
   // App pagination
   const start = (page - 1) * PAGE_SIZE;
   let items = searchedShows.slice(start, start + PAGE_SIZE);
+  const enriched = await withConcurrency(items, 8, async (s) => {
+    const stats = await fetchShowPlaybackStats(s.defaultId);
+    return {
+      ...s,
+      showLengthSeconds: stats.showLengthSeconds,
+      showTrackCount: stats.showTrackCount,
+    };
+  });
+  items = enriched;
+
   const isLengthSort = sort === "show_length_longest" || sort === "show_length_shortest";
   if (isLengthSort) {
-    const enriched = await withConcurrency(items, 8, async (s) => {
-      const showLengthSeconds = await fetchShowLengthSeconds(s.defaultId);
-      return { ...s, showLengthSeconds };
-    });
-    items = enriched.sort((a, b) => {
+    items = items.sort((a, b) => {
       const av = typeof a.showLengthSeconds === "number" ? a.showLengthSeconds : -1;
       const bv = typeof b.showLengthSeconds === "number" ? b.showLengthSeconds : -1;
       if (sort === "show_length_shortest") return av - bv;
@@ -815,6 +1066,7 @@ export async function GET(req: NextRequest) {
     debug: {
       years: yearFilters.length > 0 ? yearFilters : ["All"],
       continents: continentFilters.length > 0 ? continentFilters : ["All"],
+      showTypes: showTypes.length > 0 ? showTypes : ["All"],
       query,
       sort,
       fetchedDocs: docs.length,
