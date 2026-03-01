@@ -358,7 +358,7 @@ export default function ShowPage({
   const heroImage = selectedId
     ? `https://archive.org/services/img/${encodeURIComponent(selectedId)}`
     : "";
-  const heroImageSrc = shouldUseDefaultArtwork(selectedId)
+  const heroImageSrc = shouldUseDefaultArtwork(selectedId ?? undefined)
     ? DEFAULT_ARTWORK_SRC
     : heroImage;
   const rawShowTitle =
