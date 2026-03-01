@@ -605,30 +605,38 @@ export default function HomePage() {
 
   useEffect(() => {
     let cancelled = false;
-    const unresolved = venueShows
+    const unresolvedIds = Array.from(
+      new Set(
+        venueShows
+          .filter(
+            (s) =>
+              !Number.isFinite(s.showTrackCount ?? NaN) ||
+              !Number.isFinite(s.showLengthSeconds ?? NaN),
+          )
+          .map((s) => s.defaultId)
+          .filter(Boolean),
+      ),
+    )
       .filter(
-        (s) =>
-          (!Number.isFinite(s.showTrackCount ?? NaN) ||
-            !Number.isFinite(s.showLengthSeconds ?? NaN)) &&
-          !statsById[s.defaultId],
+        (id) => !Object.prototype.hasOwnProperty.call(statsById, id),
       )
-      .slice(0, 32);
-    if (unresolved.length === 0) return;
+      .slice(0, 24);
+    if (unresolvedIds.length === 0) return;
 
     async function run() {
-      const queue = unresolved.slice();
+      const queue = unresolvedIds.slice();
       const workers = Array.from(
         { length: Math.min(4, queue.length) },
         async () => {
           while (queue.length > 0) {
-            const next = queue.shift();
-            if (!next) return;
-            const stats = await fetchShowPlaybackStatsClient(next.defaultId);
+            const identifier = queue.shift();
+            if (!identifier) return;
+            const stats = await fetchShowPlaybackStatsClient(identifier);
             if (cancelled) return;
-            if (stats.showTrackCount == null && stats.showLengthSeconds == null) continue;
             setStatsById((prev) => {
-              if (prev[next.defaultId]) return prev;
-              return { ...prev, [next.defaultId]: stats };
+              if (Object.prototype.hasOwnProperty.call(prev, identifier)) return prev;
+              // Store even null stats so we don't retry endlessly.
+              return { ...prev, [identifier]: stats };
             });
           }
         },
@@ -641,6 +649,13 @@ export default function HomePage() {
       cancelled = true;
     };
   }, [venueShows, statsById]);
+
+  useEffect(() => {
+    const targets = venueShows.slice(0, 16);
+    for (const s of targets) {
+      router.prefetch(`/show/${encodeURIComponent(s.showKey)}`);
+    }
+  }, [venueShows, router]);
 
   function persistFavorites(next: string[]) {
     setFavoriteShows(next);
@@ -875,6 +890,10 @@ export default function HomePage() {
                   s.showLengthSeconds ?? clientStats?.showLengthSeconds ?? null;
                 const showTrackCount =
                   s.showTrackCount ?? clientStats?.showTrackCount ?? null;
+                const isStatsLoading =
+                  !Number.isFinite(showTrackCount ?? NaN) &&
+                  !Number.isFinite(showLengthSeconds ?? NaN) &&
+                  !Object.prototype.hasOwnProperty.call(statsById, s.defaultId);
                 const lengthText = formatShowLength(showLengthSeconds);
                 const trackCount = Number.isFinite(showTrackCount ?? NaN)
                   ? Math.max(0, Number(showTrackCount))
@@ -930,13 +949,21 @@ export default function HomePage() {
                         </div>
                       ) : null}
                       <div className="mt-1 flex items-center justify-center gap-[6px] text-[12px] text-white/90 [font-family:var(--font-roboto-condensed)]">
-                        <span>{trackCount ?? "—"} Tracks</span>
-                        {lengthText ? (
+                        {isStatsLoading ? (
+                          <span className="animate-pulse text-white/70">
+                            Loading stats...
+                          </span>
+                        ) : (
                           <>
-                            <span className="inline-block size-[3px] rounded-full bg-white/90" />
-                            <span>{lengthText}</span>
+                            <span>{trackCount ?? "—"} Tracks</span>
+                            {lengthText ? (
+                              <>
+                                <span className="inline-block size-[3px] rounded-full bg-white/90" />
+                                <span>{lengthText}</span>
+                              </>
+                            ) : null}
                           </>
-                        ) : null}
+                        )}
                       </div>
                     </button>
 

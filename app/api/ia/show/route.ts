@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
+const SHOW_DETAIL_CACHE_TTL_MS = 1000 * 60 * 5;
 
 type IaDoc = {
   identifier: string;
@@ -11,6 +12,27 @@ type IaDoc = {
   avg_rating?: number | string;
   num_reviews?: number | string;
 };
+
+const showDetailCache = new Map<
+  string,
+  {
+    expiresAt: number;
+    payload: {
+      key: string;
+      showDate: string;
+      defaultId: string | null;
+      sources: {
+        identifier: string;
+        title: string;
+        hint: "SBD" | "AUD" | "MATRIX" | "UNKNOWN";
+        downloads: number;
+        avg_rating: number;
+        num_reviews: number;
+        score: number;
+      }[];
+    };
+  }
+>();
 
 function parseNum(x: unknown): number {
   const n = Number(x);
@@ -62,6 +84,11 @@ export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
   const key = sp.get("key");
   if (!key) return Response.json({ error: "Missing key" }, { status: 400 });
+
+  const cached = showDetailCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) {
+    return Response.json(cached.payload);
+  }
 
   const showDate = extractShowDateFromKey(key);
   if (!showDate) return Response.json({ error: "Invalid key" }, { status: 400 });
@@ -121,10 +148,15 @@ export async function GET(req: NextRequest) {
 
   const defaultId = sources[0]?.identifier || null;
 
-  return Response.json({
+  const payload = {
     key,
     showDate,
     defaultId,
     sources,
+  };
+  showDetailCache.set(key, {
+    expiresAt: Date.now() + SHOW_DETAIL_CACHE_TTL_MS,
+    payload,
   });
+  return Response.json(payload);
 }

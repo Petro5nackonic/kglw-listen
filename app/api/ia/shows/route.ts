@@ -3,6 +3,7 @@ import { formatDuration } from "@/utils/formatDuration";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
+const SHOWS_RESPONSE_CACHE_TTL_MS = 1000 * 90;
 
 type IaDoc = {
   identifier: string;
@@ -640,6 +641,10 @@ const showPlaybackStatsCache = new Map<
   string,
   { showLengthSeconds: number | null; showTrackCount: number | null }
 >();
+const showsResponseCache = new Map<
+  string,
+  { expiresAt: number; payload: unknown }
+>();
 
 function audioExtRank(name: string): number {
   const n = name.toLowerCase();
@@ -849,6 +854,20 @@ export async function GET(req: NextRequest) {
 
   const yearFilters = years.filter((y) => /^\d{4}$/.test(y));
   const continentFilters = continents.filter((c) => c && c !== "All");
+  const showTypeFilters = [...showTypes].sort();
+  const cacheKey = JSON.stringify({
+    v: 1,
+    page,
+    years: [...yearFilters].sort(),
+    continents: [...continentFilters].sort(),
+    showTypes: showTypeFilters,
+    query: query.toLowerCase(),
+    sort,
+  });
+  const cached = showsResponseCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return Response.json(cached.payload);
+  }
 
   const PAGE_SIZE = 25;
 
@@ -1029,15 +1048,6 @@ export async function GET(req: NextRequest) {
   // App pagination
   const start = (page - 1) * PAGE_SIZE;
   let items = searchedShows.slice(start, start + PAGE_SIZE);
-  const enriched = await withConcurrency(items, 8, async (s) => {
-    const stats = await fetchShowPlaybackStats(s.defaultId);
-    return {
-      ...s,
-      showLengthSeconds: stats.showLengthSeconds,
-      showTrackCount: stats.showTrackCount,
-    };
-  });
-  items = enriched;
 
   const isLengthSort = sort === "show_length_longest" || sort === "show_length_shortest";
   if (isLengthSort) {
@@ -1049,8 +1059,7 @@ export async function GET(req: NextRequest) {
     });
   }
   const hasMore = start + PAGE_SIZE < searchedShows.length;
-
-  return Response.json({
+  const payload = {
     page,
     items,
     hasMore,
@@ -1075,5 +1084,10 @@ export async function GET(req: NextRequest) {
       searchedShows: searchedShows.length,
       iaPagesUsed: iaPage,
     },
+  };
+  showsResponseCache.set(cacheKey, {
+    expiresAt: Date.now() + SHOWS_RESPONSE_CACHE_TTL_MS,
+    payload,
   });
+  return Response.json(payload);
 }

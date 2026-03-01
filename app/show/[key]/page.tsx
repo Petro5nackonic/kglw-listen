@@ -260,11 +260,11 @@ export default function ShowPage({
 
       try {
         const res = await fetch(
-          `https://archive.org/metadata/${encodeURIComponent(selectedId)}`,
+          `/api/ia/show-metadata?id=${encodeURIComponent(selectedId)}`,
           { cache: "no-store" },
         );
         if (!res.ok)
-          throw new Error(`GET archive metadata failed: ${res.status}`);
+          throw new Error(`GET /api/ia/show-metadata failed: ${res.status}`);
         const data = (await res.json()) as IaMetadataResponse;
 
         if (!alive) return;
@@ -549,7 +549,7 @@ export default function ShowPage({
                     }}
                     className="flex min-w-0 flex-1 items-center justify-between gap-3 px-1 py-1 text-left"
                   >
-                    <span className="truncate text-[24px] leading-none [font-family:var(--font-roboto-condensed)]">
+                    <span className="truncate text-[16px] leading-none [font-family:var(--font-roboto-condensed)]">
                       {toDisplayTrackTitle(t.title)}
                     </span>
                     {t.length ? (
