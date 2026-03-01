@@ -127,6 +127,7 @@ export default function PlaylistDetailPage() {
     : params?.id || "";
 
   const [hydrated, setHydrated] = useState(false);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setHydrated(true), []);
 
   const { setQueue } = usePlayer();
@@ -141,6 +142,7 @@ export default function PlaylistDetailPage() {
   const [actionSlotId, setActionSlotId] = useState<string | null>(null);
   const [chainPickerOpen, setChainPickerOpen] = useState(false);
   const [chainDraftIds, setChainDraftIds] = useState<string[]>([]);
+  const [expandedVariants, setExpandedVariants] = useState<Record<string, boolean>>({});
   const [shuffleEnabled, setShuffleEnabled] = useState(false);
   const [showTitleByIdentifier, setShowTitleByIdentifier] = useState<
     Record<string, string>
@@ -168,8 +170,8 @@ export default function PlaylistDetailPage() {
     ).size;
   }, [playlist]);
   const versionsCount = useMemo(
-    () => playlist.slots.reduce((sum, s) => sum + s.variants.length, 0),
-    [playlist.slots],
+    () => (playlist?.slots || []).reduce((sum, s) => sum + s.variants.length, 0),
+    [playlist],
   );
   const totalDurationLabel = useMemo(() => {
     const totalSeconds = playableSlots.reduce(
@@ -258,6 +260,7 @@ export default function PlaylistDetailPage() {
     if (!actionSlotId) return;
     const exists = playableSlots.some((x) => x.slot.id === actionSlotId);
     if (exists) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setActionSlotId(null);
     setChainPickerOpen(false);
     setChainDraftIds([]);
@@ -365,9 +368,9 @@ export default function PlaylistDetailPage() {
 
       <div className="mx-auto -mt-14 max-w-md px-6 pb-8">
         <section className="mb-5">
-          <div className="rounded-t-2xl border border-white/20 bg-white/5 p-4 backdrop-blur">
+          <div className="rounded-2xl border border-white/20 bg-white/6 p-4 backdrop-blur">
             <div className="flex items-center justify-between gap-3">
-              <h1 className="truncate text-[20px] leading-none font-medium tracking-tight">
+              <h1 className="truncate text-[30px] leading-none font-medium tracking-tight [font-family:var(--font-roboto-condensed)]">
                 {playlist.name}
               </h1>
               <span className="text-xl text-fuchsia-400">♥</span>
@@ -419,7 +422,7 @@ export default function PlaylistDetailPage() {
               if (entry.type === "single") {
                 const { slot, track, idx } = entry.item;
                 return (
-                  <div key={slot.id}>
+                  <div key={slot.id} className="rounded-2xl border border-white/15 bg-white/4 px-2 py-1.5">
                     <div className="flex items-start justify-between gap-3 py-0.5">
                       <div className="flex min-w-0 flex-1 gap-3">
                         <div className="mt-1 w-5 shrink-0 text-right text-[14px] font-medium text-white/50">
@@ -432,7 +435,7 @@ export default function PlaylistDetailPage() {
                           onClick={() => playFromIndex(idx)}
                           title="Play from here"
                         >
-                          <div className="truncate text-[16px] leading-[1.1]">
+                          <div className="truncate text-[22px] leading-none [font-family:var(--font-roboto-condensed)]">
                             {toDisplayTrackTitle(slot.variants[0]?.track.title || "")}
                           </div>
                           <div className="mt-1 truncate text-[12px] leading-none text-white/70">
@@ -447,9 +450,18 @@ export default function PlaylistDetailPage() {
                             {track.length}
                           </span>
                         ) : (
-                          <span className="text-[12px] text-fuchsia-200">
+                          <button
+                            type="button"
+                            className="text-[12px] text-fuchsia-200 hover:text-fuchsia-100"
+                            onClick={() =>
+                              setExpandedVariants((prev) => ({
+                                ...prev,
+                                [slot.id]: !prev[slot.id],
+                              }))
+                            }
+                          >
                             {slot.variants.length} Versions
-                          </span>
+                          </button>
                         )}
                         <button
                           type="button"
@@ -465,12 +477,34 @@ export default function PlaylistDetailPage() {
                         </button>
                       </div>
                     </div>
+                    {slot.variants.length > 1 && expandedVariants[slot.id] && (
+                      <div className="ml-8 mt-2 rounded-xl border border-white/10 bg-black/20 p-2">
+                        <div className="mb-1 text-[11px] uppercase tracking-[0.08em] text-white/50">
+                          Fused versions
+                        </div>
+                        <div className="space-y-1">
+                          {slot.variants.map((v, vi) => (
+                            <button
+                              key={v.id}
+                              type="button"
+                              className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-xs text-white/85 hover:bg-white/5"
+                              onClick={() => playFromIndex(idx)}
+                            >
+                              <span className="min-w-0 truncate">
+                                {vi + 1}. {toDisplayTrackTitle(v.track.title)}
+                              </span>
+                              <span className="shrink-0 text-white/60">{v.track.length || ""}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               }
 
               return (
-                <div key={entry.groupId} className="flex items-start gap-[10px]">
+                <div key={entry.groupId} className="flex items-start gap-[10px] rounded-2xl border border-fuchsia-300/20 bg-fuchsia-500/5 px-2 py-1.5">
                   <div className="flex shrink-0 flex-col items-center gap-1 self-stretch">
                     <div className="w-5 text-right text-[14px] font-medium text-white/50">
                       {entry.startIdx + 1}
@@ -497,7 +531,7 @@ export default function PlaylistDetailPage() {
                               onClick={() => playFromIndex(idx)}
                               title="Play from here"
                             >
-                              <div className="truncate text-[16px] leading-[1.1]">
+                              <div className="truncate text-[22px] leading-none [font-family:var(--font-roboto-condensed)]">
                                 {toDisplayTrackTitle(slot.variants[0]?.track.title || "")}
                               </div>
                               <div className="mt-1 truncate text-[12px] leading-none text-white/70">
@@ -511,9 +545,18 @@ export default function PlaylistDetailPage() {
                                   {track.length}
                                 </span>
                               ) : (
-                                <span className="text-[12px] text-fuchsia-200">
+                                <button
+                                  type="button"
+                                  className="text-[12px] text-fuchsia-200 hover:text-fuchsia-100"
+                                  onClick={() =>
+                                    setExpandedVariants((prev) => ({
+                                      ...prev,
+                                      [slot.id]: !prev[slot.id],
+                                    }))
+                                  }
+                                >
                                   {slot.variants.length} Versions
-                                </span>
+                                </button>
                               )}
                               <button
                                 type="button"
@@ -529,11 +572,33 @@ export default function PlaylistDetailPage() {
                               </button>
                             </div>
                           </div>
+                          {slot.variants.length > 1 && expandedVariants[slot.id] && (
+                            <div className="mt-2 rounded-xl border border-white/10 bg-black/20 p-2">
+                              <div className="mb-1 text-[11px] uppercase tracking-[0.08em] text-white/50">
+                                Fused versions
+                              </div>
+                              <div className="space-y-1">
+                                {slot.variants.map((v, vi) => (
+                                  <button
+                                    key={v.id}
+                                    type="button"
+                                    className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-xs text-white/85 hover:bg-white/5"
+                                    onClick={() => playFromIndex(idx)}
+                                  >
+                                    <span className="min-w-0 truncate">
+                                      {vi + 1}. {toDisplayTrackTitle(v.track.title)}
+                                    </span>
+                                    <span className="shrink-0 text-white/60">{v.track.length || ""}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
 
-                    <div className="mt-2 flex items-center justify-between rounded-lg bg-[#201438] px-3 py-2 text-[12px] text-[#bfa7ff]">
+                    <div className="mt-2 flex items-center justify-between rounded-lg border border-fuchsia-400/20 bg-[#201438] px-3 py-2 text-[12px] text-[#bfa7ff]">
                       <span>These tracks are linked and will play in order</span>
                       <span className="text-[14px] leading-none">×</span>
                     </div>
@@ -557,75 +622,87 @@ export default function PlaylistDetailPage() {
               setChainDraftIds([]);
             }}
           />
-          <div className="fixed inset-x-0 bottom-0 z-50 mx-auto w-full max-w-md rounded-t-2xl border border-white/15 bg-[#16052c] p-4 shadow-2xl">
+          <div className="fixed inset-x-0 bottom-0 z-50 mx-auto w-full max-w-[393px] rounded-t-[28px] border border-white/15 bg-[#16052c] pb-6 shadow-[0_-4px_16px_rgba(0,0,0,0.4)]">
             {!chainPickerOpen ? (
               <div>
-                <div className="mb-1 text-center text-xs uppercase tracking-[0.18em] text-white/55">
-                  Track actions
+                <div className="px-6 pb-2 pt-5">
+                  <div className="mb-1 flex items-center justify-between gap-3">
+                    <div className="min-w-0 truncate text-[35px] leading-none [font-family:var(--font-roboto-condensed)]">
+                      {toDisplayTrackTitle(activeActionItem.track.title)}
+                    </div>
+                    <div className="shrink-0 text-sm text-white/85">
+                      {activeActionItem.track.length || "—"}
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 text-sm text-white/45">
+                    <div className="min-w-0 truncate">
+                      pin {getTrackShowLabel(activeActionItem.track.url, showTitleByIdentifier)}
+                    </div>
+                  </div>
                 </div>
-                <div className="mb-3 text-center text-sm text-white/80">
-                  {toDisplayTrackTitle(activeActionItem.track.title)}
-                </div>
-                <div className="space-y-2">
-                  <button
-                    type="button"
-                    className="w-full rounded-xl border border-white/20 bg-white/10 px-3 py-2.5 text-sm text-white/95"
-                    onClick={() => {
-                      if (activeActionIdx >= 0) playFromIndex(activeActionIdx);
-                      setActionSlotId(null);
-                      setChainPickerOpen(false);
-                    }}
-                  >
-                    Play from here
-                  </button>
-                  <button
-                    type="button"
-                    className="w-full rounded-xl border border-fuchsia-400/50 bg-fuchsia-500/10 px-3 py-2.5 text-sm text-fuchsia-100"
-                    onClick={() => {
-                      const groupId = activeActionItem.slot.linkGroupId;
-                      const selected = groupId
-                        ? playableSlots
-                            .filter((x) => x.slot.linkGroupId === groupId)
-                            .map((x) => x.slot.id)
-                        : [activeActionItem.slot.id];
-                      setChainDraftIds(selected);
-                      setChainPickerOpen(true);
-                    }}
-                  >
-                    Chains
-                  </button>
-                  {activeActionItem.slot.linkGroupId ? (
+
+                <div className="px-6 pb-1 pt-2">
+                  <div className="grid grid-cols-3 gap-2">
                     <button
                       type="button"
-                      className="w-full rounded-xl border border-fuchsia-400/50 bg-transparent px-3 py-2.5 text-sm text-fuchsia-100"
+                      className="flex items-center justify-center gap-2 rounded-xl bg-[rgba(48,26,89,0.25)] px-2 py-3 text-base hover:bg-[rgba(72,36,124,0.35)] transition"
                       onClick={() => {
-                        unlinkSlot(playlist.id, activeActionItem.slot.id);
+                        if (activeActionIdx >= 0) playFromIndex(activeActionIdx);
                         setActionSlotId(null);
                         setChainPickerOpen(false);
-                        setChainDraftIds([]);
                       }}
                     >
-                      Unlink
+                      ▶ Play
                     </button>
-                  ) : (
-                    activeActionIdx >= 0 &&
-                    activeActionIdx < playlist.slots.length - 1 && (
+                    <button
+                      type="button"
+                      className="flex items-center justify-center gap-2 rounded-xl bg-[rgba(48,26,89,0.25)] px-2 py-3 text-base hover:bg-[rgba(72,36,124,0.35)] transition"
+                      onClick={() => {
+                        const groupId = activeActionItem.slot.linkGroupId;
+                        const selected = groupId
+                          ? playableSlots
+                              .filter((x) => x.slot.linkGroupId === groupId)
+                              .map((x) => x.slot.id)
+                          : [activeActionItem.slot.id];
+                        setChainDraftIds(selected);
+                        setChainPickerOpen(true);
+                      }}
+                    >
+                      ⛓ Chain
+                    </button>
+                    {activeActionItem.slot.linkGroupId ? (
                       <button
                         type="button"
-                        className="w-full rounded-xl border border-fuchsia-400/50 bg-transparent px-3 py-2.5 text-sm text-fuchsia-100"
+                        className="flex items-center justify-center gap-2 rounded-xl bg-[rgba(48,26,89,0.25)] px-2 py-3 text-base hover:bg-[rgba(72,36,124,0.35)] transition"
                         onClick={() => {
+                          unlinkSlot(playlist.id, activeActionItem.slot.id);
+                          setActionSlotId(null);
+                          setChainPickerOpen(false);
+                          setChainDraftIds([]);
+                        }}
+                      >
+                        ↯ Unlink
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="flex items-center justify-center gap-2 rounded-xl bg-[rgba(48,26,89,0.25)] px-2 py-3 text-base hover:bg-[rgba(72,36,124,0.35)] transition"
+                        disabled={!(activeActionIdx >= 0 && activeActionIdx < playlist.slots.length - 1)}
+                        onClick={() => {
+                          if (!(activeActionIdx >= 0 && activeActionIdx < playlist.slots.length - 1)) return;
                           linkWithNext(playlist.id, activeActionItem.slot.id);
                           setActionSlotId(null);
                           setChainPickerOpen(false);
                         }}
                       >
-                        Link next
+                        ⛓ Link
                       </button>
-                    )
-                  )}
+                    )}
+                  </div>
+
                   <button
                     type="button"
-                    className="w-full rounded-xl border border-white/20 bg-transparent px-3 py-2.5 text-sm text-white/85"
+                    className="mt-2 w-full rounded-xl bg-[rgba(48,26,89,0.25)] px-4 py-4 text-base hover:bg-[rgba(72,36,124,0.35)] transition"
                     onClick={() => {
                       removeTrack(playlist.id, activeActionItem.slot.id);
                       setActionSlotId(null);
@@ -635,6 +712,18 @@ export default function PlaylistDetailPage() {
                     Remove
                   </button>
                 </div>
+
+                <button
+                  type="button"
+                  className="mt-5 w-full text-center text-[20px] text-white/90 hover:text-white transition"
+                  onClick={() => {
+                    setActionSlotId(null);
+                    setChainPickerOpen(false);
+                    setChainDraftIds([]);
+                  }}
+                >
+                  Cancel
+                </button>
               </div>
             ) : (
               <div>

@@ -12,7 +12,7 @@ type IaDoc = {
   num_reviews?: number | string;
 };
 
-function parseNum(x: any): number {
+function parseNum(x: unknown): number {
   const n = Number(x);
   return Number.isFinite(n) ? n : 0;
 }
@@ -87,8 +87,10 @@ export async function GET(req: NextRequest) {
     return Response.json({ error: "Archive request failed" }, { status: 502 });
   }
 
-  const data: any = await res.json();
-  const docs: IaDoc[] = data?.response?.docs || [];
+  const data = (await res.json()) as { response?: { docs?: IaDoc[] } };
+  const docs: IaDoc[] = Array.isArray(data?.response?.docs)
+    ? data.response.docs
+    : [];
 
   const venueSlug = (key.split("|")[1] || "").toLowerCase();
 

@@ -43,6 +43,8 @@ type IaMetadataResponse = {
   files?: IaMetadataFile[];
 };
 
+const FAVORITE_SHOWS_KEY = "kglw.favoriteShows.v1";
+
 function safeDecode(input: string) {
   try {
     return decodeURIComponent(input);
@@ -185,7 +187,7 @@ export default function ShowPage({
   } | null>(null);
   const [showPlaylistPicker, setShowPlaylistPicker] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState("");
-  const [favoriteUrls, setFavoriteUrls] = useState<string[]>([]);
+  const [favoriteShows, setFavoriteShows] = useState<string[]>([]);
   const [shareState, setShareState] = useState<"idle" | "copied" | "error">(
     "idle",
   );
@@ -195,11 +197,11 @@ export default function ShowPage({
 
   useEffect(() => {
     try {
-      const raw = localStorage.getItem("kglw.favorites.v1");
+      const raw = localStorage.getItem(FAVORITE_SHOWS_KEY);
       const parsed = raw ? (JSON.parse(raw) as string[]) : [];
-      setFavoriteUrls(Array.isArray(parsed) ? parsed : []);
+      setFavoriteShows(Array.isArray(parsed) ? parsed : []);
     } catch {
-      setFavoriteUrls([]);
+      setFavoriteShows([]);
     }
   }, []);
 
@@ -369,9 +371,7 @@ export default function ShowPage({
     .match(/taper(?:s)?\s*:\s*([^\n<]+)/i)?.[1]
     ?.trim();
   const sourceLine = selectedSource?.hint || "UNKNOWN";
-  const isFavorite = Boolean(
-    sheetTrack && favoriteUrls.includes(sheetTrack.url),
-  );
+  const isFavoriteShow = favoriteShows.includes(showKey);
 
   function closeSheet() {
     setSheetTrack(null);
@@ -381,18 +381,18 @@ export default function ShowPage({
     setPlaylistActionState({});
   }
 
-  function persistFavorites(next: string[]) {
-    setFavoriteUrls(next);
+  function persistFavoriteShows(next: string[]) {
+    setFavoriteShows(next);
     try {
-      localStorage.setItem("kglw.favorites.v1", JSON.stringify(next));
+      localStorage.setItem(FAVORITE_SHOWS_KEY, JSON.stringify(next));
     } catch {
       // ignore storage failures
     }
   }
 
   return (
-    <main className="min-h-screen bg-[#080017] text-white">
-      <div className="relative h-[190px] w-full overflow-hidden">
+    <main className="min-h-screen bg-[#080017] text-white [font-family:var(--font-roboto)]">
+      <div className="relative h-[220px] w-full overflow-hidden">
         {heroImage ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -401,7 +401,7 @@ export default function ShowPage({
             className="h-full w-full object-cover opacity-35"
           />
         ) : null}
-        <div className="absolute inset-0 bg-gradient-to-b from-[#120028]/60 via-[#100020]/75 to-[#080017]" />
+        <div className="absolute inset-0 bg-linear-to-b from-[#120028]/60 via-[#100020]/75 to-[#080017]" />
 
         <div className="absolute inset-x-0 top-0 mx-auto w-full max-w-md px-6 pt-8">
           <div className="flex items-center justify-between">
@@ -411,12 +411,12 @@ export default function ShowPage({
             <span className="text-sm text-white/60">⋮</span>
           </div>
 
-          <div className="mt-4 text-center">
-            <div className="text-2xl font-medium tracking-tight">
+          <div className="mt-7 text-center [font-family:var(--font-roboto-condensed)]">
+            <div className="text-[36px] leading-none font-medium tracking-tight">
               {showDate || "(no date)"}
             </div>
-            <div className="mt-1 text-sm text-white/70">{venueText}</div>
-            <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-black/35 px-3 py-1 text-sm">
+            <div className="mt-1 text-[14px] text-white/70">{venueText}</div>
+            <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-black/35 px-3 py-1 text-[12px] [font-family:var(--font-roboto)]">
               <span className="h-2 w-2 rounded-full bg-fuchsia-400" />
               Bootleg Gizzard
             </div>
@@ -441,25 +441,39 @@ export default function ShowPage({
           No sources found for this show.
         </div>
       ) : (
-        <div className="mx-auto -mt-2 max-w-md px-6 pb-8">
-          <section className="rounded-2xl border border-white/20 bg-white/[0.06] p-4 backdrop-blur mb-3">
+        <div className="mx-auto -mt-8 max-w-md px-6 pb-8">
+          <section className="mb-3 rounded-2xl border border-white/20 bg-white/6 p-4 backdrop-blur">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <div className="text-[22px] font-medium leading-none">
+                <div className="text-[28px] leading-none font-medium [font-family:var(--font-roboto-condensed)]">
                   {showDate}
                 </div>
-                <div className="mt-2 text-base text-white/85 tracking-wide">
+                <div className="mt-2 text-[15px] text-white/85 tracking-wide">
                   {venueText}
                 </div>
-                <div className="mt-2 text-sm text-white/65">
+                <div className="mt-2 text-[12px] text-white/65">
                   {tracks.length} Tracks • {compactDuration(totalSeconds)}
                 </div>
               </div>
-              <div className="text-white/70">♡</div>
+              <button
+                type="button"
+                className={`text-xl ${isFavoriteShow ? "text-fuchsia-400" : "text-white/70"}`}
+                onClick={() => {
+                  if (isFavoriteShow) {
+                    persistFavoriteShows(favoriteShows.filter((k) => k !== showKey));
+                  } else {
+                    persistFavoriteShows([showKey, ...favoriteShows].slice(0, 400));
+                  }
+                }}
+                aria-label={isFavoriteShow ? "Unfavorite show" : "Favorite show"}
+                title={isFavoriteShow ? "Unfavorite show" : "Favorite show"}
+              >
+                ♥
+              </button>
             </div>
           </section>
 
-          <section className="rounded-2xl border border-white/20 bg-white/[0.03] p-4 backdrop-blur mb-5">
+          <section className="mb-5 rounded-2xl border border-white/20 bg-white/3 p-4 backdrop-blur">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 {taperText ? (
@@ -517,13 +531,13 @@ export default function ShowPage({
                     ref={(el) => {
                       trackRefs.current[idx] = el;
                     }}
-                    className={`w-full transition flex items-center justify-between gap-3 ${
-                      isCurrent ? "bg-white/8" : "hover:bg-white/5"
+                    className={`w-full transition flex items-center justify-between gap-3 rounded-2xl border border-white/14 px-2 py-1 ${
+                      isCurrent ? "bg-white/10 border-fuchsia-300/40" : "bg-white/4 hover:bg-white/7"
                     } ${
                       focusedTrackIdx === idx
                         ? "bg-fuchsia-500/10 ring-1 ring-fuchsia-400/60 ring-inset"
                         : ""
-                    } rounded-xl px-2 py-1`}
+                    }`}
                   >
                     <button
                       type="button"
@@ -543,20 +557,20 @@ export default function ShowPage({
                         // (Queue replace above keeps behavior consistent across sources.)
                         if (isCurrent) setPlaying(!playing);
                       }}
-                      className="flex min-w-0 flex-1 items-center justify-between gap-4 text-left rounded-xl px-2 py-2"
+                      className="flex min-w-0 flex-1 items-center justify-between gap-4 text-left rounded-xl px-2 py-2.5"
                     >
                       <div className="min-w-0 flex flex-1 items-center gap-3">
                         <span className="shrink-0 text-sm text-white/45 w-5 text-right">
                           {idx + 1}
                         </span>
-                        <span className="truncate text-[16px]">
+                        <span className="truncate text-[20px] leading-none [font-family:var(--font-roboto-condensed)]">
                           {toDisplayTrackTitle(t.title)}
                         </span>
                       </div>
 
                       <div className="flex items-center gap-2 shrink-0">
                         {t.length ? (
-                          <span className="text-sm text-white/75 tracking-wide">
+                          <span className="text-[13px] text-white/75 tracking-wide">
                             {t.length}
                           </span>
                         ) : null}
@@ -623,18 +637,15 @@ export default function ShowPage({
                       type="button"
                       className="flex items-center justify-center gap-2 rounded-xl bg-[rgba(48,26,89,0.25)] px-4 py-4 text-base hover:bg-[rgba(72,36,124,0.35)] transition"
                       onClick={() => {
-                        if (!sheetTrack) return;
-                        if (favoriteUrls.includes(sheetTrack.url)) {
-                          persistFavorites(
-                            favoriteUrls.filter((u) => u !== sheetTrack.url),
-                          );
+                        if (isFavoriteShow) {
+                          persistFavoriteShows(favoriteShows.filter((k) => k !== showKey));
                         } else {
-                          persistFavorites([...favoriteUrls, sheetTrack.url]);
+                          persistFavoriteShows([showKey, ...favoriteShows].slice(0, 400));
                         }
                       }}
                     >
-                      <span>{isFavorite ? "★" : "♡"}</span>
-                      <span>Favorite</span>
+                      <span>{isFavoriteShow ? "★" : "♡"}</span>
+                      <span>{isFavoriteShow ? "Favorited show" : "Favorite show"}</span>
                     </button>
 
                     <button
@@ -746,7 +757,7 @@ export default function ShowPage({
                         return (
                           <div
                             key={p.id}
-                            className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5"
+                            className="rounded-xl border border-white/10 bg-white/3 px-3 py-2.5"
                           >
                             <div className="flex items-center justify-between gap-3">
                               <div className="min-w-0">

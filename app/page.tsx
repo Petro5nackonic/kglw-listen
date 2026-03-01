@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { usePlayer } from "@/components/player/store";
+import { usePlaylists } from "@/components/playlists/store";
 import { toDisplayTitle, toDisplayTrackTitle } from "@/utils/displayTitle";
 
 type Continent =
@@ -28,7 +29,36 @@ type ShowItem = {
   matchedSongTitle?: string | null;
   matchedSongLength?: string | null;
   matchedSongUrl?: string | null;
+  showLengthSeconds?: number | null;
 };
+
+const FAVORITE_SHOWS_KEY = "kglw.favoriteShows.v1";
+const RECENT_SHOWS_KEY = "kglw.recentShows.v1";
+
+function getArchiveIdentifier(url?: string): string {
+  if (!url) return "";
+  const match = String(url).match(/\/download\/([^/]+)\//i);
+  return match?.[1] ? decodeURIComponent(match[1]) : "";
+}
+
+function formatShowLength(sec?: number | null): string {
+  if (typeof sec !== "number" || !Number.isFinite(sec) || sec <= 0) return "";
+  const total = Math.floor(sec);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  if (h <= 0) return `${m}m`;
+  return `${h}h${String(m).padStart(2, "0")}m`;
+}
+
+function labelFromShowKey(showKey: string): string {
+  const raw = showKey.split("|")[1] || "";
+  if (!raw) return "";
+  return raw
+    .replace(/-/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
 type ShowsResponse = {
   page: number;
@@ -231,6 +261,7 @@ function MultiSelectDropdown(props: {
 export default function HomePage() {
   const router = useRouter();
   const setQueue = usePlayer((s) => s.setQueue);
+  const playlists = usePlaylists((s) => s.playlists);
 
   const [shows, setShows] = useState<ShowItem[]>([]);
   const [songShows, setSongShows] = useState<ShowItem[]>([]);
@@ -254,6 +285,10 @@ export default function HomePage() {
   const [query, setQuery] = useState<string>("");
   const [debouncedQuery, setDebouncedQuery] = useState<string>("");
   const [sort, setSort] = useState<string>("newest");
+  const [showTab, setShowTab] = useState<"all" | "recent" | "favorites">("all");
+  const [favoriteShows, setFavoriteShows] = useState<string[]>([]);
+  const [recentShows, setRecentShows] = useState<string[]>([]);
+  const [searchOpen, setSearchOpen] = useState(false);
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
@@ -312,6 +347,20 @@ export default function HomePage() {
   useEffect(() => {
     loadPage(1, "replace");
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    try {
+      const favRaw = localStorage.getItem(FAVORITE_SHOWS_KEY);
+      const recRaw = localStorage.getItem(RECENT_SHOWS_KEY);
+      const favParsed = JSON.parse(favRaw || "[]");
+      const recParsed = JSON.parse(recRaw || "[]");
+      setFavoriteShows(Array.isArray(favParsed) ? favParsed : []);
+      setRecentShows(Array.isArray(recParsed) ? recParsed : []);
+    } catch {
+      setFavoriteShows([]);
+      setRecentShows([]);
+    }
   }, []);
 
   // Debounce search so we don't re-fetch on every single keystroke.
@@ -390,276 +439,282 @@ export default function HomePage() {
     return arr;
   }, [songShows, songLengthSort]);
 
+  const favoriteSet = useMemo(() => new Set(favoriteShows), [favoriteShows]);
+  const recentSet = useMemo(() => new Set(recentShows), [recentShows]);
+
+  const venueShows = useMemo(() => {
+    if (showTab === "favorites") return shows.filter((s) => favoriteSet.has(s.showKey));
+    if (showTab === "recent") {
+      const byKey = new Map(shows.map((s) => [s.showKey, s]));
+      const ordered = recentShows
+        .map((key) => byKey.get(key))
+        .filter(Boolean) as ShowItem[];
+      if (ordered.length > 0) return ordered;
+      return shows.filter((s) => recentSet.has(s.showKey));
+    }
+    return shows;
+  }, [shows, showTab, favoriteSet, recentSet, recentShows]);
+  const featuredPlaylists = useMemo(() => playlists.slice(0, 10), [playlists]);
+
+  function persistFavorites(next: string[]) {
+    setFavoriteShows(next);
+    localStorage.setItem(FAVORITE_SHOWS_KEY, JSON.stringify(next));
+  }
+
+  function toggleFavoriteShow(showKey: string) {
+    if (favoriteSet.has(showKey)) {
+      persistFavorites(favoriteShows.filter((k) => k !== showKey));
+      return;
+    }
+    persistFavorites([showKey, ...favoriteShows].slice(0, 400));
+  }
+
+  function rememberRecentShow(showKey: string) {
+    const next = [showKey, ...recentShows.filter((k) => k !== showKey)].slice(0, 100);
+    setRecentShows(next);
+    localStorage.setItem(RECENT_SHOWS_KEY, JSON.stringify(next));
+  }
+
   return (
-    <main className="mx-auto max-w-5xl px-4 py-6">
-      <header className="mb-6 flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">kglw-listen</h1>
-          <p className="text-white/70">
-            Browse King Gizzard live shows from Archive.org
-          </p>
-        </div>
+    <main className="min-h-screen bg-linear-to-b from-[#13002e] via-[#09001f] to-[#050013] text-white">
+      <div className="mx-auto max-w-3xl px-4 pb-28 pt-4">
+        <div className="pb-4 text-center text-[11px] text-white/65">SetlistAppName</div>
 
-        <Link
-          href="/playlists"
-          className="shrink-0 rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-sm text-white/80 hover:border-white/25 hover:text-white transition"
-        >
-          Playlists
-        </Link>
-      </header>
-
-      <section className="mb-6 space-y-4">
-        <div>
-          <label className="mb-2 block text-sm text-white/70" htmlFor="search">
-            Search
-          </label>
-          <input
-            id="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search songs, venues, dates, continents…"
-            className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/40 outline-none transition focus:border-white/30"
-            autoComplete="off"
-          />
-        </div>
-      </section>
-
-      {error && (
-        <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
-          {error}
-        </div>
-      )}
-
-      <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-          <MultiSelectDropdown
-            id="years"
-            label="Year"
-            options={availableYears}
-            value={years}
-            onChange={setYears}
-            minWidthClass="min-w-[12rem]"
-          />
-
-          <MultiSelectDropdown
-            id="continents"
-            label="Continent"
-            options={availableContinents}
-            value={continents}
-            onChange={setContinents}
-            minWidthClass="min-w-[14rem]"
-          />
-        </div>
-
-        <div className="flex items-center justify-end gap-2">
-          <label htmlFor="sort" className="text-sm text-white/70">
-            Sort by
-          </label>
-          <select
-            id="sort"
-            className="rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm"
-            value={sort}
-            onChange={(e) => setSort(e.target.value)}
-          >
-            <option value="newest">Newest</option>
-            <option value="oldest">Oldest</option>
-            <option value="most_played">Most played</option>
-            <option value="least_played">Least played</option>
-            <option value="show_length_longest">Show length - longest</option>
-            <option value="show_length_shortest">Show length - shortest</option>
-          </select>
-        </div>
-      </div>
-
-      {debouncedQuery && (
-        <section className="mb-4 rounded-xl border border-white/10 bg-white/5 p-3">
-          <div className="text-sm font-medium text-white/90">Search results</div>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setResultFilter("venues")}
-              className={`rounded-full border px-3 py-1.5 text-xs transition ${
-                resultFilter === "venues"
-                  ? "border-white/35 bg-white/15 text-white"
-                  : "border-white/15 bg-black/20 text-white/75 hover:border-white/25 hover:text-white"
-              }`}
+        <section className="mb-6">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-[34px] leading-none font-medium tracking-tight [font-family:var(--font-roboto-condensed)]">
+              Playlists
+            </h2>
+            <Link
+              href="/playlists"
+              className="rounded-full border border-fuchsia-400/50 bg-fuchsia-500/10 px-3 py-1.5 text-xs text-fuchsia-100"
             >
-              Venues {venueTotal}
-            </button>
-            <button
-              type="button"
-              onClick={() => setResultFilter("shows")}
-              className={`rounded-full border px-3 py-1.5 text-xs transition ${
-                resultFilter === "shows"
-                  ? "border-white/35 bg-white/15 text-white"
-                  : "border-white/15 bg-black/20 text-white/75 hover:border-white/25 hover:text-white"
-              }`}
-            >
-              Shows {songTotal}
-            </button>
+              See All ↗
+            </Link>
+          </div>
 
-            {resultFilter === "shows" && (
-              <button
-                type="button"
-                onClick={() =>
-                  setSongLengthSort((v) => (v === "desc" ? "asc" : "desc"))
-                }
-                className="ml-auto rounded-full border border-white/15 bg-black/20 px-3 py-1.5 text-xs text-white/80 hover:border-white/25 hover:text-white transition"
+          <div className="-mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-1">
+            {featuredPlaylists.length === 0 ? (
+              <Link
+                href="/playlists"
+                className="min-w-[170px] rounded-2xl border border-white/15 bg-white/5 p-3"
               >
-                {songLengthSort === "desc"
-                  ? "Longest version first"
-                  : "Shortest version first"}
-              </button>
+                <div className="mb-2 h-[96px] rounded-xl bg-linear-to-br from-[#200040] to-[#4f1f9f]" />
+                <div className="truncate text-sm">Create your first playlist</div>
+                <div className="mt-1 text-xs text-white/60">Tap to get started</div>
+              </Link>
+            ) : (
+              featuredPlaylists.map((p) => {
+                const firstUrl = p.slots[0]?.variants[0]?.track?.url;
+                const identifier = getArchiveIdentifier(firstUrl);
+                const art = identifier
+                  ? `https://archive.org/services/img/${encodeURIComponent(identifier)}`
+                  : "";
+                const versions = p.slots.reduce((sum, slot) => sum + slot.variants.length, 0);
+                return (
+                  <Link
+                    key={p.id}
+                    href={`/playlists/${p.id}`}
+                    className="min-w-[170px] snap-start rounded-2xl border border-white/15 bg-white/5 p-3"
+                  >
+                    <div className="mb-2 h-[96px] overflow-hidden rounded-xl bg-linear-to-br from-[#200040] to-[#4f1f9f]">
+                      {art ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={art} alt="" className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="flex h-full items-center justify-center text-3xl text-white/40">
+                          ♪
+                        </div>
+                      )}
+                    </div>
+                    <div className="line-clamp-2 text-sm leading-tight">{p.name}</div>
+                    <div className="mt-1 text-xs text-white/60">
+                      {p.slots.length} Tracks • {versions} Versions
+                    </div>
+                  </Link>
+                );
+              })
             )}
           </div>
         </section>
-      )}
 
-      {debouncedQuery && resultFilter === "shows" && (
-        <>
-          <div className="mb-2 text-sm font-medium text-white/85">
-            {debouncedQuery} appears in {songTotal} show
-            {songTotal === 1 ? "" : "s"}
+        <section>
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-[34px] leading-none font-medium tracking-tight [font-family:var(--font-roboto-condensed)]">
+              Shows
+            </h2>
+            <button
+              type="button"
+              aria-label="Toggle search"
+              className="rounded-full p-2 text-white/85"
+              onClick={() => setSearchOpen((v) => !v)}
+            >
+              ⌕
+            </button>
           </div>
-          <section className="mb-5 rounded-xl border border-white/10 bg-white/5 divide-y divide-white/10 overflow-hidden">
-            {sortedSongShows.map((s) => (
-              <div
-                key={`song-${s.showKey}`}
-                className="group relative flex items-center gap-3 px-3 py-2.5 hover:bg-white/10 transition cursor-pointer"
-                onClick={() => {
-                  router.push(`/show/${encodeURIComponent(s.showKey)}`);
-                }}
-              >
-                <div className="h-10 w-10 overflow-hidden rounded bg-black/20 shrink-0">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={s.artwork}
-                    alt=""
-                    className="h-full w-full object-cover"
-                  />
-                </div>
 
-                <div className="min-w-0 flex-1 pr-16">
-                  <div className="truncate text-sm font-medium">
-                    {toDisplayTrackTitle(s.matchedSongTitle || debouncedQuery)}
-                  </div>
-                  <div className="mt-0.5 truncate text-xs text-white/60">
-                    {toDisplayTitle(s.title)} • {s.showDate}
-                  </div>
-                </div>
-
-                <div className="shrink-0 text-xs text-white/70">
-                  {displaySongLength(s.matchedSongLength, s.matchedSongSeconds)}
-                </div>
-
-                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition">
-                  <button
-                    type="button"
-                    className="rounded-full border border-white/20 bg-black/70 px-2.5 py-1 text-xs text-white"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (!s.matchedSongUrl) return;
-                      setQueue(
-                        [
-                          {
-                            title: toDisplayTrackTitle(
-                              s.matchedSongTitle || debouncedQuery,
-                            ),
-                            url: s.matchedSongUrl,
-                            length: displaySongLength(
-                              s.matchedSongLength,
-                              s.matchedSongSeconds,
-                            ),
-                          },
-                        ],
-                        0,
-                      );
-                    }}
-                    disabled={!s.matchedSongUrl}
-                    title={s.matchedSongUrl ? "Play song" : "Song preview unavailable"}
-                  >
-                    Play
-                  </button>
-
-                  <button
-                    type="button"
-                    className="rounded-full border border-white/20 bg-black/70 px-2.5 py-1 text-xs text-white"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const song = toDisplayTrackTitle(
-                        s.matchedSongTitle || debouncedQuery || "",
-                      ).trim();
-                      const params = new URLSearchParams();
-                      if (song) params.set("song", song);
-                      const suffix = params.toString() ? `?${params.toString()}` : "";
-                      router.push(`/show/${encodeURIComponent(s.showKey)}${suffix}`);
-                    }}
-                    title="Go to show and focus this song"
-                  >
-                    Go to show
-                  </button>
-                </div>
-              </div>
-            ))}
-            {sortedSongShows.length === 0 && (
-              <div className="px-3 py-4 text-sm text-white/65">
-                No song matches found.
-              </div>
-            )}
-          </section>
-        </>
-      )}
-
-      {debouncedQuery && resultFilter === "venues" && (
-        <div className="mb-2 text-sm font-medium text-white/85">Venues</div>
-      )}
-
-      {(!debouncedQuery || resultFilter === "venues") && (
-        <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {shows.map((s) => (
-          <Link
-            key={s.showKey}
-            href={`/show/${encodeURIComponent(s.showKey)}`} // IMPORTANT: must be /show/<key>
-            className="group rounded-xl border border-white/10 bg-white/5 p-3 hover:border-white/20 hover:bg-white/10 transition"
-          >
-            <div className="flex items-start gap-3">
-              <div className="h-14 w-14 overflow-hidden rounded-lg bg-black/20 shrink-0">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={s.artwork}
-                  alt=""
-                  className="h-full w-full object-cover"
-                />
-              </div>
-
-              <div className="min-w-0">
-                <div className="text-sm text-white/70">{s.showDate}</div>
-                <div className="mt-0.5 line-clamp-2 font-medium">
-                  {toDisplayTitle(s.title)}
-                </div>
-                <div className="mt-1 text-xs text-white/60 flex flex-wrap gap-x-2 gap-y-1">
-                  {s.continent && s.continent !== "Unknown" && (
-                    <span>{s.continent}</span>
-                  )}
-                  <span>•</span>
-                  <span>
-                    {s.sourcesCount} source{s.sourcesCount === 1 ? "" : "s"}
-                  </span>
-                </div>
-              </div>
+          {searchOpen && (
+            <div className="mb-3">
+              <input
+                id="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search songs, venues, dates..."
+                className="w-full rounded-xl border border-white/15 bg-black/35 px-3 py-2 text-sm text-white placeholder:text-white/45 outline-none focus:border-fuchsia-300/45"
+                autoComplete="off"
+              />
             </div>
-          </Link>
-        ))}
-        </section>
-      )}
+          )}
 
-      <div className="py-8">
-        {loading && <div className="text-sm text-white/60">Loading…</div>}
-        {!hasMore && !loading && (
-          <div className="text-sm text-white/60">End of list.</div>
-        )}
-        <div ref={sentinelRef} />
+          <div className="mb-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setShowTab("all")}
+              className={`rounded-full px-3 py-1.5 text-xs ${
+                showTab === "all"
+                  ? "bg-fuchsia-500/45 text-white"
+                  : "bg-white/10 text-white/80"
+              }`}
+            >
+              All
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowTab("recent")}
+              className={`rounded-full px-3 py-1.5 text-xs ${
+                showTab === "recent"
+                  ? "bg-fuchsia-500/45 text-white"
+                  : "bg-white/10 text-white/80"
+              }`}
+            >
+              Recently Played
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowTab("favorites")}
+              className={`rounded-full px-3 py-1.5 text-xs ${
+                showTab === "favorites"
+                  ? "bg-fuchsia-500/45 text-white"
+                  : "bg-white/10 text-white/80"
+              }`}
+            >
+              Favorites
+            </button>
+          </div>
+
+          <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <div>
+              <div className="mb-1 text-[11px] text-white/60">Sort By</div>
+              <select
+                id="sort"
+                className="w-full rounded-full border border-white/20 bg-black/35 px-3 py-2 text-sm"
+                value={sort}
+                onChange={(e) => setSort(e.target.value)}
+              >
+                <option value="newest">Recent</option>
+                <option value="oldest">Oldest</option>
+                <option value="most_played">Most played</option>
+                <option value="least_played">Least played</option>
+                <option value="show_length_longest">Longest show</option>
+                <option value="show_length_shortest">Shortest show</option>
+              </select>
+            </div>
+            <MultiSelectDropdown
+              id="years"
+              label="Filters"
+              options={availableYears}
+              value={years}
+              onChange={setYears}
+            />
+            <MultiSelectDropdown
+              id="continents"
+              label=" "
+              options={availableContinents}
+              value={continents}
+              onChange={setContinents}
+            />
+          </div>
+
+          {error && (
+            <div className="mb-3 rounded-xl border border-red-400/30 bg-red-600/15 p-3 text-sm text-red-100">
+              {error}
+            </div>
+          )}
+
+          <div className="space-y-2">
+            {venueShows.map((s) => {
+              const isFav = favoriteSet.has(s.showKey);
+              const detailsText = `${s.sourcesCount} Tracks${s.showLengthSeconds ? ` • ${formatShowLength(s.showLengthSeconds)}` : ""}`;
+              return (
+                <div
+                  key={s.showKey}
+                  className="group relative rounded-2xl border border-white/20 bg-white/8 p-2.5"
+                >
+                  <button
+                    type="button"
+                    className="flex w-full items-start gap-3 text-left"
+                    onClick={() => {
+                      rememberRecentShow(s.showKey);
+                      router.push(`/show/${encodeURIComponent(s.showKey)}`);
+                    }}
+                  >
+                    <div className="h-[74px] w-[74px] shrink-0 overflow-hidden rounded-lg bg-black/30">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={s.artwork} alt="" className="h-full w-full object-cover" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[11px] text-white/75">{detailsText}</div>
+                      <div className="mt-0.5 line-clamp-2 text-[25px] leading-[1.02] [font-family:var(--font-roboto-condensed)]">
+                        {toDisplayTitle(s.title)}
+                      </div>
+                      <div className="mt-1 text-xs text-white/80">{s.showDate}</div>
+                      <div className="mt-1 truncate text-xs text-white/65">
+                        {labelFromShowKey(s.showKey)}
+                      </div>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={isFav ? "Remove favorite show" : "Favorite show"}
+                    className={`absolute right-3 top-3 text-sm ${
+                      isFav ? "text-fuchsia-400" : "text-white/50"
+                    }`}
+                    onClick={() => toggleFavoriteShow(s.showKey)}
+                    title={isFav ? "Unfavorite show" : "Favorite show"}
+                  >
+                    ♥
+                  </button>
+                </div>
+              );
+            })}
+
+            {venueShows.length === 0 && (
+              <div className="rounded-xl border border-white/15 bg-white/5 p-4 text-sm text-white/70">
+                No shows found for this filter.
+              </div>
+            )}
+          </div>
+
+          <div className="py-8">
+            {loading && <div className="text-sm text-white/65">Loading…</div>}
+            {!hasMore && !loading && (
+              <div className="text-sm text-white/50">End of list.</div>
+            )}
+            <div ref={sentinelRef} />
+          </div>
+        </section>
       </div>
+
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-[#080015]/95 backdrop-blur">
+        <div className="mx-auto grid max-w-3xl grid-cols-4 px-4 py-3 text-center text-[10px] text-white/80">
+          <Link href="/" className="text-fuchsia-300">
+            HOME
+          </Link>
+          <Link href="/playlists">LIBRARY</Link>
+          <Link href="/">BROWSE</Link>
+          <Link href="/">PROFILE</Link>
+        </div>
+      </nav>
     </main>
   );
 }

@@ -22,6 +22,13 @@ type IaDoc = {
   num_reviews?: number | string;
 };
 
+type IaMetadataFile = {
+  name?: string;
+  title?: string;
+  track?: string;
+  length?: string | number;
+};
+
 type Recording = {
   identifier: string;
   title: string;
@@ -127,7 +134,7 @@ function sourceHint(identifier: string, title?: string): "SBD" | "AUD" | "MATRIX
   return "UNKNOWN";
 }
 
-function parseNum(x: any): number {
+function parseNum(x: unknown): number {
   const n = Number(x);
   return Number.isFinite(n) ? n : 0;
 }
@@ -472,8 +479,8 @@ async function fetchShowLengthSeconds(identifier: string): Promise<number | null
       return null;
     }
 
-    const data: any = await res.json();
-    const files: any[] = Array.isArray(data?.files) ? data.files : [];
+    const data = (await res.json()) as { files?: IaMetadataFile[] };
+    const files: IaMetadataFile[] = Array.isArray(data?.files) ? data.files : [];
     const audioAll = files.filter((f) => {
       const name = String(f?.name || "");
       return Boolean(name) && isAudioName(name);
@@ -531,8 +538,8 @@ async function fetchSongMatchInfo(
       { cache: "no-store", signal: controller.signal },
     );
     if (!res.ok) return { seconds: null, title: null, length: null, url: null };
-    const data: any = await res.json();
-    const files: any[] = Array.isArray(data?.files) ? data.files : [];
+    const data = (await res.json()) as { files?: IaMetadataFile[] };
+    const files: IaMetadataFile[] = Array.isArray(data?.files) ? data.files : [];
 
     let best: { seconds: number; title: string; length: string; url: string } | null = null;
     for (const f of files) {
@@ -672,8 +679,10 @@ export async function GET(req: NextRequest) {
       return Response.json({ page, items: [], hasMore: false, error: `Archive request failed (page ${iaPage})` }, { status: 502 });
     }
 
-    const data: any = await res.json();
-    const batch: IaDoc[] = data?.response?.docs || [];
+    const data = (await res.json()) as { response?: { docs?: IaDoc[] } };
+    const batch: IaDoc[] = Array.isArray(data?.response?.docs)
+      ? data.response.docs
+      : [];
     if (batch.length === 0) break;
 
     docs = docs.concat(batch);
@@ -718,8 +727,10 @@ export async function GET(req: NextRequest) {
         const songRes = await fetch(songUrl, { cache: "no-store" });
         if (!songRes.ok) break;
 
-        const songData: any = await songRes.json();
-        const batch: IaDoc[] = songData?.response?.docs || [];
+        const songData = (await songRes.json()) as { response?: { docs?: IaDoc[] } };
+        const batch: IaDoc[] = Array.isArray(songData?.response?.docs)
+          ? songData.response.docs
+          : [];
         if (batch.length === 0) break;
 
         songDocs.push(...batch);

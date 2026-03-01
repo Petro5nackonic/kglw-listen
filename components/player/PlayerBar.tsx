@@ -15,6 +15,16 @@ function fmt(sec: number) {
 export function PlayerBar() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  const playerState = usePlayer() as unknown as {
+    queue: Array<{ title: string; url: string; track?: string }>;
+    index: number;
+    playing: boolean;
+    setQueue: (queue: Array<{ title: string; url: string; track?: string }>, startIndex?: number) => void;
+    play?: () => void;
+    pause?: () => void;
+    next?: () => void;
+    prev?: () => void;
+  };
   const {
     queue,
     index,
@@ -24,7 +34,7 @@ export function PlayerBar() {
     pause,
     next,
     prev,
-  } = usePlayer() as any;
+  } = playerState;
 
   const hasQueue = Array.isArray(queue) && queue.length > 0;
   const currentTrack = hasQueue ? queue[index] : null;
@@ -41,6 +51,7 @@ export function PlayerBar() {
 
     if (!src) {
       audio.removeAttribute("src");
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCurrent(0);
       setDuration(0);
       return;
