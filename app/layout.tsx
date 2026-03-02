@@ -1,6 +1,10 @@
 import "./globals.css";
+import "@fortawesome/fontawesome-svg-core/styles.css";
 import { PlayerBar } from "@/components/player/PlayerBar";
+import { config } from "@fortawesome/fontawesome-svg-core";
 import { Roboto, Roboto_Condensed } from "next/font/google";
+
+config.autoAddCss = false;
 
 const roboto = Roboto({
   subsets: ["latin"],

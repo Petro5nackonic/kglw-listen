@@ -12,9 +12,12 @@ import {
   faChevronDown,
   faEllipsisVertical,
   faGuitar,
+  faGuitarElectric,
+  faTurntable,
+  faViolin,
   faMagnifyingGlass,
   faSliders,
-} from "@fortawesome/free-solid-svg-icons";
+} from "@fortawesome/pro-solid-svg-icons";
 import { usePlayer, type Track } from "@/components/player/store";
 import { usePlaylists } from "@/components/playlists/store";
 import { toDisplayTitle, toDisplayTrackTitle } from "@/utils/displayTitle";
@@ -70,6 +73,11 @@ type SongSheetTrack = {
   showKey: string;
   showDate: string;
   venueText: string;
+};
+type SongSuggestion = {
+  title: string;
+  count: number;
+  lastPlayedDate: string;
 };
 
 const SHOW_TYPE_OPTIONS = [
@@ -318,30 +326,12 @@ function QuickFilterIcon(props: {
     return <FontAwesomeIcon icon={faGuitar} className={cls} />;
   }
   if (props.icon === "turntable") {
-    return (
-      <svg viewBox="0 0 24 24" aria-hidden="true" className={cls} fill="none" stroke="currentColor" strokeWidth="1.8">
-        <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />
-        <circle cx="10" cy="12" r="3.5" />
-        <circle cx="10" cy="12" r="1.2" fill="currentColor" stroke="none" />
-        <path d="M15.5 8.5h3M17 7v3" />
-      </svg>
-    );
+    return <FontAwesomeIcon icon={faTurntable} className={cls} />;
   }
   if (props.icon === "violin") {
-    return (
-      <svg viewBox="0 0 24 24" aria-hidden="true" className={cls} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M9.5 6.5c1.2-1.2 3.8-1.2 5 0 .8.8.8 2 0 2.8l-3.4 3.4c-.8.8-.8 2 0 2.8l.9.9c.7.7.7 1.8 0 2.5l-1.1 1.1c-.7.7-1.8.7-2.5 0l-.9-.9c-.8-.8-2-.8-2.8 0L3 20.8" />
-        <path d="M15.2 3.8l5 5M16.9 2.1l5 5" />
-      </svg>
-    );
+    return <FontAwesomeIcon icon={faViolin} className={cls} />;
   }
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className={cls} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M20 5l-2.8 2.8-1.7-1.7L18.3 3.3A2.4 2.4 0 0 1 22 6.9l-2.8 2.8-1.7-1.7L20.3 5.2" />
-      <path d="M9.8 11.2l4.6-4.6 3.2 3.2-4.6 4.6c-.7.7-1.7 1-2.6.9l-3 .8.8-3c-.1-.9.2-1.9.9-2.6Z" />
-      <path d="M6.6 17.4l-1.9 1.9M8.8 19.6l-1.9 1.9" />
-    </svg>
-  );
+  return <FontAwesomeIcon icon={faGuitarElectric} className={cls} />;
 }
 
 function MultiSelectDropdown(props: {
@@ -839,6 +829,38 @@ export default function HomePage() {
     const mins = Math.max(1, Math.round(avgSec / 60));
     return `${mins} min`;
   }, [sortedSongShows]);
+  const songSuggestions = useMemo<SongSuggestion[]>(() => {
+    const byTitle = new Map<string, SongSuggestion>();
+    for (const s of sortedSongShows) {
+      const title = toDisplayTrackTitle(s.matchedSongTitle || debouncedQuery).trim();
+      if (!title) continue;
+      const key = title.toLowerCase();
+      const existing = byTitle.get(key);
+      if (existing) {
+        existing.count += 1;
+        if (String(s.showDate || "") > existing.lastPlayedDate) {
+          existing.lastPlayedDate = String(s.showDate || "");
+        }
+        continue;
+      }
+      byTitle.set(key, {
+        title,
+        count: 1,
+        lastPlayedDate: String(s.showDate || ""),
+      });
+    }
+    return Array.from(byTitle.values())
+      .sort((a, b) => {
+        if (b.count !== a.count) return b.count - a.count;
+        return b.lastPlayedDate.localeCompare(a.lastPlayedDate);
+      })
+      .slice(0, 6);
+  }, [sortedSongShows, debouncedQuery]);
+  const showSongSuggestions =
+    resultFilter === "venues" &&
+    query.trim().length > 0 &&
+    debouncedQuery.length > 0 &&
+    songSuggestions.length > 0;
   const mostPlayedSongShowKey = useMemo(() => {
     if (sortedSongShows.length === 0) return "";
     let best: ShowItem | null = null;
@@ -1066,6 +1088,14 @@ export default function HomePage() {
     setQueue(queue, startIndex < 0 ? 0 : startIndex);
   }
 
+  function applySongSuggestion(title: string) {
+    const next = title.trim();
+    if (!next) return;
+    setQuery(next);
+    setDebouncedQuery(next);
+    setResultFilter("shows");
+  }
+
   return (
     <main className="min-h-screen bg-[#080017] text-white">
       <header className="fixed inset-x-0 top-0 z-40 border-b border-white/10 bg-[rgba(13,2,33,0.8)] backdrop-blur-[34px]">
@@ -1167,34 +1197,47 @@ export default function HomePage() {
                   id="search"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && songSuggestions.length > 0) {
+                      e.preventDefault();
+                      applySongSuggestion(songSuggestions[0].title);
+                    }
+                  }}
                   placeholder="Search songs, shows, venues, etc"
                   className="w-full rounded-xl border border-white/50 bg-transparent px-11 py-[14px] text-[14px] text-white outline-none placeholder:text-white/60"
                   autoComplete="off"
                 />
               </div>
-              {debouncedQuery && resultFilter === "venues" && songTotal > 0 && topSongMatch && (
-                <button
-                  type="button"
-                  className="mt-2 w-full rounded-b-xl rounded-t-none border border-white/30 px-4 pb-3 pt-6 text-left"
-                  onClick={() => setResultFilter("shows")}
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-sm text-white">
-                        {toDisplayTrackTitle(topSongMatch.matchedSongTitle || debouncedQuery)}
-                      </div>
+              {showSongSuggestions && (
+                <div className="mt-2 overflow-hidden rounded-xl border border-white/30 bg-[rgba(8,0,23,0.95)]">
+                  {songSuggestions.map((suggestion) => (
+                    <button
+                      key={suggestion.title.toLowerCase()}
+                      type="button"
+                      className="block w-full border-b border-white/10 px-4 py-3 text-left transition hover:bg-white/10"
+                      onClick={() => applySongSuggestion(suggestion.title)}
+                    >
+                      <div className="truncate text-sm text-white">{suggestion.title}</div>
                       <div className="text-xs text-white/70">
-                        Last played: {formatCardDate(topSongMatch.showDate)}
+                        {suggestion.count} match{suggestion.count === 1 ? "" : "es"} • Last played:{" "}
+                        {formatCardDate(suggestion.lastPlayedDate)}
                       </div>
-                    </div>
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between px-4 py-3 text-left text-sm text-white transition hover:bg-white/10"
+                    onClick={() => setResultFilter("shows")}
+                  >
+                    <span>See all song matches</span>
                     <div className="flex items-center gap-2">
-                      <span className="rounded-full bg-white/10 px-2 py-1 text-xs text-white/70">
+                      <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-white/80">
                         {songTotal}
                       </span>
                       <FontAwesomeIcon icon={faChevronRight} className="text-xs text-white" />
                     </div>
-                  </div>
-                </button>
+                  </button>
+                </div>
               )}
             </div>
 
