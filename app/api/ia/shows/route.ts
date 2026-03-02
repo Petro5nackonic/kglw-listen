@@ -36,6 +36,10 @@ type Recording = {
   showDate: string;
   showKey: string;
   city?: string;
+  state?: string;
+  country?: string;
+  venueText?: string;
+  locationText?: string;
   continent: Continent;
   artwork: string;
   downloads: number;
@@ -50,6 +54,10 @@ type ShowListItem = {
   showDate: string;
   title: string;
   city?: string;
+  state?: string;
+  country?: string;
+  venueText?: string;
+  locationText?: string;
   defaultId: string;
   sourcesCount: number;
   artwork: string;
@@ -107,6 +115,23 @@ const VENUE_STOP_WORDS = new Set([
   "bootleg",
   "official",
 ]);
+
+const US_STATE_ABBR_TO_NAME: Record<string, string> = {
+  AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California",
+  CO: "Colorado", CT: "Connecticut", DE: "Delaware", FL: "Florida", GA: "Georgia",
+  HI: "Hawaii", ID: "Idaho", IL: "Illinois", IN: "Indiana", IA: "Iowa",
+  KS: "Kansas", KY: "Kentucky", LA: "Louisiana", ME: "Maine", MD: "Maryland",
+  MA: "Massachusetts", MI: "Michigan", MN: "Minnesota", MS: "Mississippi", MO: "Missouri",
+  MT: "Montana", NE: "Nebraska", NV: "Nevada", NH: "New Hampshire", NJ: "New Jersey",
+  NM: "New Mexico", NY: "New York", NC: "North Carolina", ND: "North Dakota", OH: "Ohio",
+  OK: "Oklahoma", OR: "Oregon", PA: "Pennsylvania", RI: "Rhode Island", SC: "South Carolina",
+  SD: "South Dakota", TN: "Tennessee", TX: "Texas", UT: "Utah", VT: "Vermont",
+  VA: "Virginia", WA: "Washington", WV: "West Virginia", WI: "Wisconsin", WY: "Wyoming",
+  DC: "District of Columbia",
+};
+const US_STATE_NAME_TO_ABBR = new Map(
+  Object.entries(US_STATE_ABBR_TO_NAME).map(([abbr, name]) => [name.toLowerCase(), abbr]),
+);
 
 function isKglwDoc(doc: IaDoc): boolean {
   const creator = Array.isArray(doc.creator) ? doc.creator.join(" ") : doc.creator || "";
@@ -447,6 +472,62 @@ function cityFromVenueCoverage(venue?: string, coverage?: string): string {
   return pickCity(String(venue || ""));
 }
 
+function parseLocationDetails(
+  venue?: string,
+  coverage?: string,
+  title?: string,
+): {
+  city?: string;
+  state?: string;
+  country?: string;
+  venueText?: string;
+  locationText?: string;
+} {
+  const coverageText = String(coverage || "").trim();
+  const venueRaw = String(venue || "").trim();
+  const venueText = venuePhraseFromTitle(title);
+  const locationText = [coverageText, venueRaw, venueText].filter(Boolean).join(" | ");
+  const city = cityFromVenueCoverage(venue, coverage) || undefined;
+
+  const fromCoverage = coverageText || venueRaw;
+  const parts = fromCoverage
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  let state: string | undefined;
+  let country: string | undefined;
+  if (parts.length >= 2) {
+    const maybeState = parts[1];
+    const maybeCountry = parts[parts.length - 1];
+    const abbr = maybeState.toUpperCase();
+    if (US_STATE_ABBR_TO_NAME[abbr]) {
+      state = US_STATE_ABBR_TO_NAME[abbr];
+      country = "United States";
+    } else {
+      const mapped = US_STATE_NAME_TO_ABBR.get(maybeState.toLowerCase());
+      if (mapped) {
+        state = US_STATE_ABBR_TO_NAME[mapped];
+        country = "United States";
+      }
+    }
+    if (!country && maybeCountry) country = maybeCountry;
+  }
+
+  const hay = `${coverageText} ${venueRaw}`.toLowerCase();
+  if (!country && /\b(usa|u\.s\.a|united states|us)\b/.test(hay)) {
+    country = "United States";
+  }
+
+  return {
+    city,
+    state,
+    country,
+    venueText: venueText || undefined,
+    locationText: locationText || undefined,
+  };
+}
+
 function buildRecordingsFromDocs(input: IaDoc[], continentFilters: string[]): Recording[] {
   return input
     .map((d) => {
@@ -462,6 +543,7 @@ function buildRecordingsFromDocs(input: IaDoc[], continentFilters: string[]): Re
         d.coverage,
         d.title,
       );
+      const location = parseLocationDetails(d.venue, d.coverage, d.title);
 
       if (
         continentFilters.length > 0 &&
@@ -475,7 +557,11 @@ function buildRecordingsFromDocs(input: IaDoc[], continentFilters: string[]): Re
         title: d.title || d.identifier,
         showDate,
         showKey,
-        city: cityFromVenueCoverage(d.venue, d.coverage),
+        city: location.city,
+        state: location.state,
+        country: location.country,
+        venueText: location.venueText,
+        locationText: location.locationText,
         continent: showContinent,
         artwork: `https://archive.org/services/img/${encodeURIComponent(
           d.identifier,
@@ -498,6 +584,10 @@ function buildShowsFromRecordings(recordings: Recording[]): ShowListItem[] {
       showDate: string;
       title: string;
       city?: string;
+      state?: string;
+      country?: string;
+      venueText?: string;
+      locationText?: string;
       sources: Recording[];
       continent: Continent;
     }
@@ -511,6 +601,10 @@ function buildShowsFromRecordings(recordings: Recording[]): ShowListItem[] {
         showDate: r.showDate,
         title: r.title,
         city: r.city,
+        state: r.state,
+        country: r.country,
+        venueText: r.venueText,
+        locationText: r.locationText,
         sources: [r],
         continent: r.continent,
       });
@@ -519,6 +613,10 @@ function buildShowsFromRecordings(recordings: Recording[]): ShowListItem[] {
     g.sources.push(r);
     if ((g.title?.length || 0) < (r.title?.length || 0)) g.title = r.title;
     if (!g.city && r.city) g.city = r.city;
+    if (!g.state && r.state) g.state = r.state;
+    if (!g.country && r.country) g.country = r.country;
+    if (!g.venueText && r.venueText) g.venueText = r.venueText;
+    if (!g.locationText && r.locationText) g.locationText = r.locationText;
     if (g.continent === "Unknown" && r.continent !== "Unknown") {
       g.continent = r.continent;
     }
@@ -561,6 +659,10 @@ function buildShowsFromRecordings(recordings: Recording[]): ShowListItem[] {
       showDate: g.showDate,
       title: g.title,
       city: g.city || undefined,
+      state: g.state || undefined,
+      country: g.country || undefined,
+      venueText: g.venueText || undefined,
+      locationText: g.locationText || undefined,
       defaultId: best.identifier,
       sourcesCount: sources.length,
       artwork: best.artwork,
@@ -951,7 +1053,22 @@ export async function GET(req: NextRequest) {
   const qLower = query.toLowerCase();
   const searchedShows = query
     ? sortedShows.filter((s) => {
-        const haystack = `${s.showDate} ${s.title} ${s.continent} ${s.showKey}`.toLowerCase();
+        const normalizedShowKey = String(s.showKey || "").replaceAll("-", " ");
+        const haystack = [
+          s.showDate,
+          s.title,
+          s.continent,
+          s.city,
+          s.state,
+          s.country,
+          s.venueText,
+          s.locationText,
+          s.showKey,
+          normalizedShowKey,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
         return haystack.includes(qLower);
       })
     : sortedShows;

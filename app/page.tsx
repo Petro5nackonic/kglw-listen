@@ -3,7 +3,25 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { usePlayer } from "@/components/player/store";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import {
+  faCirclePlay,
+  faBookmark,
+  faChevronLeft,
+  faChevronRight,
+  faChevronDown,
+  faEllipsisVertical,
+  faGuitar,
+  faMagnifyingGlass,
+  faSliders,
+} from "@fortawesome/free-solid-svg-icons";
+import {
+  faGuitarElectric,
+  faTurntable,
+  faViolin,
+} from "@fortawesome/pro-solid-svg-icons";
+import { type IconDefinition } from "@fortawesome/fontawesome-svg-core";
+import { usePlayer, type Track } from "@/components/player/store";
 import { usePlaylists } from "@/components/playlists/store";
 import { toDisplayTitle, toDisplayTrackTitle } from "@/utils/displayTitle";
 import { shouldUseDefaultArtwork } from "@/utils/archiveArtwork";
@@ -22,6 +40,10 @@ type ShowItem = {
   showDate: string;
   title: string;
   city?: string;
+  state?: string;
+  country?: string;
+  venueText?: string;
+  locationText?: string;
   defaultId: string;
   sourcesCount: number;
   artwork: string;
@@ -40,6 +62,21 @@ type ShowPlaybackStats = {
   showLengthSeconds: number | null;
   showTrackCount: number | null;
 };
+type IaMetadataFile = {
+  name?: string;
+  title?: string;
+  track?: string;
+  length?: string | number;
+};
+type SongSheetTrack = {
+  title: string;
+  url: string;
+  length?: string;
+  track: string;
+  showKey: string;
+  showDate: string;
+  venueText: string;
+};
 
 const SHOW_TYPE_OPTIONS = [
   { value: "Acoustic" },
@@ -47,9 +84,46 @@ const SHOW_TYPE_OPTIONS = [
   { value: "Orchestra" },
   { value: "Standard" },
 ];
+const QUICK_SHOW_FILTERS: {
+  value: "Rave" | "Acoustic" | "Orchestra" | "Standard";
+  label: string;
+  icon: IconDefinition;
+  activeClass: string;
+  inactiveIconClass: string;
+}[] = [
+  {
+    value: "Rave",
+    label: "Rave",
+    icon: faTurntable,
+    activeClass: "bg-linear-to-br from-[rgb(197,16,243)] to-[rgb(28,47,143)]",
+    inactiveIconClass: "text-fuchsia-300",
+  },
+  {
+    value: "Acoustic",
+    label: "Acoustic",
+    icon: faGuitar,
+    activeClass: "bg-linear-to-br from-[rgb(209,234,141)] to-[rgb(42,122,140)]",
+    inactiveIconClass: "text-lime-200",
+  },
+  {
+    value: "Orchestra",
+    label: "Orchestra",
+    icon: faViolin,
+    activeClass: "bg-linear-to-br from-[rgb(227,85,140)] to-[rgb(244,158,102)]",
+    inactiveIconClass: "text-rose-300",
+  },
+  {
+    value: "Standard",
+    label: "Rock",
+    icon: faGuitarElectric,
+    activeClass: "bg-linear-to-br from-[rgb(83,113,157)] to-[rgb(70,70,70)]",
+    inactiveIconClass: "text-slate-300",
+  },
+];
 
 const FAVORITE_SHOWS_KEY = "kglw.favoriteShows.v1";
 const RECENT_SHOWS_KEY = "kglw.recentShows.v1";
+const SHOW_STATS_CACHE_KEY = "kglw.showStats.v1";
 const DEFAULT_ARTWORK_SRC = "/api/default-artwork";
 
 function getArchiveIdentifier(url?: string): string {
@@ -176,7 +250,7 @@ function showCardVariant(tag?: "ORCHESTRA" | "RAVE" | "ACOUSTIC") {
     case "RAVE":
       return {
         cardClass:
-          "bg-linear-to-br from-[rgba(197,16,243,0.2)] to-[rgba(28,47,143,0.2)]",
+          "bg-linear-to-b from-[rgba(197,16,243,0.2)] to-[rgba(10,143,245,0.2)]",
         badgeClass:
           "bg-linear-to-br from-[rgb(197,16,243)] to-[rgb(28,47,143)] text-white",
         badgeText: "Rave",
@@ -404,6 +478,8 @@ export default function HomePage() {
   const router = useRouter();
   const setQueue = usePlayer((s) => s.setQueue);
   const playlists = usePlaylists((s) => s.playlists);
+  const addTrackToPlaylist = usePlaylists((s) => s.addTrack);
+  const createPlaylist = usePlaylists((s) => s.createPlaylist);
 
   const [shows, setShows] = useState<ShowItem[]>([]);
   const [songShows, setSongShows] = useState<ShowItem[]>([]);
@@ -429,10 +505,22 @@ export default function HomePage() {
   const [debouncedQuery, setDebouncedQuery] = useState<string>("");
   const [sort, setSort] = useState<string>("newest");
   const [showTab, setShowTab] = useState<"all" | "recent" | "favorites">("all");
+  const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
   const [favoriteShows, setFavoriteShows] = useState<string[]>([]);
   const [recentShows, setRecentShows] = useState<string[]>([]);
-  const [searchOpen, setSearchOpen] = useState(false);
   const [statsById, setStatsById] = useState<Record<string, ShowPlaybackStats>>({});
+  const inFlightStatsIdsRef = useRef<Set<string>>(new Set());
+  const queueByIdentifierRef = useRef<Record<string, Track[]>>({});
+  const playPendingRef = useRef<Set<string>>(new Set());
+  const [songSheetTrack, setSongSheetTrack] = useState<SongSheetTrack | null>(null);
+  const [showSongPlaylistPicker, setShowSongPlaylistPicker] = useState(false);
+  const [songShareState, setSongShareState] = useState<"idle" | "copied" | "error">(
+    "idle",
+  );
+  const [songPlaylistActionState, setSongPlaylistActionState] = useState<
+    Record<string, "added" | "exists" | undefined>
+  >({});
+  const [songNewPlaylistName, setSongNewPlaylistName] = useState("");
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
@@ -442,9 +530,19 @@ export default function HomePage() {
     for (const y of years) params.append("year", y);
     for (const c of continents) params.append("continent", c);
     for (const t of showTypes) params.append("showType", t);
-    params.set("query", debouncedQuery);
     params.set("sort", sort);
     return `/api/ia/shows?${params.toString()}`; // IMPORTANT: use /api/ia/shows
+  }
+
+  function buildSongSearchUrl(p: number) {
+    const params = new URLSearchParams();
+    params.set("page", String(p));
+    for (const y of years) params.append("year", y);
+    for (const c of continents) params.append("continent", c);
+    for (const t of showTypes) params.append("showType", t);
+    params.set("query", debouncedQuery);
+    params.set("sort", sort);
+    return `/api/ia/shows?${params.toString()}`;
   }
 
   async function loadPage(p: number, mode: "append" | "replace") {
@@ -508,6 +606,61 @@ export default function HomePage() {
     }
   }, []);
 
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(SHOW_STATS_CACHE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as unknown;
+      if (!parsed || typeof parsed !== "object") return;
+
+      const cleaned: Record<string, ShowPlaybackStats> = {};
+      for (const [id, value] of Object.entries(parsed as Record<string, unknown>)) {
+        if (!value || typeof value !== "object") continue;
+        const maybe = value as {
+          showLengthSeconds?: unknown;
+          showTrackCount?: unknown;
+        };
+        const showLengthSeconds =
+          typeof maybe.showLengthSeconds === "number" &&
+          Number.isFinite(maybe.showLengthSeconds)
+            ? maybe.showLengthSeconds
+            : null;
+        const showTrackCount =
+          typeof maybe.showTrackCount === "number" &&
+          Number.isFinite(maybe.showTrackCount)
+            ? maybe.showTrackCount
+            : null;
+        if (showLengthSeconds == null && showTrackCount == null) continue;
+        cleaned[id] = { showLengthSeconds, showTrackCount };
+      }
+      if (Object.keys(cleaned).length > 0) {
+        setStatsById((prev) => ({ ...cleaned, ...prev }));
+      }
+    } catch {
+      // Ignore bad cache payloads and continue normally.
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      // Persist only computed values so transient nulls don't get stuck forever.
+      const persistable = Object.fromEntries(
+        Object.entries(statsById).filter(([, stats]) => {
+          const hasLength =
+            typeof stats?.showLengthSeconds === "number" &&
+            Number.isFinite(stats.showLengthSeconds);
+          const hasTrackCount =
+            typeof stats?.showTrackCount === "number" &&
+            Number.isFinite(stats.showTrackCount);
+          return hasLength || hasTrackCount;
+        }),
+      );
+      localStorage.setItem(SHOW_STATS_CACHE_KEY, JSON.stringify(persistable));
+    } catch {
+      // Ignore storage quota / serialization errors.
+    }
+  }, [statsById]);
+
   // Debounce search so we don't re-fetch on every single keystroke.
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQuery(query.trim()), 300);
@@ -516,12 +669,38 @@ export default function HomePage() {
 
   useEffect(() => {
     setShows([]);
-    setSongShows([]);
-    setSongTotal(0);
-    setVenueTotal(0);
     setHasMore(true);
     setPage(1);
     loadPage(1, "replace");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [years.join("|"), continents.join("|"), showTypes.join("|"), sort]);
+
+  useEffect(() => {
+    let alive = true;
+    async function runSongSearch() {
+      if (!debouncedQuery) {
+        if (!alive) return;
+        setSongShows([]);
+        setSongTotal(0);
+        return;
+      }
+      try {
+        const res = await fetch(buildSongSearchUrl(1), { cache: "no-store" });
+        if (!res.ok) return;
+        const data = (await res.json()) as ShowsResponse;
+        if (!alive) return;
+        setSongShows(data.song?.items || []);
+        setSongTotal(data.song?.total || 0);
+      } catch {
+        if (!alive) return;
+        setSongShows([]);
+        setSongTotal(0);
+      }
+    }
+    runSongSearch();
+    return () => {
+      alive = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [years.join("|"), continents.join("|"), showTypes.join("|"), debouncedQuery, sort]);
 
@@ -530,8 +709,10 @@ export default function HomePage() {
       setResultFilter("venues");
       return;
     }
-    setResultFilter(songTotal > 0 ? "shows" : "venues");
-  }, [debouncedQuery, songTotal]);
+    if (resultFilter === "shows" && songTotal <= 0) {
+      setResultFilter("venues");
+    }
+  }, [debouncedQuery, songTotal, resultFilter]);
 
   const canInfiniteLoad = !(debouncedQuery && resultFilter === "shows");
 
@@ -602,6 +783,52 @@ export default function HomePage() {
     return shows;
   }, [shows, showTab, favoriteSet, recentSet, recentShows]);
   const featuredPlaylists = useMemo(() => playlists.slice(0, 10), [playlists]);
+  const sortLabel = useMemo(() => {
+    switch (sort) {
+      case "oldest":
+        return "Oldest";
+      case "most_played":
+        return "Most played";
+      case "least_played":
+        return "Least played";
+      case "show_length_longest":
+        return "Longest show";
+      case "show_length_shortest":
+        return "Shortest show";
+      case "newest":
+      default:
+        return "Newest";
+    }
+  }, [sort]);
+  const topSongMatch = sortedSongShows[0] || null;
+  const songAvgMinutesLabel = useMemo(() => {
+    const durations = sortedSongShows
+      .map((s) => s.matchedSongSeconds)
+      .filter((n): n is number => typeof n === "number" && Number.isFinite(n) && n > 0);
+    if (durations.length === 0) return "n/a";
+    const avgSec = Math.round(durations.reduce((a, b) => a + b, 0) / durations.length);
+    const mins = Math.max(1, Math.round(avgSec / 60));
+    return `${mins} min`;
+  }, [sortedSongShows]);
+  const mostPlayedSongShowKey = useMemo(() => {
+    if (sortedSongShows.length === 0) return "";
+    let best: ShowItem | null = null;
+    for (const s of sortedSongShows) {
+      if (!best || (s.plays || 0) > (best.plays || 0)) best = s;
+    }
+    return best?.showKey || "";
+  }, [sortedSongShows]);
+  const longestSongShowKey = useMemo(() => {
+    if (sortedSongShows.length === 0) return "";
+    let best: ShowItem | null = null;
+    for (const s of sortedSongShows) {
+      const sec = typeof s.matchedSongSeconds === "number" ? s.matchedSongSeconds : -1;
+      const bestSec =
+        typeof best?.matchedSongSeconds === "number" ? best.matchedSongSeconds : -1;
+      if (!best || sec > bestSec) best = s;
+    }
+    return best?.showKey || "";
+  }, [sortedSongShows]);
 
   useEffect(() => {
     let cancelled = false;
@@ -618,10 +845,15 @@ export default function HomePage() {
       ),
     )
       .filter(
-        (id) => !Object.prototype.hasOwnProperty.call(statsById, id),
+        (id) =>
+          !Object.prototype.hasOwnProperty.call(statsById, id) &&
+          !inFlightStatsIdsRef.current.has(id),
       )
       .slice(0, 24);
     if (unresolvedIds.length === 0) return;
+
+    // Mark these as in-flight up front to prevent duplicate requests across effect reruns.
+    for (const id of unresolvedIds) inFlightStatsIdsRef.current.add(id);
 
     async function run() {
       const queue = unresolvedIds.slice();
@@ -631,13 +863,17 @@ export default function HomePage() {
           while (queue.length > 0) {
             const identifier = queue.shift();
             if (!identifier) return;
-            const stats = await fetchShowPlaybackStatsClient(identifier);
-            if (cancelled) return;
-            setStatsById((prev) => {
-              if (Object.prototype.hasOwnProperty.call(prev, identifier)) return prev;
-              // Store even null stats so we don't retry endlessly.
-              return { ...prev, [identifier]: stats };
-            });
+            try {
+              const stats = await fetchShowPlaybackStatsClient(identifier);
+              if (cancelled) return;
+              setStatsById((prev) => {
+                if (Object.prototype.hasOwnProperty.call(prev, identifier)) return prev;
+                // Store even null stats so we don't retry endlessly.
+                return { ...prev, [identifier]: stats };
+              });
+            } finally {
+              inFlightStatsIdsRef.current.delete(identifier);
+            }
           }
         },
       );
@@ -674,6 +910,131 @@ export default function HomePage() {
     const next = [showKey, ...recentShows.filter((k) => k !== showKey)].slice(0, 100);
     setRecentShows(next);
     localStorage.setItem(RECENT_SHOWS_KEY, JSON.stringify(next));
+  }
+
+  async function fetchPlayableQueueForIdentifier(identifier: string): Promise<Track[]> {
+    try {
+      const res = await fetch(`/api/ia/show-metadata?id=${encodeURIComponent(identifier)}`, {
+        cache: "no-store",
+      });
+      if (!res.ok) return [];
+      const data = (await res.json()) as { files?: IaMetadataFile[] };
+      const files = Array.isArray(data?.files) ? data.files : [];
+      const audioAll = files.filter((f) => {
+        const name = String(f?.name || "");
+        return Boolean(name) && isAudioName(name);
+      });
+      if (audioAll.length === 0) return [];
+
+      const bestSet = Math.min(
+        ...audioAll.map((f) => trackSetRank(String(f?.name || ""))),
+      );
+      const inSet = audioAll.filter(
+        (f) => trackSetRank(String(f?.name || "")) === bestSet,
+      );
+      const bestExt = Math.min(
+        ...inSet.map((f) => audioExtRank(String(f?.name || ""))),
+      );
+      const picked = inSet.filter(
+        (f) => audioExtRank(String(f?.name || "")) === bestExt,
+      );
+
+      picked.sort((a, b) => {
+        const ta = parseTrackNum(a?.track);
+        const tb = parseTrackNum(b?.track);
+        if (ta !== tb) return ta - tb;
+        return String(a?.name || "").localeCompare(String(b?.name || ""));
+      });
+
+      const seen = new Set<string>();
+      const queue: Track[] = [];
+      for (const f of picked) {
+        const fileName = String(f?.name || "").trim();
+        if (!fileName) continue;
+        const title = String(f?.title || f?.name || "").trim() || fileName;
+        const lenRaw = String(f?.length || "").trim();
+        const dedupeKey = `${title.toLowerCase()}|${lenRaw}`;
+        if (seen.has(dedupeKey)) continue;
+        seen.add(dedupeKey);
+        queue.push({
+          title: toDisplayTrackTitle(title),
+          url: `https://archive.org/download/${encodeURIComponent(identifier)}/${encodeURIComponent(fileName)}`,
+          length: lenRaw || undefined,
+          track: String(queue.length + 1),
+          name: fileName,
+        });
+      }
+      return queue;
+    } catch {
+      return [];
+    }
+  }
+
+  async function playShowFromCard(show: ShowItem) {
+    const identifier = String(show.defaultId || "").trim();
+    if (!identifier) return;
+
+    rememberRecentShow(show.showKey);
+    const cached = queueByIdentifierRef.current[identifier];
+    if (cached && cached.length > 0) {
+      setQueue(cached, 0);
+      return;
+    }
+    if (playPendingRef.current.has(identifier)) return;
+
+    playPendingRef.current.add(identifier);
+    try {
+      const queue = await fetchPlayableQueueForIdentifier(identifier);
+      if (queue.length === 0) return;
+      queueByIdentifierRef.current[identifier] = queue;
+      setQueue(queue, 0);
+    } finally {
+      playPendingRef.current.delete(identifier);
+    }
+  }
+
+  function normalizeSongText(v: string): string {
+    return String(v || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function closeSongSheet() {
+    setSongSheetTrack(null);
+    setShowSongPlaylistPicker(false);
+    setSongShareState("idle");
+    setSongPlaylistActionState({});
+    setSongNewPlaylistName("");
+  }
+
+  async function playSongResult(songShow: ShowItem) {
+    const identifier = String(songShow.defaultId || "").trim();
+    if (!identifier) return;
+
+    rememberRecentShow(songShow.showKey);
+    let queue = queueByIdentifierRef.current[identifier];
+    if (!queue || queue.length === 0) {
+      if (playPendingRef.current.has(identifier)) return;
+      playPendingRef.current.add(identifier);
+      try {
+        queue = await fetchPlayableQueueForIdentifier(identifier);
+        if (!queue || queue.length === 0) return;
+        queueByIdentifierRef.current[identifier] = queue;
+      } finally {
+        playPendingRef.current.delete(identifier);
+      }
+    }
+
+    const needle = normalizeSongText(songShow.matchedSongTitle || debouncedQuery);
+    const startIndex = needle
+      ? Math.max(
+          0,
+          queue.findIndex((t) => normalizeSongText(t.title).includes(needle)),
+        )
+      : 0;
+    setQueue(queue, startIndex < 0 ? 0 : startIndex);
   }
 
   return (
@@ -763,118 +1124,155 @@ export default function HomePage() {
           </section>
 
           <section>
-            <div className="mb-3 flex items-center justify-between">
+            <div className="mb-3">
               <h2 className="text-[34px] leading-none font-semibold">Shows</h2>
-              <button
-                type="button"
-                aria-label="Toggle search"
-                className="rounded-full p-1.5 text-white/90"
-                onClick={() => setSearchOpen((v) => !v)}
-              >
-                ⌕
-              </button>
             </div>
 
-            {searchOpen && (
-              <div className="mb-3">
+            <div className="mb-3">
+              <div className="relative">
+                <FontAwesomeIcon
+                  icon={faMagnifyingGlass}
+                  className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[18px] text-white"
+                />
                 <input
                   id="search"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search songs, venues, dates..."
-                  className="w-full rounded-xl border border-white/20 bg-black/35 px-3 py-2 text-sm text-white placeholder:text-white/45 outline-none focus:border-fuchsia-300/45"
+                  placeholder="Search songs, shows, venues, etc"
+                  className="w-full rounded-xl border border-white/50 bg-transparent px-11 py-[14px] text-[14px] text-white outline-none placeholder:text-white/60"
                   autoComplete="off"
                 />
               </div>
-            )}
-
-            <div className="mb-3 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setShowTab("all")}
-                className={`rounded-full px-4 py-2 text-[13px] ${
-                  showTab === "all" ? "bg-[#5a22c9]" : "bg-white/10 text-white/90"
-                }`}
-              >
-                All
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowTab("recent")}
-                className={`rounded-full px-4 py-2 text-[13px] ${
-                  showTab === "recent"
-                    ? "bg-[#5a22c9]"
-                    : "bg-white/10 text-white/90"
-                }`}
-              >
-                Recently Played
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowTab("favorites")}
-                className={`rounded-full px-4 py-2 text-[13px] ${
-                  showTab === "favorites"
-                    ? "bg-[#5a22c9]"
-                    : "bg-white/10 text-white/90"
-                }`}
-              >
-                Favorites
-              </button>
+              {debouncedQuery && resultFilter === "venues" && songTotal > 0 && topSongMatch && (
+                <button
+                  type="button"
+                  className="mt-2 w-full rounded-b-xl rounded-t-none border border-white/30 px-4 pb-3 pt-6 text-left"
+                  onClick={() => setResultFilter("shows")}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm text-white">
+                        {toDisplayTrackTitle(topSongMatch.matchedSongTitle || debouncedQuery)}
+                      </div>
+                      <div className="text-xs text-white/70">
+                        Last played: {formatCardDate(topSongMatch.showDate)}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-full bg-white/10 px-2 py-1 text-xs text-white/70">
+                        {songTotal}
+                      </span>
+                      <FontAwesomeIcon icon={faChevronRight} className="text-xs text-white" />
+                    </div>
+                  </div>
+                </button>
+              )}
             </div>
 
-            <div className="mb-4">
-              <div className="grid grid-cols-2 gap-2 md:flex md:items-end">
-                <div>
-                  <div className="mb-1 text-[12px] text-white/70">Sort By:</div>
-                  <select
-                    id="sort"
-                    className="w-full rounded-full border border-white/90 bg-transparent px-3 py-2 text-sm"
-                    value={sort}
-                    onChange={(e) => setSort(e.target.value)}
+            <div className="mb-3 grid grid-cols-4 gap-2">
+              {QUICK_SHOW_FILTERS.map((opt) => {
+                const active = showTypes.includes(opt.value) && showTypes.length === 1;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    className={`rounded-xl px-2 py-2 text-center transition ${
+                      active ? `${opt.activeClass} text-white` : "bg-white/10 text-white"
+                    }`}
+                    onClick={() => {
+                      if (active) {
+                        setShowTypes([]);
+                        return;
+                      }
+                      setShowTypes([opt.value]);
+                    }}
                   >
-                    <option value="newest">Newest</option>
-                    <option value="oldest">Oldest</option>
-                    <option value="most_played">Most played</option>
-                    <option value="least_played">Least played</option>
-                    <option value="show_length_longest">Longest show</option>
-                    <option value="show_length_shortest">Shortest show</option>
-                  </select>
-                </div>
+                    <div className={`text-[18px] ${active ? "text-white" : opt.inactiveIconClass}`}>
+                      <FontAwesomeIcon icon={opt.icon} className="h-[18px] w-[23px]" />
+                    </div>
+                    <div className="text-[13px]">{opt.label}</div>
+                  </button>
+                );
+              })}
+            </div>
 
-                <div className="col-span-1">
-                  <div className="mb-1 text-[12px] text-white/70">Filters:</div>
-                  <div className="flex gap-2">
-                    <MultiSelectDropdown
-                      id="years"
-                      label=""
-                      options={availableYears}
-                      value={years}
-                      onChange={setYears}
-                      minWidthClass="min-w-[110px]"
-                      emptyLabel="Years"
-                    />
-                    <MultiSelectDropdown
-                      id="continents"
-                      label=""
-                      options={availableContinents}
-                      value={continents}
-                      onChange={setContinents}
-                      minWidthClass="min-w-[124px]"
-                      emptyLabel="Continent"
-                    />
-                    <MultiSelectDropdown
-                      id="showTypes"
-                      label=""
-                      options={SHOW_TYPE_OPTIONS}
-                      value={showTypes}
-                      onChange={setShowTypes}
-                      minWidthClass="min-w-[132px]"
-                      emptyLabel="Show Type"
-                    />
-                  </div>
+            <div className="mb-3 flex items-center gap-2">
+              <button
+                type="button"
+                aria-label="Toggle advanced filters"
+                className="rounded-full border border-white px-3 py-2 text-[12px] text-white"
+                onClick={() => setAdvancedFiltersOpen((v) => !v)}
+              >
+                <FontAwesomeIcon icon={faSliders} />
+              </button>
+              <button
+                type="button"
+                className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-[12px] ${
+                  showTab === "favorites"
+                    ? "border-white bg-white text-[#080017]"
+                    : "border-white text-white"
+                }`}
+                onClick={() =>
+                  setShowTab((prev) => (prev === "favorites" ? "all" : "favorites"))
+                }
+              >
+                <span>Saved</span>
+                <FontAwesomeIcon icon={faBookmark} />
+              </button>
+              <label className="inline-flex items-center gap-2 rounded-full border border-white px-3 py-2 text-[12px] text-white">
+                <span>{sortLabel}</span>
+                <FontAwesomeIcon icon={faChevronDown} />
+                <select
+                  id="sort"
+                  className="w-0 appearance-none bg-transparent text-transparent"
+                  value={sort}
+                  onChange={(e) => setSort(e.target.value)}
+                >
+                  <option value="newest">Newest</option>
+                  <option value="oldest">Oldest</option>
+                  <option value="most_played">Most played</option>
+                  <option value="least_played">Least played</option>
+                  <option value="show_length_longest">Longest show</option>
+                  <option value="show_length_shortest">Shortest show</option>
+                </select>
+              </label>
+            </div>
+
+            <div className="mb-3 text-[12px] font-medium text-white">{venueShows.length} Shows</div>
+
+            {advancedFiltersOpen && (
+              <div className="mb-4">
+                <div className="flex gap-2">
+                  <MultiSelectDropdown
+                    id="years"
+                    label=""
+                    options={availableYears}
+                    value={years}
+                    onChange={setYears}
+                    minWidthClass="min-w-[110px]"
+                    emptyLabel="Years"
+                  />
+                  <MultiSelectDropdown
+                    id="continents"
+                    label=""
+                    options={availableContinents}
+                    value={continents}
+                    onChange={setContinents}
+                    minWidthClass="min-w-[124px]"
+                    emptyLabel="Continent"
+                  />
+                  <MultiSelectDropdown
+                    id="showTypes"
+                    label=""
+                    options={SHOW_TYPE_OPTIONS}
+                    value={showTypes}
+                    onChange={setShowTypes}
+                    minWidthClass="min-w-[132px]"
+                    emptyLabel="Show Type"
+                  />
                 </div>
               </div>
-            </div>
+            )}
 
             {error && (
               <div className="mb-3 rounded-xl border border-red-400/30 bg-red-600/15 p-3 text-sm text-red-100">
@@ -882,129 +1280,236 @@ export default function HomePage() {
               </div>
             )}
 
-            <div className="grid w-full grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
-              {venueShows.map((s) => {
-                const isFav = favoriteSet.has(s.showKey);
-                const clientStats = statsById[s.defaultId];
-                const showLengthSeconds =
-                  s.showLengthSeconds ?? clientStats?.showLengthSeconds ?? null;
-                const showTrackCount =
-                  s.showTrackCount ?? clientStats?.showTrackCount ?? null;
-                const isStatsLoading =
-                  !Number.isFinite(showTrackCount ?? NaN) &&
-                  !Number.isFinite(showLengthSeconds ?? NaN) &&
-                  !Object.prototype.hasOwnProperty.call(statsById, s.defaultId);
-                const lengthText = formatShowLength(showLengthSeconds);
-                const trackCount = Number.isFinite(showTrackCount ?? NaN)
-                  ? Math.max(0, Number(showTrackCount))
-                  : null;
-                const specialTag = s.specialTag || null;
-                const variant = showCardVariant(specialTag || undefined);
-                const displayTitle = truncateWithEllipsis(toDisplayTitle(s.title), 38);
-                const imageSrc = shouldUseDefaultArtwork(s.defaultId)
-                  ? DEFAULT_ARTWORK_SRC
-                  : s.artwork;
-                return (
-                  <div
-                    key={s.showKey}
-                    className={`relative flex h-full flex-col rounded-2xl p-3 ${variant.cardClass}`}
+            {debouncedQuery && resultFilter === "shows" ? (
+              <div className="mb-3">
+                <div className="mb-4 flex items-center justify-between">
+                  <button
+                    type="button"
+                    className="text-white"
+                    onClick={() => setResultFilter("venues")}
+                    aria-label="Back to venue results"
                   >
-                    <button
-                      type="button"
-                      className="flex w-full flex-1 flex-col text-center"
-                      onClick={() => {
-                        rememberRecentShow(s.showKey);
-                        router.push(`/show/${encodeURIComponent(s.showKey)}`);
-                      }}
-                    >
-                      <div className="relative h-[144px] w-full overflow-hidden rounded-lg bg-black/30">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={imageSrc}
-                          alt=""
-                          className="h-full w-full object-cover"
-                          onError={(e) => {
-                            const img = e.currentTarget;
-                            if (img.src.endsWith(DEFAULT_ARTWORK_SRC)) return;
-                            img.src = DEFAULT_ARTWORK_SRC;
-                          }}
-                        />
-                        {specialTag ? (
-                          <span
-                            className={`absolute bottom-2 left-1/2 -translate-x-1/2 rounded-[6px] px-3 py-[3px] text-[12px] leading-none font-medium tracking-[0.2px] ${variant.badgeClass}`}
-                          >
-                            {variant.badgeText}
-                          </span>
-                        ) : null}
-                      </div>
-                      <div className="mt-2 text-[13px] text-white [font-family:var(--font-roboto-condensed)]">
-                        {formatCardDate(s.showDate)}
-                      </div>
-                      <div className="line-clamp-2 text-[14px] leading-[1.15] font-semibold tracking-[0.3px] [font-family:var(--font-roboto-condensed)]">
-                        {displayTitle}
-                      </div>
-                      {s.city ? (
-                        <div className="mt-1 text-[12px] leading-[1.1] font-light text-white/80 [font-family:var(--font-roboto-condensed)]">
-                          {s.city}
-                        </div>
-                      ) : null}
-                      <div className="mt-1 flex items-center justify-center gap-[6px] text-[12px] text-white/90 [font-family:var(--font-roboto-condensed)]">
-                        {isStatsLoading ? (
-                          <span className="animate-pulse text-white/70">
-                            Loading stats...
-                          </span>
-                        ) : (
-                          <>
-                            <span>{trackCount ?? "—"} Tracks</span>
-                            {lengthText ? (
-                              <>
-                                <span className="inline-block size-[3px] rounded-full bg-white/90" />
-                                <span>{lengthText}</span>
-                              </>
-                            ) : null}
-                          </>
-                        )}
-                      </div>
-                    </button>
+                    <FontAwesomeIcon icon={faChevronLeft} />
+                  </button>
+                  <div className="text-center">
+                    <div className="text-xl text-white">
+                      {toDisplayTrackTitle(topSongMatch?.matchedSongTitle || debouncedQuery)}
+                    </div>
+                    <div className="text-xs text-white/70">Avg. length: {songAvgMinutesLabel}</div>
+                  </div>
+                  <span className="w-2" />
+                </div>
 
-                    <div className="mt-auto flex justify-center pt-3">
-                      <div className="inline-flex h-[31px] items-center justify-center gap-[10px] rounded-[8px] border border-black/20 bg-black/20 px-3">
+                <div className="mb-2 text-xs font-medium text-white">{songTotal} Shows</div>
+                <div className="space-y-2">
+                  {sortedSongShows.map((s) => {
+                    const songTitle = toDisplayTrackTitle(s.matchedSongTitle || debouncedQuery);
+                    const timeLabel = displaySongLength(s.matchedSongLength, s.matchedSongSeconds);
+                    const isMostPlayed = s.showKey === mostPlayedSongShowKey;
+                    const isLongest = s.showKey === longestSongShowKey;
+                    return (
+                      <div
+                        key={`song-${s.showKey}`}
+                        className="flex items-center justify-between rounded-xl border border-white/20 px-3 py-2"
+                      >
                         <button
                           type="button"
-                          aria-label={isFav ? "Remove favorite show" : "Favorite show"}
-                          className={`inline-flex h-[15px] w-[16px] items-center justify-center ${isFav ? "text-fuchsia-300" : "text-white"}`}
-                          onClick={() => toggleFavoriteShow(s.showKey)}
-                          title={isFav ? "Unfavorite show" : "Favorite show"}
+                          className="min-w-0 text-left"
+                          onClick={() => {
+                            rememberRecentShow(s.showKey);
+                            router.push(
+                              `/show/${encodeURIComponent(s.showKey)}?song=${encodeURIComponent(songTitle)}`,
+                            );
+                          }}
                         >
-                          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-                            <path d="M7 3.5h10a1.5 1.5 0 0 1 1.5 1.5v16.5l-6.5-4-6.5 4V5A1.5 1.5 0 0 1 7 3.5Z" />
-                          </svg>
+                          <div className="truncate text-2xl leading-none text-white">{songTitle}</div>
+                          <div className="truncate text-xs text-white/70">
+                            {formatCardDate(s.showDate)} {toDisplayTitle(s.title)}
+                          </div>
+                          {(isMostPlayed || isLongest) && (
+                            <div className="mt-1 flex items-center gap-1">
+                              {isMostPlayed ? (
+                                <span className="rounded-full bg-white/10 px-2 py-[2px] text-[10px] text-white/90">
+                                  Most Played
+                                </span>
+                              ) : null}
+                              {isLongest ? (
+                                <span className="rounded-full bg-white/10 px-2 py-[2px] text-[10px] text-white/90">
+                                  Longest
+                                </span>
+                              ) : null}
+                            </div>
+                          )}
                         </button>
-                        <span className="h-[29px] w-px bg-black/30" />
+                        <div className="ml-2 flex items-center gap-3">
+                          <span className="text-xl text-white">{timeLabel}</span>
+                          <button
+                            type="button"
+                            className="text-white"
+                            onClick={() => {
+                              void playSongResult(s);
+                            }}
+                            aria-label="Play show"
+                          >
+                            <FontAwesomeIcon icon={faCirclePlay} className="text-3xl" />
+                          </button>
+                          <button
+                            type="button"
+                            className="text-white/70"
+                            aria-label="More options"
+                            onClick={() => {
+                              setSongSheetTrack({
+                                title: songTitle,
+                                url: s.matchedSongUrl || "",
+                                length: s.matchedSongLength || undefined,
+                                track: "1",
+                                showKey: s.showKey,
+                                showDate: s.showDate,
+                                venueText: toDisplayTitle(s.title),
+                              });
+                              setShowSongPlaylistPicker(false);
+                              setSongShareState("idle");
+                              setSongPlaylistActionState({});
+                            }}
+                          >
+                            <FontAwesomeIcon icon={faEllipsisVertical} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="grid w-full grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
+                  {venueShows.map((s) => {
+                    const isFav = favoriteSet.has(s.showKey);
+                    const clientStats = statsById[s.defaultId];
+                    const showLengthSeconds =
+                      s.showLengthSeconds ?? clientStats?.showLengthSeconds ?? null;
+                    const showTrackCount =
+                      s.showTrackCount ?? clientStats?.showTrackCount ?? null;
+                    const isStatsLoading =
+                      !Number.isFinite(showTrackCount ?? NaN) &&
+                      !Number.isFinite(showLengthSeconds ?? NaN) &&
+                      !Object.prototype.hasOwnProperty.call(statsById, s.defaultId);
+                    const lengthText = formatShowLength(showLengthSeconds);
+                    const trackCount = Number.isFinite(showTrackCount ?? NaN)
+                      ? Math.max(0, Number(showTrackCount))
+                      : null;
+                    const specialTag = s.specialTag || null;
+                    const variant = showCardVariant(specialTag || undefined);
+                    const displayTitle = truncateWithEllipsis(toDisplayTitle(s.title), 38);
+                    const imageSrc = shouldUseDefaultArtwork(s.defaultId)
+                      ? DEFAULT_ARTWORK_SRC
+                      : s.artwork;
+                    return (
+                      <div
+                        key={s.showKey}
+                        className={`relative flex h-full flex-col rounded-2xl p-3 ${variant.cardClass}`}
+                      >
                         <button
                           type="button"
-                          className="inline-flex items-center gap-1 text-[12px] text-white [font-family:var(--font-roboto-condensed)]"
+                          className="flex w-full flex-1 flex-col text-center"
                           onClick={() => {
                             rememberRecentShow(s.showKey);
                             router.push(`/show/${encodeURIComponent(s.showKey)}`);
                           }}
                         >
-                          <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-                            <path d="M8 6v12l10-6-10-6Z" />
-                          </svg>
-                          <span>Play</span>
+                          <div className="relative h-[144px] w-full overflow-hidden rounded-lg bg-black/30">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={imageSrc}
+                              alt=""
+                              className="h-full w-full object-cover"
+                              onError={(e) => {
+                                const img = e.currentTarget;
+                                if (img.src.endsWith(DEFAULT_ARTWORK_SRC)) return;
+                                img.src = DEFAULT_ARTWORK_SRC;
+                              }}
+                            />
+                            {specialTag ? (
+                              <span
+                                className={`absolute bottom-2 left-1/2 -translate-x-1/2 rounded-[6px] px-3 py-[3px] text-[12px] leading-none font-medium tracking-[0.2px] ${variant.badgeClass}`}
+                              >
+                                {variant.badgeText}
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="mt-2 text-[13px] text-white [font-family:var(--font-roboto-condensed)]">
+                            {formatCardDate(s.showDate)}
+                          </div>
+                          <div className="line-clamp-2 text-[14px] leading-[1.15] font-semibold tracking-[0.3px] [font-family:var(--font-roboto-condensed)]">
+                            {displayTitle}
+                          </div>
+                          {s.city ? (
+                            <div className="mt-1 text-[12px] leading-[1.1] font-light text-white/80 [font-family:var(--font-roboto-condensed)]">
+                              {s.city}
+                            </div>
+                          ) : null}
+                          <div className="mt-1 flex items-center justify-center gap-[6px] text-[12px] text-white/90 [font-family:var(--font-roboto-condensed)]">
+                            {isStatsLoading ? (
+                              <span className="animate-pulse text-white/70">
+                                Loading stats...
+                              </span>
+                            ) : (
+                              <>
+                                <span>{trackCount ?? "—"} Tracks</span>
+                                {lengthText ? (
+                                  <>
+                                    <span className="inline-block size-[3px] rounded-full bg-white/90" />
+                                    <span>{lengthText}</span>
+                                  </>
+                                ) : null}
+                              </>
+                            )}
+                          </div>
                         </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
 
-            {venueShows.length === 0 && (
-              <div className="mt-3 rounded-xl border border-white/15 bg-white/5 p-4 text-sm text-white/70">
-                No shows found for this filter.
-              </div>
+                        <div className="mt-auto flex justify-center pt-3">
+                          <div className="inline-flex h-[31px] items-center justify-center gap-[10px] rounded-[8px] border border-black/20 bg-black/20 px-3">
+                            <button
+                              type="button"
+                              aria-label={isFav ? "Remove favorite show" : "Favorite show"}
+                              className={`inline-flex h-[15px] w-[16px] items-center justify-center ${isFav ? "text-fuchsia-300" : "text-white"}`}
+                              onClick={() => toggleFavoriteShow(s.showKey)}
+                              title={isFav ? "Unfavorite show" : "Favorite show"}
+                            >
+                              {isFav ? (
+                                <FontAwesomeIcon icon={faBookmark} className="h-4 w-4" />
+                              ) : (
+                                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                                  <path d="M7 3.5h10a1.5 1.5 0 0 1 1.5 1.5v16.5l-6.5-4-6.5 4V5A1.5 1.5 0 0 1 7 3.5Z" />
+                                </svg>
+                              )}
+                            </button>
+                            <span className="h-[29px] w-px bg-black/30" />
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 text-[12px] text-white [font-family:var(--font-roboto-condensed)]"
+                              onClick={() => {
+                                void playShowFromCard(s);
+                              }}
+                            >
+                              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                                <path d="M8 6v12l10-6-10-6Z" />
+                              </svg>
+                              <span>Play</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {venueShows.length === 0 && (
+                  <div className="mt-3 rounded-xl border border-white/15 bg-white/5 p-4 text-sm text-white/70">
+                    No shows found for this filter.
+                  </div>
+                )}
+              </>
             )}
 
             <div className="py-8">
@@ -1026,6 +1531,220 @@ export default function HomePage() {
           </section>
         </div>
       </div>
+
+      {songSheetTrack && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50"
+          onClick={() => closeSongSheet()}
+        >
+          <div
+            className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-[393px] rounded-t-2xl border border-white/15 bg-[#080017] px-6 pb-10 pt-6 shadow-[0_-4px_16px_rgba(0,0,0,0.4)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {!showSongPlaylistPicker ? (
+              <>
+                <div className="mb-6 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="truncate text-[22px] leading-none">
+                      {toDisplayTrackTitle(songSheetTrack.title)}
+                    </div>
+                    <div className="text-sm text-white/85">
+                      {songSheetTrack.length || "—"}
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between text-sm text-white/45">
+                    <div className="min-w-0 truncate">pin {songSheetTrack.venueText}</div>
+                    <div className="shrink-0">{formatCardDate(songSheetTrack.showDate)}</div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      className="flex items-center justify-center gap-2 rounded-xl bg-[rgba(48,26,89,0.25)] px-4 py-4 text-base hover:bg-[rgba(72,36,124,0.35)] transition"
+                      onClick={() => toggleFavoriteShow(songSheetTrack.showKey)}
+                    >
+                      <span>{favoriteSet.has(songSheetTrack.showKey) ? "★" : "♡"}</span>
+                      <span>{favoriteSet.has(songSheetTrack.showKey) ? "Favorited show" : "Favorite show"}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="flex items-center justify-center gap-2 rounded-xl bg-[rgba(48,26,89,0.25)] px-4 py-4 text-base hover:bg-[rgba(72,36,124,0.35)] transition"
+                      onClick={async () => {
+                        try {
+                          const songUrl = `${window.location.origin}/show/${encodeURIComponent(songSheetTrack.showKey)}?song=${encodeURIComponent(songSheetTrack.title)}`;
+                          await navigator.clipboard.writeText(songUrl);
+                          setSongShareState("copied");
+                          setTimeout(() => setSongShareState("idle"), 1500);
+                        } catch {
+                          setSongShareState("error");
+                          setTimeout(() => setSongShareState("idle"), 1500);
+                        }
+                      }}
+                    >
+                      <span>➤</span>
+                      <span>
+                        Share
+                        {songShareState === "copied" ? " • copied" : ""}
+                        {songShareState === "error" ? " • failed" : ""}
+                      </span>
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={!songSheetTrack.url}
+                    className="w-full rounded-xl bg-[rgba(48,26,89,0.25)] px-4 py-4 text-base hover:bg-[rgba(72,36,124,0.35)] transition disabled:cursor-not-allowed disabled:opacity-50"
+                    onClick={() => setShowSongPlaylistPicker(true)}
+                  >
+                    + Add to playlist(s)
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  className="mt-5 w-full text-center text-[20px] text-white/90 hover:text-white transition"
+                  onClick={() => closeSongSheet()}
+                >
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="mb-6 flex items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    className="text-base text-white/70 hover:text-white"
+                    onClick={() => setShowSongPlaylistPicker(false)}
+                  >
+                    ←
+                  </button>
+                  <div className="min-w-0 text-center flex-1">
+                    <div className="truncate text-base font-medium">
+                      {toDisplayTrackTitle(songSheetTrack.title)}
+                    </div>
+                    <div className="truncate text-xs text-white/50">
+                      {songSheetTrack.venueText}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="text-base text-white/70 hover:text-white"
+                    onClick={() => closeSongSheet()}
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="mb-2 flex items-center justify-between">
+                  <div className="mx-auto text-sm text-white/75">Select playlist(s)</div>
+                  <button
+                    type="button"
+                    className="rounded-lg border border-white/15 bg-white/10 px-2.5 py-1 text-xs hover:bg-white/15 transition"
+                    onClick={() => {
+                      if (!songSheetTrack.url) return;
+                      const id = createPlaylist(songNewPlaylistName || "New playlist");
+                      addTrackToPlaylist(id, {
+                        title: toDisplayTrackTitle(songSheetTrack.title),
+                        url: songSheetTrack.url,
+                        length: songSheetTrack.length,
+                        track: songSheetTrack.track,
+                      });
+                      setSongPlaylistActionState((prev) => ({ ...prev, [id]: "added" }));
+                      closeSongSheet();
+                      router.push(`/playlists/${id}`);
+                    }}
+                  >
+                    New +
+                  </button>
+                </div>
+
+                <div className="rounded-xl border border-white/10 bg-black/20 p-2">
+                  {playlists.length > 0 ? (
+                    <div className="mb-2 max-h-56 space-y-2 overflow-auto">
+                      {playlists.map((p) => {
+                        const canonical = toDisplayTrackTitle(songSheetTrack.title).toLowerCase();
+                        const slot = p.slots.find((s) => s.canonicalTitle === canonical);
+                        const alreadyExact = Boolean(
+                          slot?.variants.some((v) => v.track.url === songSheetTrack.url),
+                        );
+                        const actionState = songPlaylistActionState[p.id];
+                        const tracksCount = p.slots.length;
+                        const versionsCount = p.slots.reduce(
+                          (sum, s) => sum + s.variants.length,
+                          0,
+                        );
+                        const linksCount = p.slots.filter((s) => s.variants.length > 1).length;
+                        return (
+                          <div
+                            key={p.id}
+                            className="rounded-xl border border-white/10 bg-white/3 px-3 py-2.5"
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="truncate text-sm">{p.name}</div>
+                                <div className="mt-0.5 text-[11px] text-white/50">
+                                  {tracksCount} Tracks • {versionsCount} Versions • {linksCount} Links
+                                </div>
+                              </div>
+
+                              {alreadyExact ? (
+                                <span className="text-xs text-emerald-300">Added!</span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="rounded-lg border border-white/15 bg-white/10 px-2.5 py-1 text-xs hover:bg-white/15 transition"
+                                  disabled={!songSheetTrack.url}
+                                  onClick={() => {
+                                    if (!songSheetTrack.url) return;
+                                    const out = addTrackToPlaylist(p.id, {
+                                      title: toDisplayTrackTitle(songSheetTrack.title),
+                                      url: songSheetTrack.url,
+                                      length: songSheetTrack.length,
+                                      track: songSheetTrack.track,
+                                    });
+                                    setSongPlaylistActionState((prev) => ({
+                                      ...prev,
+                                      [p.id]: out === "exists" ? "exists" : "added",
+                                    }));
+                                  }}
+                                >
+                                  {actionState === "added" ? "Added!" : "Add"}
+                                </button>
+                              )}
+                            </div>
+
+                            {slot && !alreadyExact && (
+                              <div className="mt-1 text-[11px] text-white/50">
+                                {toDisplayTrackTitle(songSheetTrack.title)} is already on this
+                                playlist. Add will merge versions.
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="px-2 py-1 text-xs text-white/60">
+                      No playlists yet. Create one:
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  className="mt-5 w-full text-center text-[20px] text-white/90 hover:text-white transition"
+                  onClick={() => setShowSongPlaylistPicker(false)}
+                >
+                  Done
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
     </main>
   );
