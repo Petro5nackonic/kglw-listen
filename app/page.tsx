@@ -15,12 +15,6 @@ import {
   faMagnifyingGlass,
   faSliders,
 } from "@fortawesome/free-solid-svg-icons";
-import {
-  faGuitarElectric,
-  faTurntable,
-  faViolin,
-} from "@fortawesome/pro-solid-svg-icons";
-import { type IconDefinition } from "@fortawesome/fontawesome-svg-core";
 import { usePlayer, type Track } from "@/components/player/store";
 import { usePlaylists } from "@/components/playlists/store";
 import { toDisplayTitle, toDisplayTrackTitle } from "@/utils/displayTitle";
@@ -87,35 +81,35 @@ const SHOW_TYPE_OPTIONS = [
 const QUICK_SHOW_FILTERS: {
   value: "Rave" | "Acoustic" | "Orchestra" | "Standard";
   label: string;
-  icon: IconDefinition;
+  icon: "turntable" | "guitar" | "violin" | "guitar-electric";
   activeClass: string;
   inactiveIconClass: string;
 }[] = [
   {
     value: "Rave",
     label: "Rave",
-    icon: faTurntable,
+    icon: "turntable",
     activeClass: "bg-linear-to-br from-[rgb(197,16,243)] to-[rgb(28,47,143)]",
     inactiveIconClass: "text-fuchsia-300",
   },
   {
     value: "Acoustic",
     label: "Acoustic",
-    icon: faGuitar,
+    icon: "guitar",
     activeClass: "bg-linear-to-br from-[rgb(209,234,141)] to-[rgb(42,122,140)]",
     inactiveIconClass: "text-lime-200",
   },
   {
     value: "Orchestra",
     label: "Orchestra",
-    icon: faViolin,
+    icon: "violin",
     activeClass: "bg-linear-to-br from-[rgb(227,85,140)] to-[rgb(244,158,102)]",
     inactiveIconClass: "text-rose-300",
   },
   {
     value: "Standard",
     label: "Rock",
-    icon: faGuitarElectric,
+    icon: "guitar-electric",
     activeClass: "bg-linear-to-br from-[rgb(83,113,157)] to-[rgb(70,70,70)]",
     inactiveIconClass: "text-slate-300",
   },
@@ -313,6 +307,41 @@ function displaySongLength(raw?: string | null, sec?: number | null): string {
   if (v && /^\d+(\.\d+)?$/.test(v)) return fmtSongLen(Number(v));
   if (v) return v;
   return fmtSongLen(sec);
+}
+
+function QuickFilterIcon(props: {
+  icon: "turntable" | "guitar" | "violin" | "guitar-electric";
+  className?: string;
+}) {
+  const cls = props.className || "h-[18px] w-[23px]";
+  if (props.icon === "guitar") {
+    return <FontAwesomeIcon icon={faGuitar} className={cls} />;
+  }
+  if (props.icon === "turntable") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true" className={cls} fill="none" stroke="currentColor" strokeWidth="1.8">
+        <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />
+        <circle cx="10" cy="12" r="3.5" />
+        <circle cx="10" cy="12" r="1.2" fill="currentColor" stroke="none" />
+        <path d="M15.5 8.5h3M17 7v3" />
+      </svg>
+    );
+  }
+  if (props.icon === "violin") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true" className={cls} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M9.5 6.5c1.2-1.2 3.8-1.2 5 0 .8.8.8 2 0 2.8l-3.4 3.4c-.8.8-.8 2 0 2.8l.9.9c.7.7.7 1.8 0 2.5l-1.1 1.1c-.7.7-1.8.7-2.5 0l-.9-.9c-.8-.8-2-.8-2.8 0L3 20.8" />
+        <path d="M15.2 3.8l5 5M16.9 2.1l5 5" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={cls} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 5l-2.8 2.8-1.7-1.7L18.3 3.3A2.4 2.4 0 0 1 22 6.9l-2.8 2.8-1.7-1.7L20.3 5.2" />
+      <path d="M9.8 11.2l4.6-4.6 3.2 3.2-4.6 4.6c-.7.7-1.7 1-2.6.9l-3 .8.8-3c-.1-.9.2-1.9.9-2.6Z" />
+      <path d="M6.6 17.4l-1.9 1.9M8.8 19.6l-1.9 1.9" />
+    </svg>
+  );
 }
 
 function MultiSelectDropdown(props: {
@@ -1188,7 +1217,7 @@ export default function HomePage() {
                     }}
                   >
                     <div className={`text-[18px] ${active ? "text-white" : opt.inactiveIconClass}`}>
-                      <FontAwesomeIcon icon={opt.icon} className="h-[18px] w-[23px]" />
+                      <QuickFilterIcon icon={opt.icon} className="h-[18px] w-[23px]" />
                     </div>
                     <div className="text-[13px]">{opt.label}</div>
                   </button>

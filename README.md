@@ -35,15 +35,3 @@ The easiest way to deploy your Next.js app is to use the [Vercel Platform](https
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
 
-## Font Awesome Pro
-
-This project is configured to pull `@fortawesome/*` packages from the Font Awesome npm registry using the `FONTAWESOME_NPM_AUTH_TOKEN` environment variable (see `.npmrc`).
-
-### Windows PowerShell setup
-
-1. Add your token to `.env.local`:
-   - `FONTAWESOME_NPM_AUTH_TOKEN=your_token_here`
-2. Before running `npm install`, set the shell environment variable from `.env.local`:
-   - `$env:FONTAWESOME_NPM_AUTH_TOKEN = (Select-String -Path .env.local -Pattern '^FONTAWESOME_NPM_AUTH_TOKEN=').Line.Split('=',2)[1]`
-3. Install the Pro icon package(s), e.g.:
-   - `npm install @fortawesome/pro-solid-svg-icons`
