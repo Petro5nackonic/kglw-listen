@@ -636,6 +636,15 @@ export default function HomePage() {
   >({});
   const [songNewPlaylistName, setSongNewPlaylistName] = useState("");
   const [homePlaylistMenuId, setHomePlaylistMenuId] = useState<string | null>(null);
+  const [playlistRenameTarget, setPlaylistRenameTarget] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
+  const [playlistRenameValue, setPlaylistRenameValue] = useState("");
+  const [playlistDeleteTarget, setPlaylistDeleteTarget] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const sortMenuRef = useRef<HTMLDivElement | null>(null);
@@ -1380,7 +1389,7 @@ export default function HomePage() {
               <button
                 type="button"
                 aria-label="Close playlist menu"
-                className="fixed inset-0 z-20"
+                className="fixed inset-0 z-[70]"
                 onClick={() => setHomePlaylistMenuId(null)}
               />
             )}
@@ -1389,17 +1398,10 @@ export default function HomePage() {
               {featuredPlaylists.length === 0 ? (
                 <Link
                   href="/playlists"
-                  className="flex items-center justify-between rounded-[16px] border border-white/20 bg-white/5 p-3 backdrop-blur-[6px]"
+                  className="flex items-center justify-center rounded-[16px] border border-white/20 bg-white/5 p-3 backdrop-blur-[6px]"
                 >
-                  <div className="min-w-0">
-                    <div className="truncate text-[18px] font-medium [font-family:var(--font-roboto-condensed)]">
-                      Create your first playlist
-                    </div>
-                    <div className="mt-1 text-[12px] text-white/70">Tap to get started</div>
-                  </div>
-                  <div className="ml-4 flex shrink-0 items-center gap-4 text-white">
-                    <FontAwesomeIcon icon={faCirclePlay} className="text-[24px]" />
-                    <FontAwesomeIcon icon={faEllipsisVertical} className="text-[18px] text-white/75" />
+                  <div className="text-[18px] font-medium text-white [font-family:var(--font-roboto-condensed)]">
+                    Create a playlist
                   </div>
                 </Link>
               ) : (
@@ -1419,7 +1421,9 @@ export default function HomePage() {
                   return (
                     <div
                       key={p.id}
-                      className="relative flex items-center justify-between rounded-[16px] border border-white/20 bg-white/5 p-3 backdrop-blur-[6px]"
+                      className={`relative flex items-center justify-between rounded-[16px] border border-white/20 bg-white/5 p-3 backdrop-blur-[6px] ${
+                        homePlaylistMenuId === p.id ? "z-[90]" : "z-0"
+                      }`}
                     >
                       <Link href={`/playlists/${p.id}`} className="min-w-0 flex-1">
                         <div className="truncate text-[18px] font-medium text-white [font-family:var(--font-roboto-condensed)]">
@@ -1466,7 +1470,7 @@ export default function HomePage() {
                         </button>
                       </div>
                       {homePlaylistMenuId === p.id && (
-                        <div className="absolute right-3 top-10 z-30 w-44 rounded-[12px] border border-white/15 bg-[#16052c] p-1.5 shadow-[0_8px_18px_rgba(0,0,0,0.45)]">
+                        <div className="absolute right-3 top-10 z-[95] w-44 rounded-[12px] border border-white/15 bg-[#16052c] p-1.5 shadow-[0_8px_18px_rgba(0,0,0,0.45)]">
                           <button
                             type="button"
                             className="flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-left text-[14px] text-white/90 hover:bg-white/10 [font-family:var(--font-roboto-condensed)]"
@@ -1475,26 +1479,11 @@ export default function HomePage() {
                                 typeof window !== "undefined"
                                   ? `${window.location.origin}/playlists/${p.id}`
                                   : "";
-                              const shareTitle = `Playlist: ${p.name}`;
-                              const shareText = `Check out my playlist "${p.name}"`;
                               try {
-                                if (
-                                  typeof navigator !== "undefined" &&
-                                  typeof navigator.share === "function"
-                                ) {
-                                  await navigator.share({
-                                    title: shareTitle,
-                                    text: shareText,
-                                    url: shareUrl,
-                                  });
-                                } else if (
-                                  typeof navigator !== "undefined" &&
-                                  navigator.clipboard?.writeText
-                                ) {
-                                  await navigator.clipboard.writeText(shareUrl);
-                                }
+                                if (!shareUrl) return;
+                                await navigator.clipboard.writeText(shareUrl);
                               } catch {
-                                // ignore user-cancelled share sheets and clipboard failures
+                                // ignore clipboard failures
                               }
                               setHomePlaylistMenuId(null);
                             }}
@@ -1506,9 +1495,8 @@ export default function HomePage() {
                             type="button"
                             className="mt-1 flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-left text-[14px] text-white/90 hover:bg-white/10 [font-family:var(--font-roboto-condensed)]"
                             onClick={() => {
-                              const nextName = prompt("Rename playlist", p.name)?.trim();
-                              if (!nextName) return;
-                              renamePlaylist(p.id, nextName);
+                              setPlaylistRenameTarget({ id: p.id, name: p.name });
+                              setPlaylistRenameValue(p.name);
                               setHomePlaylistMenuId(null);
                             }}
                           >
@@ -1519,8 +1507,7 @@ export default function HomePage() {
                             type="button"
                             className="mt-1 flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-left text-[14px] text-rose-200 hover:bg-rose-500/20 [font-family:var(--font-roboto-condensed)]"
                             onClick={() => {
-                              if (!confirm(`Delete playlist "${p.name}"?`)) return;
-                              deletePlaylist(p.id);
+                              setPlaylistDeleteTarget({ id: p.id, name: p.name });
                               setHomePlaylistMenuId(null);
                             }}
                           >
@@ -1998,6 +1985,91 @@ export default function HomePage() {
           </section>
         </div>
       </div>
+
+      {playlistRenameTarget && (
+        <>
+          <button
+            type="button"
+            aria-label="Close rename playlist modal"
+            className="fixed inset-0 z-[90] bg-black/65"
+            onClick={() => setPlaylistRenameTarget(null)}
+          />
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <div className="w-full max-w-sm rounded-[14px] border border-white/20 bg-[#120229] p-4 shadow-[0_12px_30px_rgba(0,0,0,0.5)]">
+              <div className="text-[16px] font-medium text-white [font-family:var(--font-roboto-condensed)]">
+                Rename playlist
+              </div>
+              <input
+                autoFocus
+                value={playlistRenameValue}
+                onChange={(e) => setPlaylistRenameValue(e.target.value)}
+                className="mt-3 w-full rounded-[10px] border border-white/25 bg-black/25 px-3 py-2 text-[14px] text-white outline-none focus:border-white/45"
+              />
+              <div className="mt-4 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  className="rounded-[10px] border border-white/20 px-3 py-1.5 text-[13px] text-white/85 hover:bg-white/10"
+                  onClick={() => setPlaylistRenameTarget(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="rounded-[10px] bg-[#5a22c9] px-3 py-1.5 text-[13px] text-white hover:bg-[#6a33d9]"
+                  onClick={() => {
+                    const next = playlistRenameValue.trim();
+                    if (!next) return;
+                    renamePlaylist(playlistRenameTarget.id, next);
+                    setPlaylistRenameTarget(null);
+                  }}
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {playlistDeleteTarget && (
+        <>
+          <button
+            type="button"
+            aria-label="Close delete playlist modal"
+            className="fixed inset-0 z-[90] bg-black/65"
+            onClick={() => setPlaylistDeleteTarget(null)}
+          />
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <div className="w-full max-w-sm rounded-[14px] border border-rose-300/25 bg-[#120229] p-4 shadow-[0_12px_30px_rgba(0,0,0,0.5)]">
+              <div className="text-[16px] font-medium text-white [font-family:var(--font-roboto-condensed)]">
+                Delete playlist?
+              </div>
+              <div className="mt-2 text-[13px] text-white/75">
+                This will permanently delete "{playlistDeleteTarget.name}".
+              </div>
+              <div className="mt-4 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  className="rounded-[10px] border border-white/20 px-3 py-1.5 text-[13px] text-white/85 hover:bg-white/10"
+                  onClick={() => setPlaylistDeleteTarget(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="rounded-[10px] bg-rose-600 px-3 py-1.5 text-[13px] text-white hover:bg-rose-500"
+                  onClick={() => {
+                    deletePlaylist(playlistDeleteTarget.id);
+                    setPlaylistDeleteTarget(null);
+                  }}
+                >
+                  Confirm deletion
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
 
       {songSheetTrack && (
         <div
