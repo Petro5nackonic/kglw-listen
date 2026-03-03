@@ -139,6 +139,77 @@ function venueFromTitle(title?: string): string {
   return m?.[1]?.trim() || "";
 }
 
+function normalizeLooseText(input: string): string {
+  return String(input || "")
+    .toLowerCase()
+    .replace(/['’]/g, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function tokenSet(input: string): Set<string> {
+  return new Set(
+    normalizeLooseText(input)
+      .split(" ")
+      .map((t) => t.trim())
+      .filter((t) => t.length >= 3),
+  );
+}
+
+function hasStrongTokenOverlap(a: string, b: string): boolean {
+  const ta = tokenSet(a);
+  const tb = tokenSet(b);
+  if (ta.size === 0 || tb.size === 0) return false;
+  let overlap = 0;
+  for (const t of ta) {
+    if (tb.has(t)) overlap += 1;
+  }
+  return overlap >= 2;
+}
+
+function cleanTrackTitleForShowContext(
+  rawTrackTitle: string,
+  contextPhrases: string[],
+): string {
+  const fallback = toDisplayTrackTitle(rawTrackTitle).trim();
+  if (!fallback) return "";
+
+  const context = contextPhrases
+    .map((p) => String(p || "").trim())
+    .filter(Boolean);
+  const contextNorm = context.map((c) => normalizeLooseText(c)).filter((c) => c.length >= 4);
+
+  const looksLikeShowContext = (segment: string): boolean => {
+    const s = String(segment || "").trim();
+    if (!s) return false;
+    if (/live\s+(?:at|in)\s+/i.test(s)) return true;
+    const n = normalizeLooseText(s);
+    if (!n) return false;
+    if (contextNorm.some((c) => n.includes(c) || c.includes(n))) return true;
+    return context.some((c) => hasStrongTokenOverlap(s, c));
+  };
+
+  let next = fallback;
+  next = next.replace(/\(([^)]*)\)/g, (full, inner: string) =>
+    looksLikeShowContext(inner) ? "" : full,
+  );
+
+  const segments = next
+    .split(/\s+-\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const filteredSegments = segments.filter((segment) => !looksLikeShowContext(segment));
+  if (filteredSegments.length > 0) {
+    next = filteredSegments.join(" - ");
+  }
+
+  next = next.replace(/^\s*\d{1,2}\s*[-.)]?\s*/, "").trim();
+  next = next.replace(/\s{2,}/g, " ").trim();
+
+  return next || fallback;
+}
+
 export default function ShowPage({
   params,
 }: {
@@ -368,6 +439,13 @@ export default function ShowPage({
     venueFromTitle(rawShowTitle) ||
     venueFromTitle(selectedSource?.title) ||
     "Unknown venue";
+  const displayTrackTitle = (trackTitle: string) =>
+    cleanTrackTitleForShowContext(trackTitle, [
+      rawShowTitle,
+      selectedSource?.title || "",
+      venueText,
+      showDate,
+    ]);
   const totalSeconds = useMemo(
     () => tracks.reduce((sum, t) => sum + lengthToSeconds(t.length), 0),
     [tracks],
@@ -517,7 +595,7 @@ export default function ShowPage({
               const isCurrent = Boolean(currentUrl && currentUrl === t.url);
 
               const trackForPlaylist = {
-                title: toDisplayTrackTitle(t.title),
+                title: displayTrackTitle(t.title),
                 url: t.url,
                 length: t.length,
                 track: String(idx + 1),
@@ -538,7 +616,7 @@ export default function ShowPage({
                     onClick={() => {
                       setQueue(
                         tracks.map((x, i) => ({
-                          title: toDisplayTrackTitle(x.title),
+                          title: displayTrackTitle(x.title),
                           url: x.url,
                           length: x.length,
                           track: String(i + 1),
@@ -550,7 +628,7 @@ export default function ShowPage({
                     className="flex min-w-0 flex-1 items-center justify-between gap-3 px-1 py-1 text-left"
                   >
                     <span className="truncate text-[16px] leading-none [font-family:var(--font-roboto-condensed)]">
-                      {toDisplayTrackTitle(t.title)}
+                      {displayTrackTitle(t.title)}
                     </span>
                     {t.length ? (
                       <span className="shrink-0 text-[14px] tracking-[0.04em] text-white/85 [font-family:var(--font-roboto-condensed)]">
@@ -733,9 +811,11 @@ export default function ShowPage({
                           (sum, s) => sum + s.variants.length,
                           0,
                         );
-                        const linksCount = p.slots.filter(
-                          (s) => s.variants.length > 1,
-                        ).length;
+                        const chainsCount = new Set(
+                          p.slots
+                            .map((s) => s.linkGroupId)
+                            .filter((v): v is string => Boolean(v)),
+                        ).size;
                         return (
                           <div
                             key={p.id}
@@ -746,7 +826,7 @@ export default function ShowPage({
                                 <div className="truncate text-sm">{p.name}</div>
                                 <div className="mt-0.5 text-[11px] text-white/50">
                                   {tracksCount} Tracks • {versionsCount} Versions •{" "}
-                                  {linksCount} Links
+                                  {chainsCount} Chains
                                 </div>
                               </div>
 

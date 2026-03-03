@@ -14,6 +14,7 @@ function fmt(sec: number) {
 
 export function PlayerBar() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const fallbackTriedRef = useRef<Set<string>>(new Set());
 
   const playerState = usePlayer() as unknown as {
     queue: Array<{ title: string; url: string; track?: string }>;
@@ -41,6 +42,13 @@ export function PlayerBar() {
 
   const src = currentTrack?.url || "";
 
+  function toMp3FallbackUrl(url: string): string {
+    const clean = String(url || "");
+    if (!clean) return "";
+    // Common demo/source URLs are FLAC; try same path with MP3 as a pragmatic fallback.
+    return clean.replace(/\.flac(\?.*)?$/i, ".mp3$1");
+  }
+
   const [current, setCurrent] = useState(0);
   const [duration, setDuration] = useState(0);
 
@@ -62,6 +70,7 @@ export function PlayerBar() {
     audio.src = src;
     audio.load();
     setCurrent(0);
+    fallbackTriedRef.current.delete(src);
 
     if (playing) {
       audio.play().catch((err) => {
@@ -113,6 +122,24 @@ export function PlayerBar() {
           onEnded={() => next?.()}
           onError={() => {
             const a = audioRef.current;
+            if (!a || !src) return;
+
+            const maybeMp3 = toMp3FallbackUrl(src);
+            const canFallback =
+              maybeMp3 &&
+              maybeMp3 !== src &&
+              /\.flac(\?.*)?$/i.test(src) &&
+              !fallbackTriedRef.current.has(src);
+
+            if (canFallback) {
+              fallbackTriedRef.current.add(src);
+              a.src = maybeMp3;
+              a.load();
+              if (playing) {
+                a.play().catch((err) => console.error("MP3 fallback play() failed:", err));
+              }
+              return;
+            }
             console.error("AUDIO ERROR", a?.error, a?.src);
           }}
         />

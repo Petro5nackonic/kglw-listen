@@ -12,6 +12,7 @@ export type PlaylistSlot = {
   addedAt: number;
   updatedAt: number;
   linkGroupId?: string;
+  chainOrder?: number;
   variants: PlaylistTrackVariant[];
 };
 

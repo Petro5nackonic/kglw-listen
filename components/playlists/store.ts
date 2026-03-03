@@ -20,6 +20,7 @@ type PlaylistsState = {
   linkWithNext: (playlistId: string, slotId: string) => void;
   unlinkSlot: (playlistId: string, slotId: string) => void;
   setChain: (playlistId: string, slotIds: string[]) => void;
+  snapChain: (playlistId: string, groupId: string) => void;
 };
 
 function normalizeName(name: string) {
@@ -115,7 +116,7 @@ export const usePlaylists = create<PlaylistsState>()(
 
         const playlist: Playlist = {
           id,
-          name: "Demo: Fused + Linked",
+          name: "Demo: Fused + Chained",
           createdAt: now,
           updatedAt: now,
           slots: [
@@ -323,8 +324,22 @@ export const usePlaylists = create<PlaylistsState>()(
             const nxt = nextSlots[idx + 1];
             const groupId = curr.linkGroupId || nxt.linkGroupId || safeUUID();
 
-            nextSlots[idx] = { ...curr, linkGroupId: groupId, updatedAt: now };
-            nextSlots[idx + 1] = { ...nxt, linkGroupId: groupId, updatedAt: now };
+            const currOrder =
+              typeof curr.chainOrder === "number" ? curr.chainOrder : idx;
+            const nextOrder =
+              typeof nxt.chainOrder === "number" ? nxt.chainOrder : idx + 1;
+            nextSlots[idx] = {
+              ...curr,
+              linkGroupId: groupId,
+              chainOrder: currOrder,
+              updatedAt: now,
+            };
+            nextSlots[idx + 1] = {
+              ...nxt,
+              linkGroupId: groupId,
+              chainOrder: nextOrder,
+              updatedAt: now,
+            };
 
             return { ...p, updatedAt: now, slots: nextSlots };
           }),
@@ -342,7 +357,12 @@ export const usePlaylists = create<PlaylistsState>()(
 
             const now = Date.now();
             const nextSlots = p.slots.slice();
-            nextSlots[idx] = { ...nextSlots[idx], linkGroupId: undefined, updatedAt: now };
+            nextSlots[idx] = {
+              ...nextSlots[idx],
+              linkGroupId: undefined,
+              chainOrder: undefined,
+              updatedAt: now,
+            };
 
             // If only one linked slot remains in this group, unlink it too.
             const remaining = nextSlots.filter((s) => s.linkGroupId === groupId);
@@ -352,6 +372,7 @@ export const usePlaylists = create<PlaylistsState>()(
                   nextSlots[i] = {
                     ...nextSlots[i],
                     linkGroupId: undefined,
+                    chainOrder: undefined,
                     updatedAt: now,
                   };
                 }
@@ -374,6 +395,8 @@ export const usePlaylists = create<PlaylistsState>()(
             const now = Date.now();
             const selected = new Set(unique);
             const nextSlots = p.slots.slice();
+            const idToOriginalIndex = new Map<string, number>();
+            nextSlots.forEach((slot, idx) => idToOriginalIndex.set(slot.id, idx));
             const affectedGroups = new Set<string>();
 
             // Detach selected slots from any existing chains first.
@@ -381,7 +404,12 @@ export const usePlaylists = create<PlaylistsState>()(
               const slot = nextSlots[i];
               if (!selected.has(slot.id)) continue;
               if (slot.linkGroupId) affectedGroups.add(slot.linkGroupId);
-              nextSlots[i] = { ...slot, linkGroupId: undefined, updatedAt: now };
+              nextSlots[i] = {
+                ...slot,
+                linkGroupId: undefined,
+                chainOrder: undefined,
+                updatedAt: now,
+              };
             }
 
             // Clean up orphaned single-slot chains in affected groups.
@@ -396,6 +424,7 @@ export const usePlaylists = create<PlaylistsState>()(
                   nextSlots[idx] = {
                     ...nextSlots[idx],
                     linkGroupId: undefined,
+                    chainOrder: undefined,
                     updatedAt: now,
                   };
                 }
@@ -403,11 +432,72 @@ export const usePlaylists = create<PlaylistsState>()(
             }
 
             const groupId = safeUUID();
-            for (let i = 0; i < nextSlots.length; i++) {
-              if (!selected.has(nextSlots[i].id)) continue;
-              nextSlots[i] = { ...nextSlots[i], linkGroupId: groupId, updatedAt: now };
-            }
+            const orderedExisting = unique.filter((slotId) =>
+              nextSlots.some((s) => s.id === slotId),
+            );
+            if (orderedExisting.length < 2) return p;
 
+            orderedExisting.forEach((slotId, order) => {
+              const idx = nextSlots.findIndex((s) => s.id === slotId);
+              if (idx < 0) return;
+              nextSlots[idx] = {
+                ...nextSlots[idx],
+                linkGroupId: groupId,
+                chainOrder: order,
+                updatedAt: now,
+              };
+            });
+
+            // Keep chain songs contiguous and in chain order in the visible playlist.
+            const chainSlots = orderedExisting
+              .map((slotId) => nextSlots.find((s) => s.id === slotId))
+              .filter(Boolean);
+            const remaining = nextSlots.filter((s) => !selected.has(s.id));
+
+            const anchorOrigIndex =
+              idToOriginalIndex.get(orderedExisting[0]) ??
+              Math.min(
+                ...orderedExisting
+                  .map((slotId) => idToOriginalIndex.get(slotId))
+                  .filter((v): v is number => typeof v === "number"),
+              );
+            const insertAt = remaining.findIndex((slot) => {
+              const orig = idToOriginalIndex.get(slot.id);
+              return typeof orig === "number" && orig >= anchorOrigIndex;
+            });
+
+            const reordered =
+              insertAt < 0
+                ? remaining.concat(chainSlots)
+                : [
+                    ...remaining.slice(0, insertAt),
+                    ...chainSlots,
+                    ...remaining.slice(insertAt),
+                  ];
+
+            return { ...p, updatedAt: now, slots: reordered };
+          }),
+        });
+      },
+
+      snapChain: (playlistId, groupId) => {
+        if (!groupId) return;
+        set({
+          playlists: get().playlists.map((p) => {
+            if (p.id !== playlistId) return p;
+            const now = Date.now();
+            let touched = false;
+            const nextSlots = p.slots.map((slot) => {
+              if (slot.linkGroupId !== groupId) return slot;
+              touched = true;
+              return {
+                ...slot,
+                linkGroupId: undefined,
+                chainOrder: undefined,
+                updatedAt: now,
+              };
+            });
+            if (!touched) return p;
             return { ...p, updatedAt: now, slots: nextSlots };
           }),
         });
