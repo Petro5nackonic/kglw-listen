@@ -35,3 +35,12 @@ The easiest way to deploy your Next.js app is to use the [Vercel Platform](https
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
 
+## Private Font Awesome Packages
+
+This project uses `@fortawesome/pro-solid-svg-icons`, which is a private package.
+
+- The repo `.npmrc` is configured to read the token from `FONTAWESOME_NPM_AUTH_TOKEN`.
+- Do not commit raw auth tokens to git.
+- For local dev, set the env var in your shell.
+- For deploys (e.g. Vercel), add `FONTAWESOME_NPM_AUTH_TOKEN` in project Environment Variables.
+
