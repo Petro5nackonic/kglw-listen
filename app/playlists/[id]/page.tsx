@@ -224,6 +224,11 @@ function byDateAdded(a: PlaylistSlot, b: PlaylistSlot): number {
 }
 
 function orderSlotsForDisplay(slots: PlaylistSlot[]): PlaylistSlot[] {
+  type ChainGroupDef = {
+    groupId: string;
+    ordered: PlaylistSlot[];
+    anchorInBase: number;
+  };
   const base = [...slots].sort(byDateAdded);
   const groups = new Map<string, PlaylistSlot[]>();
   for (const slot of base) {
@@ -247,12 +252,8 @@ function orderSlotsForDisplay(slots: PlaylistSlot[]): PlaylistSlot[] {
       const anchorInBase = base.findIndex((s) => s.id === seed.id);
       return { groupId, ordered, anchorInBase };
     })
-    .filter(Boolean)
-    .sort((a, b) => a.anchorInBase - b.anchorInBase) as Array<{
-    groupId: string;
-    ordered: PlaylistSlot[];
-    anchorInBase: number;
-  }>;
+    .filter((value): value is ChainGroupDef => value !== null)
+    .sort((a, b) => a.anchorInBase - b.anchorInBase);
 
   let working = [...base];
   for (const def of groupDefs) {

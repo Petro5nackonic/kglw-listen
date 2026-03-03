@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
 import type { Track } from "@/components/player/store";
-import type { Playlist } from "@/components/playlists/types";
+import type { Playlist, PlaylistSlot } from "@/components/playlists/types";
 import { moveItem, safeUUID } from "@/components/playlists/utils";
 import { toDisplayTrackTitle } from "@/utils/displayTitle";
 
@@ -451,7 +451,7 @@ export const usePlaylists = create<PlaylistsState>()(
             // Keep chain songs contiguous and in chain order in the visible playlist.
             const chainSlots = orderedExisting
               .map((slotId) => nextSlots.find((s) => s.id === slotId))
-              .filter(Boolean);
+              .filter((slot): slot is PlaylistSlot => Boolean(slot));
             const remaining = nextSlots.filter((s) => !selected.has(s.id));
 
             const anchorOrigIndex =
