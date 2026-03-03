@@ -38,16 +38,27 @@ export function toDisplayTrackTitle(title?: string | null): string {
 
   let cleaned = toDisplayTitle(original);
 
-  // Some uploads include the full show/venue prefix in track titles:
-  // "Live at <venue/date> - 08 Road Train". Keep only the song part.
-  if (/\blive at\b/i.test(cleaned)) {
-    const tail = cleaned.match(/.*\s[-:|–—]\s(?:\d{1,2}\s+)?(.+)$/i);
-    if (tail?.[1]) cleaned = tail[1];
+  // Some uploads include multiple show/set prefixes before a numbered song segment,
+  // e.g. "Live in New York City '25 - Rock Night - 07 Sense".
+  const segments = cleaned
+    .split(/\s[-:|–—]\s/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  for (let i = segments.length - 1; i >= 0; i -= 1) {
+    const numberedSegment = segments[i].match(/^(?:track\s*)?\d{1,2}\s+(.+)$/i);
+    if (numberedSegment?.[1]) {
+      cleaned = numberedSegment[1];
+      break;
+    }
   }
 
   cleaned = cleaned
     .replace(/\s*[-:|–—]\s*live at .+$/i, "")
+    .replace(/\s*[-:|–—]\s*live in .+$/i, "")
     .replace(/\s*\(live at[^)]*\)/gi, "")
+    .replace(/\s*\(live in[^)]*\)/gi, "")
+    // Keep only the song portion when a live/location suffix trails in parens.
+    .replace(/\s*\((?:from\s+)?live[^)]*\)\s*$/i, "")
     .replace(LEADING_TRACK_NUM_RE, "")
     .replace(/\s{2,}/g, " ")
     .trim();

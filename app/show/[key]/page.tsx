@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { usePlayer } from "@/components/player/store";
 import { usePlaylists } from "@/components/playlists/store";
 import { toDisplayTitle, toDisplayTrackTitle } from "@/utils/displayTitle";
@@ -210,12 +210,9 @@ function cleanTrackTitleForShowContext(
   return next || fallback;
 }
 
-export default function ShowPage({
-  params,
-}: {
-  params: Record<string, string | string[] | undefined>;
-}) {
+export default function ShowPage() {
   const router = useRouter();
+  const params = useParams<{ key?: string | string[] }>();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 

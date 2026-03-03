@@ -28,7 +28,18 @@ function normalizeName(name: string) {
 }
 
 function canonicalTrackTitle(track: Track): string {
-  return toDisplayTrackTitle(track.title).toLowerCase().trim();
+  return toDisplayTrackTitle(track.title)
+    .toLowerCase()
+    .replace(/['’]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+function slotMatchesCanonical(slot: PlaylistSlot, canonical: string): boolean {
+  if (!canonical) return false;
+  if (slot.canonicalTitle === canonical) return true;
+  return slot.variants.some((v) => canonicalTrackTitle(v.track) === canonical);
 }
 
 type LegacyPlaylistTrack = {
@@ -234,7 +245,7 @@ export const usePlaylists = create<PlaylistsState>()(
             if (p.id !== playlistId) return p;
             const now = Date.now();
             const canonical = canonicalTrackTitle(track);
-            const slotIdx = p.slots.findIndex((s) => s.canonicalTitle === canonical);
+            const slotIdx = p.slots.findIndex((s) => slotMatchesCanonical(s, canonical));
 
             if (slotIdx < 0) {
               result = "added";
@@ -261,6 +272,7 @@ export const usePlaylists = create<PlaylistsState>()(
             const nextSlots = p.slots.slice();
             nextSlots[slotIdx] = {
               ...slot,
+              canonicalTitle: canonical,
               updatedAt: now,
               variants: slot.variants.concat({
                 id: safeUUID(),

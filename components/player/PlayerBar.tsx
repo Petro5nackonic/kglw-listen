@@ -1,6 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import {
+  faBackwardStep,
+  faForwardStep,
+  faPause,
+  faPlay,
+  faXmark,
+} from "@fortawesome/pro-solid-svg-icons";
 import { usePlayer } from "@/components/player/store";
 import { toDisplayTrackTitle } from "@/utils/displayTitle";
 
@@ -171,7 +179,7 @@ export function PlayerBar() {
             disabled={!hasQueue}
             title="Previous"
           >
-            ◀◀
+            <FontAwesomeIcon icon={faBackwardStep} />
           </button>
 
           {playing ? (
@@ -181,7 +189,7 @@ export function PlayerBar() {
               disabled={!hasQueue}
               title="Pause"
             >
-              ❚❚
+              <FontAwesomeIcon icon={faPause} />
             </button>
           ) : (
             <button
@@ -190,7 +198,7 @@ export function PlayerBar() {
               disabled={!hasQueue}
               title="Play"
             >
-              ▶
+              <FontAwesomeIcon icon={faPlay} />
             </button>
           )}
 
@@ -200,7 +208,7 @@ export function PlayerBar() {
             disabled={!hasQueue}
             title="Next"
           >
-            ▶▶
+            <FontAwesomeIcon icon={faForwardStep} />
           </button>
 
           {/* Track title */}
@@ -215,7 +223,7 @@ export function PlayerBar() {
             disabled={!hasQueue}
             title="Clear"
           >
-            ✕
+            <FontAwesomeIcon icon={faXmark} />
           </button>
         </div>
       </div>

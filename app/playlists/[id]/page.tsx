@@ -11,6 +11,7 @@ import {
   faEllipsisVertical,
   faGripLines,
   faMapPin,
+  faPen,
   faPaperPlane,
   faMagnifyingGlass,
   faCirclePlay,
@@ -311,6 +312,7 @@ export default function PlaylistDetailPage() {
   );
   const removeTrack = usePlaylists((s) => s.removeTrack);
   const deletePlaylist = usePlaylists((s) => s.deletePlaylist);
+  const renamePlaylist = usePlaylists((s) => s.renamePlaylist);
   const setChain = usePlaylists((s) => s.setChain);
   const snapChain = usePlaylists((s) => s.snapChain);
   const [actionSlotId, setActionSlotId] = useState<string | null>(null);
@@ -509,9 +511,11 @@ export default function PlaylistDetailPage() {
   }, [actionSlotId, chainPickerOpen]);
   useEffect(() => {
     let cancelled = false;
-    const identifiers = Array.from(
-      new Set(playableSlots.map((x) => getArchiveIdentifier(x.track.url)).filter(Boolean)),
-    );
+    const identifiers = Array.from(new Set(
+      (playlist?.slots || [])
+        .flatMap((slot) => slot.variants.map((variant) => getArchiveIdentifier(variant.track.url)))
+        .filter(Boolean),
+    ));
     if (identifiers.length === 0) return;
 
     const missing = identifiers.filter((id) => !showTitleByIdentifier[id]);
@@ -549,7 +553,7 @@ export default function PlaylistDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [playableSlots, showTitleByIdentifier]);
+  }, [playlist?.slots, showTitleByIdentifier]);
 
   if (!hydrated) {
     return (
@@ -590,7 +594,7 @@ export default function PlaylistDetailPage() {
 
   return (
     <main className="min-h-screen bg-[#080017] text-white [font-family:var(--font-roboto)]">
-      <div className="relative isolate overflow-hidden">
+      <div className="relative z-20 isolate overflow-hidden">
         {heroImage ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -608,10 +612,10 @@ export default function PlaylistDetailPage() {
             </Link>
           </div>
 
-          <section className="mt-9 isolate">
-            <div className="rounded-[16px] border border-white/20 bg-white/5 p-4 backdrop-blur-[6px]">
+          <section className="mt-9 isolate pb-4">
+            <div className="relative z-[2] mb-[-16px] rounded-[16px] border border-white/20 bg-white/5 p-4 backdrop-blur-[6px]">
               <div className="flex items-start justify-between gap-3">
-                <h1 className="truncate text-[20px] leading-[1.05] font-medium [font-family:var(--font-roboto-condensed)]">
+                <h1 className="truncate text-[20px] leading-[1.05] font-medium [font-family:var(--font-roboto)]">
                   {playlist.name}
                 </h1>
                 <div className="relative flex items-center gap-2">
@@ -625,7 +629,7 @@ export default function PlaylistDetailPage() {
                     <FontAwesomeIcon icon={faEllipsisVertical} />
                   </button>
                   {playlistMenuOpen && (
-                    <div className="absolute right-0 top-7 z-30 w-44 rounded-[12px] border border-white/15 bg-[#16052c] p-1.5 shadow-[0_8px_18px_rgba(0,0,0,0.45)]">
+                    <div className="absolute right-0 top-7 z-50 w-44 rounded-[12px] border border-white/15 bg-[#16052c] p-1.5 shadow-[0_8px_18px_rgba(0,0,0,0.45)]">
                       <button
                         type="button"
                         className="flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-left text-[14px] text-white/90 hover:bg-white/10 [font-family:var(--font-roboto-condensed)]"
@@ -661,6 +665,19 @@ export default function PlaylistDetailPage() {
                       </button>
                       <button
                         type="button"
+                        className="mt-1 flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-left text-[14px] text-white/90 hover:bg-white/10 [font-family:var(--font-roboto-condensed)]"
+                        onClick={() => {
+                          const nextName = prompt("Rename playlist", playlist.name)?.trim();
+                          if (!nextName) return;
+                          renamePlaylist(playlist.id, nextName);
+                          setPlaylistMenuOpen(false);
+                        }}
+                      >
+                        <FontAwesomeIcon icon={faPen} className="text-[11px]" />
+                        <span>Rename playlist</span>
+                      </button>
+                      <button
+                        type="button"
                         className="mt-1 flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-left text-[14px] text-rose-200 hover:bg-rose-500/20 [font-family:var(--font-roboto-condensed)]"
                         onClick={() => {
                           if (!confirm(`Delete playlist "${playlist.name}"?`)) return;
@@ -676,36 +693,36 @@ export default function PlaylistDetailPage() {
                   )}
                 </div>
               </div>
-              <div className="mt-2 flex flex-wrap items-center gap-x-2 text-[16px] font-light text-white/80 [font-family:var(--font-roboto-condensed)]">
+              <div className="mt-4 flex flex-wrap items-center gap-x-[6px] text-[16px] font-light text-white [font-family:var(--font-roboto-condensed)]">
                 <span>
                   {playlist.slots.length} Track{playlist.slots.length === 1 ? "" : "s"}
                 </span>
-                <span className="text-white/45">•</span>
+                <span className="size-[4px] shrink-0 rounded-full bg-white/55" />
                 <span>
                   {versionsCount} Version{versionsCount === 1 ? "" : "s"}
                 </span>
-                <span className="text-white/45">•</span>
+                <span className="size-[4px] shrink-0 rounded-full bg-white/55" />
                 <span>
-                  {chainGroups} Chain{chainGroups === 1 ? "" : "s"}
+                  {chainGroups} Link{chainGroups === 1 ? "" : "s"}
                 </span>
-                <span className="text-white/45">•</span>
+                <span className="size-[4px] shrink-0 rounded-full bg-white/55" />
                 <span>{totalDurationLabel}</span>
               </div>
             </div>
-            <div className="-mt-[1px] rounded-bl-[16px] rounded-br-[16px] border border-white/20 px-4 pb-3 pt-7 backdrop-blur-[6px]">
+            <div className="relative z-[1] -mt-[1px] mb-[-16px] rounded-bl-[16px] rounded-br-[16px] border border-white/20 px-4 pb-3 pt-7 backdrop-blur-[6px]">
               <div className="grid grid-cols-2 gap-4">
                 <button
                   type="button"
-                  className="flex items-center justify-center gap-2 rounded-[24px] bg-[#5a22c9] px-4 py-2.5 text-[14px] text-white [font-family:var(--font-roboto)]"
+                  className="flex items-center justify-center gap-1 rounded-[24px] bg-[#5a22c9] px-[14px] py-[10px] text-[14px] font-normal text-white [font-family:var(--font-roboto)]"
                   onClick={() => playFromIndex(0)}
                   disabled={playableSlots.length === 0}
                 >
                   Play
-                  <FontAwesomeIcon icon={faCirclePlay} className="text-[16px]" />
+                  <FontAwesomeIcon icon={faCirclePlay} className="text-[18px]" />
                 </button>
                 <button
                   type="button"
-                  className="flex items-center justify-center gap-2 rounded-[24px] bg-linear-to-r from-[#5a22c9] to-[#c86c45] px-4 py-2.5 text-[14px] text-white [font-family:var(--font-roboto)]"
+                  className="flex items-center justify-center gap-1 rounded-[24px] bg-linear-to-r from-[#5a22c9] to-[#c86c45] px-[14px] py-[10px] text-[14px] font-normal text-white [font-family:var(--font-roboto)]"
                   onClick={() => playFromIndex(getRandomShuffleStartIndex(playableSlots), {}, true)}
                   disabled={playableSlots.length === 0}
                 >
@@ -923,80 +940,82 @@ export default function PlaylistDetailPage() {
               }
 
               return (
-                <div key={entry.groupId} className="flex items-start gap-[10px]">
-                  <div className="flex shrink-0 flex-col items-center self-stretch pt-[5px]">
-                    <span className="mb-[5px] size-[6px] rounded-full bg-[#5a22c9]" />
-                    <div className="flex flex-1 flex-col items-center gap-[4px]">
-                      {Array.from({ length: 11 }).map((_, dotIdx) => (
-                        <span
-                          key={dotIdx}
-                          className="h-[2px] w-[2px] rounded-full bg-[#5a22c9]"
-                        />
-                      ))}
-                      <FontAwesomeIcon icon={faChain} className="text-[11px] text-[#5a22c9]" />
-                    </div>
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <div className="space-y-2">
-                      {entry.items.map(({ slot, track, idx }) => {
+                <div key={entry.groupId} className="min-w-0 rounded-[8px]">
+                  <div className="space-y-2">
+                    {entry.items.map(({ slot, track, idx }, chainIdx) => {
                         const activeVariantId =
                           slot.variants.find((v) => v.track.url === activeTrackUrl)?.id || "";
                         const isSlotActive = Boolean(activeVariantId);
+                        const isLastInChain = chainIdx === entry.items.length - 1;
                         return (
-                          <div key={slot.id}>
+                          <div key={slot.id} className="flex items-start gap-[10px]">
+                            <div className="relative mt-[8px] flex w-[14px] shrink-0 justify-center">
+                              {chainIdx === 0 ? (
+                                <FontAwesomeIcon
+                                  icon={faChain}
+                                  className="text-[14pt] text-[#5a22c9]"
+                                  style={{ transform: "rotate(-49deg)" }}
+                                />
+                              ) : (
+                                <span className="size-[6px] rounded-full bg-[#5a22c9]" aria-hidden />
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
                             <div className="flex items-start justify-between gap-3 py-0.5">
-                              <button
-                                type="button"
-                                className="min-w-0 flex-1 text-left"
-                                onClick={() => playFromIndex(idx)}
-                                title="Play from here"
-                              >
-                                <div
-                                  className={`truncate text-[16px] leading-[1.03] [font-family:var(--font-roboto-condensed)] ${
-                                    isSlotActive ? "text-[#EFD50F]" : "text-white"
-                                  }`}
-                                >
-                                  {toDisplayTrackTitle(slot.variants[0]?.track.title || "")}
-                                </div>
-                                <div className="mt-1 truncate text-[12px] leading-[1.05] text-white/70">
-                                  {getTrackShowLabel(track.url, showTitleByIdentifier)}
-                                </div>
-                              </button>
-
-                              <div className="flex shrink-0 items-center gap-2 pt-1">
-                                {slot.variants.length === 1 && track.length ? (
-                                  <span className="text-[14px] leading-none font-light tracking-[0.04em] text-white">
-                                    {track.length}
-                                  </span>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    className="flex items-center gap-1.5 rounded-[6px] bg-linear-to-r from-fuchsia-500/35 to-orange-400/30 px-2 py-[3px] text-[12px] leading-none text-white hover:from-fuchsia-500/45 hover:to-orange-400/45"
-                                    onClick={() =>
-                                      setExpandedVariants((prev) => ({
-                                        ...prev,
-                                        [slot.id]: !prev[slot.id],
-                                      }))
-                                    }
-                                  >
-                                    <FontAwesomeIcon icon={faShuffle} className="text-[10px] text-white/95" />
-                                    {slot.variants.length} Versions
-                                  </button>
-                                )}
                                 <button
                                   type="button"
-                                  className="rounded-md px-1 text-[18px] leading-none text-white/55 hover:text-white/90"
-                                  aria-label="Track actions"
-                                  title="Track actions"
-                                  onClick={() => {
-                                    setActionSlotId(slot.id);
-                                    setChainPickerOpen(false);
-                                  }}
+                                  className="min-w-0 flex-1 text-left"
+                                  onClick={() => playFromIndex(idx)}
+                                  title="Play from here"
                                 >
-                                  <FontAwesomeIcon icon={faEllipsisVertical} />
+                                  <div
+                                    className={`truncate text-[16px] leading-[1.03] [font-family:var(--font-roboto-condensed)] ${
+                                      isSlotActive ? "text-[#EFD50F]" : "text-white"
+                                    }`}
+                                  >
+                                    {toDisplayTrackTitle(slot.variants[0]?.track.title || "")}
+                                  </div>
+                                  <div className="mt-1 truncate text-[12px] leading-[1.05] text-white/70">
+                                    {getTrackShowLabel(track.url, showTitleByIdentifier)}
+                                  </div>
                                 </button>
-                              </div>
+
+                                <div className="flex shrink-0 items-start gap-2">
+                                  {slot.variants.length === 1 && track.length ? (
+                                    <span className="text-[14px] leading-none font-light tracking-[0.04em] text-white">
+                                      {track.length}
+                                    </span>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      className="flex items-center gap-1.5 rounded-[6px] bg-linear-to-r from-fuchsia-500/35 to-orange-400/30 px-2 py-[3px] text-[12px] leading-none text-white hover:from-fuchsia-500/45 hover:to-orange-400/45"
+                                      onClick={() =>
+                                        setExpandedVariants((prev) => ({
+                                          ...prev,
+                                          [slot.id]: !prev[slot.id],
+                                        }))
+                                      }
+                                    >
+                                      <FontAwesomeIcon
+                                        icon={faShuffle}
+                                        className="text-[10px] text-white/95"
+                                      />
+                                      {slot.variants.length} Versions
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    className="rounded-md px-1 text-[18px] leading-none text-white/55 hover:text-white/90"
+                                    aria-label="Track actions"
+                                    title="Track actions"
+                                    onClick={() => {
+                                      setActionSlotId(slot.id);
+                                      setChainPickerOpen(false);
+                                    }}
+                                  >
+                                    <FontAwesomeIcon icon={faEllipsisVertical} />
+                                  </button>
+                                </div>
                             </div>
                             {slot.variants.length > 1 && expandedVariants[slot.id] && (
                               <div className="mt-2 space-y-2 pl-2">
@@ -1014,19 +1033,22 @@ export default function PlaylistDetailPage() {
                                     >
                                       {vi + 1}. {getTrackShowLabel(v.track.url, showTitleByIdentifier)}
                                     </span>
-                                    <span className="shrink-0 text-[14px] text-white">{v.track.length || ""}</span>
+                                    <span className="shrink-0 text-[14px] text-white">
+                                      {v.track.length || ""}
+                                    </span>
                                   </button>
                                 ))}
                               </div>
                             )}
+                            </div>
                           </div>
                         );
                       })}
                     </div>
 
-                    {!chainHintDismissed && entryIdx === firstChainedRenderIndex && (
-                      <div className="mt-2 flex items-center justify-between rounded-[8px] bg-[#201438] px-3 py-2 text-[12px] text-[#8f77cf]">
-                        <span>These tracks are chained and will play in order</span>
+                  {!chainHintDismissed && entryIdx === firstChainedRenderIndex && (
+                      <div className="ml-[24px] mt-2 flex items-center justify-between rounded-[8px] bg-[#201438] px-3 py-2 text-[12px] text-[#8f77cf]">
+                        <span>These tracks are linked and will play in order</span>
                         <button
                           type="button"
                           className="text-[14px] leading-none text-[#7c65be] hover:text-[#b8a7e6]"
@@ -1044,7 +1066,6 @@ export default function PlaylistDetailPage() {
                         </button>
                       </div>
                     )}
-                  </div>
                 </div>
               );
             })}

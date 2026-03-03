@@ -11,12 +11,14 @@ import {
   faChevronRight,
   faChevronDown,
   faEllipsisVertical,
-  faGuitar,
-  faGuitarElectric,
-  faTurntable,
-  faViolin,
+  faPaperPlane,
+  faPen,
+  faTrash,
   faMagnifyingGlass,
   faSliders,
+  faSquare,
+  faSquareCheck,
+  faXmark,
 } from "@fortawesome/pro-solid-svg-icons";
 import { usePlayer, type Track } from "@/components/player/store";
 import { usePlaylists } from "@/components/playlists/store";
@@ -79,54 +81,32 @@ type SongSuggestion = {
   count: number;
   lastPlayedDate: string;
 };
+type ShowSuggestion = {
+  showKey: string;
+  title: string;
+  subtitle: string;
+  lastPlayedDate: string;
+};
 
 const SHOW_TYPE_OPTIONS = [
-  { value: "Acoustic" },
   { value: "Rave" },
+  { value: "Acoustic" },
   { value: "Orchestra" },
   { value: "Standard" },
-];
-const QUICK_SHOW_FILTERS: {
-  value: "Rave" | "Acoustic" | "Orchestra" | "Standard";
-  label: string;
-  icon: "turntable" | "guitar" | "violin" | "guitar-electric";
-  activeClass: string;
-  inactiveIconClass: string;
-}[] = [
-  {
-    value: "Rave",
-    label: "Rave",
-    icon: "turntable",
-    activeClass: "bg-linear-to-br from-[rgb(197,16,243)] to-[rgb(28,47,143)]",
-    inactiveIconClass: "text-fuchsia-300",
-  },
-  {
-    value: "Acoustic",
-    label: "Acoustic",
-    icon: "guitar",
-    activeClass: "bg-linear-to-br from-[rgb(209,234,141)] to-[rgb(42,122,140)]",
-    inactiveIconClass: "text-lime-200",
-  },
-  {
-    value: "Orchestra",
-    label: "Orchestra",
-    icon: "violin",
-    activeClass: "bg-linear-to-br from-[rgb(227,85,140)] to-[rgb(244,158,102)]",
-    inactiveIconClass: "text-rose-300",
-  },
-  {
-    value: "Standard",
-    label: "Rock",
-    icon: "guitar-electric",
-    activeClass: "bg-linear-to-br from-[rgb(83,113,157)] to-[rgb(70,70,70)]",
-    inactiveIconClass: "text-slate-300",
-  },
 ];
 
 const FAVORITE_SHOWS_KEY = "kglw.favoriteShows.v1";
 const RECENT_SHOWS_KEY = "kglw.recentShows.v1";
 const SHOW_STATS_CACHE_KEY = "kglw.showStats.v1";
 const DEFAULT_ARTWORK_SRC = "/api/default-artwork";
+const SORT_OPTIONS: { value: string; label: string }[] = [
+  { value: "newest", label: "Newest" },
+  { value: "oldest", label: "Oldest" },
+  { value: "most_played", label: "Most played" },
+  { value: "least_played", label: "Least played" },
+  { value: "show_length_longest", label: "Longest show" },
+  { value: "show_length_shortest", label: "Shortest show" },
+];
 
 function getArchiveIdentifier(url?: string): string {
   if (!url) return "";
@@ -290,6 +270,7 @@ type ShowsResponse = {
   facets?: {
     years: { value: string; count: number }[];
     continents: { value: string; count: number }[];
+    showTypes?: { value: string; count: number }[];
   };
 };
 
@@ -317,21 +298,46 @@ function displaySongLength(raw?: string | null, sec?: number | null): string {
   return fmtSongLen(sec);
 }
 
-function QuickFilterIcon(props: {
-  icon: "turntable" | "guitar" | "violin" | "guitar-electric";
-  className?: string;
-}) {
-  const cls = props.className || "h-[18px] w-[23px]";
-  if (props.icon === "guitar") {
-    return <FontAwesomeIcon icon={faGuitar} className={cls} />;
-  }
-  if (props.icon === "turntable") {
-    return <FontAwesomeIcon icon={faTurntable} className={cls} />;
-  }
-  if (props.icon === "violin") {
-    return <FontAwesomeIcon icon={faViolin} className={cls} />;
-  }
-  return <FontAwesomeIcon icon={faGuitarElectric} className={cls} />;
+function tokenizeSearchInput(input: string): string[] {
+  return String(input || "")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/g)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 2)
+    .slice(0, 6);
+}
+
+function tokenPrefixMatch(text: string, tokens: string[]): boolean {
+  if (tokens.length === 0) return false;
+  const words = String(text || "")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/g)
+    .map((w) => w.trim())
+    .filter(Boolean);
+  if (words.length === 0) return false;
+  return tokens.every((t) => words.some((w) => w.startsWith(t)));
+}
+
+function queryMatchesByTokens(text: string, query: string): boolean {
+  const q = String(query || "").trim().toLowerCase();
+  if (!q) return true;
+  const hay = String(text || "").toLowerCase();
+  if (hay.includes(q)) return true;
+  const tokens = tokenizeSearchInput(q);
+  if (tokens.length === 0) return false;
+  return tokenPrefixMatch(hay, tokens);
+}
+
+function relevanceScore(text: string, query: string): number {
+  const q = String(query || "").trim().toLowerCase();
+  if (!q) return 0;
+  const t = String(text || "").toLowerCase().trim();
+  if (!t) return 0;
+  if (t === q) return 5;
+  if (t.startsWith(q)) return 4;
+  if (t.includes(q)) return 3;
+  if (queryMatchesByTokens(t, q)) return 2;
+  return 0;
 }
 
 function MultiSelectDropdown(props: {
@@ -377,6 +383,21 @@ function MultiSelectDropdown(props: {
 
   const summary = summarizeSelection(value, emptyLabel || "All");
   const full = value.join(", ") || (emptyLabel || "All");
+  const panelTitle = emptyLabel || label || "Filter";
+  const totalCount = options.reduce(
+    (sum, opt) => sum + (typeof opt.count === "number" ? opt.count : 0),
+    0,
+  );
+  const draftCount =
+    draft.length === 0
+      ? totalCount
+      : options.reduce(
+          (sum, opt) =>
+            draft.includes(opt.value) && typeof opt.count === "number"
+              ? sum + opt.count
+              : sum,
+          0,
+        );
 
   return (
     <div
@@ -393,81 +414,157 @@ function MultiSelectDropdown(props: {
         aria-expanded={open}
         aria-controls={`${id}-panel`}
         title={full}
-        className="w-full rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-left text-sm text-white/90 hover:border-white/25 transition"
+        className={`w-full text-left transition ${
+          value.length > 0
+            ? "rounded-[8px] border border-white/30 bg-[rgba(48,26,89,0.65)] px-[14px] py-[10px] text-[12px] text-white"
+            : "rounded-[8px] border border-white/30 bg-transparent px-[14px] py-[10px] text-[12px] text-white hover:border-white/45"
+        }`}
         onClick={() => {
           setDraft(value);
           setOpen((v) => !v);
         }}
       >
-        <span className="block truncate">{summary}</span>
+        {value.length > 0 ? (
+          <span className="flex items-center justify-between">
+            <span className="flex items-center gap-[6px]">
+              <span className="inline-flex h-[18px] min-w-[15px] items-center justify-center rounded-[4px] bg-[#5a22c9] px-1 text-[12px] font-semibold text-white">
+                {value.length}
+              </span>
+              <span className="text-[12px] text-white">{emptyLabel || label || "Selected"}</span>
+            </span>
+            <span
+              role="button"
+              tabIndex={0}
+              aria-label={`Clear ${emptyLabel || label || "filter"}`}
+              className="inline-flex items-center"
+              onPointerDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onChange([]);
+                setDraft([]);
+                setOpen(false);
+              }}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter" && e.key !== " ") return;
+                e.preventDefault();
+                e.stopPropagation();
+                onChange([]);
+                setDraft([]);
+                setOpen(false);
+              }}
+            >
+              <FontAwesomeIcon icon={faXmark} className="text-[12px] text-white" />
+            </span>
+          </span>
+        ) : (
+          <span className="block truncate">{summary}</span>
+        )}
       </button>
 
       {open && (
-        <div
-          id={`${id}-panel`}
-          role="dialog"
-          aria-label={`${label} filter`}
-          className="absolute right-0 z-50 mt-2 w-[18rem] rounded-xl border border-white/15 bg-black/70 backdrop-blur p-3 shadow-lg"
-        >
-          <div className="mb-2 flex items-center justify-between">
-            <button
-              type="button"
-              className="text-xs text-white/70 hover:text-white transition"
-              onClick={() => setDraft(options.map((o) => o.value))}
-            >
-              Select all
-            </button>
-            <button
-              type="button"
-              className="text-xs text-white/70 hover:text-white transition"
-              onClick={() => setDraft([])}
-            >
-              Clear
-            </button>
-          </div>
-
-          <div className="max-h-56 overflow-auto rounded-lg border border-white/10 bg-white/5">
-            {options.map((opt) => {
-              const checked = draft.includes(opt.value);
-              return (
-                <label
-                  key={opt.value}
-                  className="flex items-center justify-between gap-3 px-3 py-2 text-sm hover:bg-white/5 cursor-pointer"
-                >
-                  <span className="flex items-center gap-2 min-w-0">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4"
-                      checked={checked}
-                      onChange={(e) => {
-                        const nextChecked = e.target.checked;
-                        setDraft((prev) => {
-                          if (nextChecked)
-                            return prev.includes(opt.value)
-                              ? prev
-                              : prev.concat(opt.value);
-                          return prev.filter((v) => v !== opt.value);
-                        });
-                      }}
-                    />
-                    <span className="truncate">{opt.value}</span>
-                  </span>
-                  {typeof opt.count === "number" ? (
-                    <span className="text-xs text-white/50">{opt.count}</span>
-                  ) : null}
-                </label>
-              );
-            })}
-          </div>
-
-          <div className="mt-2 flex items-center justify-between">
-            <div className="text-xs text-white/60">
-              {draft.length} of {options.length}
+        <>
+          <button
+            type="button"
+            aria-label="Close filter panel"
+            className="fixed inset-0 z-40 bg-black/60"
+            onClick={() => {
+              setOpen(false);
+              setDraft(value);
+            }}
+          />
+          <div
+            id={`${id}-panel`}
+            role="dialog"
+            aria-label={`${panelTitle} filter`}
+            className="fixed inset-x-0 bottom-0 z-50 mx-auto w-full max-w-[393px] rounded-t-[16px] border border-white/15 bg-[#080017] px-6 pb-8 pt-4 shadow-[0_-4px_4px_rgba(0,0,0,0.25)]"
+          >
+            <div className="mx-auto h-[4px] w-[53px] rounded-[16px] bg-white/30" />
+            <div className="mt-6 text-[24px] font-medium text-white [font-family:var(--font-roboto-condensed)]">
+              {panelTitle}
             </div>
-            <div className="flex items-center gap-2">
+
+            {draft.length === 0 ? (
+              <div className="mt-4 flex h-[35px] items-center justify-center rounded-[8px] bg-black/30 text-[14px] text-white/60 [font-family:var(--font-roboto-condensed)]">
+                No filters selected
+              </div>
+            ) : (
+              <div className="mt-4 flex flex-wrap items-start justify-center gap-2">
+                {draft.map((selected) => (
+                  <button
+                    key={selected}
+                    type="button"
+                    className="inline-flex items-center gap-3 rounded-[12px] bg-[rgba(48,26,89,0.25)] px-3 py-2 text-[16px] text-white [font-family:var(--font-roboto-condensed)]"
+                    onClick={() => {
+                      setDraft((prev) => prev.filter((v) => v !== selected));
+                    }}
+                  >
+                    <span>{selected}</span>
+                    <FontAwesomeIcon icon={faXmark} className="text-[12px]" />
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="mt-4 max-h-[44vh] space-y-2 overflow-auto pr-1">
+              {options.map((opt) => {
+                const checked = draft.includes(opt.value);
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    className={`flex w-full items-center justify-between rounded-[12px] px-4 py-4 text-left ${
+                      checked ? "bg-[rgba(48,26,89,0.65)] text-white" : "bg-[rgba(48,26,89,0.25)] text-white"
+                    }`}
+                    onClick={() => {
+                      setDraft((prev) =>
+                        prev.includes(opt.value)
+                          ? prev.filter((v) => v !== opt.value)
+                          : prev.concat(opt.value),
+                      );
+                    }}
+                  >
+                    <span className="flex min-w-0 items-center gap-4">
+                      <FontAwesomeIcon
+                        icon={checked ? faSquareCheck : faSquare}
+                        className={`text-[18px] ${checked ? "text-white" : "text-white/40"}`}
+                      />
+                      <span className="truncate text-[16px] text-white [font-family:var(--font-roboto-condensed)]">
+                        {opt.value}
+                      </span>
+                    </span>
+                    {typeof opt.count === "number" ? (
+                      <span className="text-[16px] text-white [font-family:var(--font-roboto-condensed)]">
+                        {opt.count}
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-6 space-y-6">
               <button
                 type="button"
-                className="rounded-lg border border-white/15 px-3 py-1.5 text-sm text-white/80 hover:border-white/25 hover:text-white transition"
+                className="flex h-[57px] w-full items-center justify-between rounded-[12px] bg-[#5a22c9] px-4 py-2 text-white"
+                onClick={() => {
+                  onChange(draft);
+                  setOpen(false);
+                }}
+              >
+                <span className="text-[16px] font-semibold [font-family:var(--font-roboto-condensed)]">
+                  Apply Filters
+                </span>
+                <span className="text-[14px] [font-family:var(--font-roboto-condensed)]">
+                  {draftCount} Shows
+                </span>
+              </button>
+              <button
+                type="button"
+                className="block w-full text-center text-[14px] text-white/90 [font-family:var(--font-roboto-condensed)] hover:text-white"
                 onClick={() => {
                   setOpen(false);
                   setDraft(value);
@@ -475,19 +572,9 @@ function MultiSelectDropdown(props: {
               >
                 Cancel
               </button>
-              <button
-                type="button"
-                className="rounded-lg border border-white/15 bg-white/10 px-3 py-1.5 text-sm text-white hover:bg-white/15 transition"
-                onClick={() => {
-                  onChange(draft);
-                  setOpen(false);
-                }}
-              >
-                Done
-              </button>
             </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   );
@@ -499,6 +586,8 @@ export default function HomePage() {
   const playlists = usePlaylists((s) => s.playlists);
   const addTrackToPlaylist = usePlaylists((s) => s.addTrack);
   const createPlaylist = usePlaylists((s) => s.createPlaylist);
+  const renamePlaylist = usePlaylists((s) => s.renamePlaylist);
+  const deletePlaylist = usePlaylists((s) => s.deletePlaylist);
 
   const [shows, setShows] = useState<ShowItem[]>([]);
   const [songShows, setSongShows] = useState<ShowItem[]>([]);
@@ -520,11 +609,15 @@ export default function HomePage() {
   const [continentFacet, setContinentFacet] = useState<
     { value: string; count: number }[]
   >([]);
+  const [showTypeFacet, setShowTypeFacet] = useState<
+    { value: string; count: number }[]
+  >([]);
   const [query, setQuery] = useState<string>("");
   const [debouncedQuery, setDebouncedQuery] = useState<string>("");
   const [sort, setSort] = useState<string>("newest");
   const [showTab, setShowTab] = useState<"all" | "recent" | "favorites">("all");
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
+  const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const [favoriteShows, setFavoriteShows] = useState<string[]>([]);
   const [recentShows, setRecentShows] = useState<string[]>([]);
   const [statsById, setStatsById] = useState<Record<string, ShowPlaybackStats>>({});
@@ -533,6 +626,8 @@ export default function HomePage() {
   const playPendingRef = useRef<Set<string>>(new Set());
   const [songSheetTrack, setSongSheetTrack] = useState<SongSheetTrack | null>(null);
   const [showSongPlaylistPicker, setShowSongPlaylistPicker] = useState(false);
+  const [songSearchLoading, setSongSearchLoading] = useState(false);
+  const [searchVenueShows, setSearchVenueShows] = useState<ShowItem[]>([]);
   const [songShareState, setSongShareState] = useState<"idle" | "copied" | "error">(
     "idle",
   );
@@ -540,8 +635,10 @@ export default function HomePage() {
     Record<string, "added" | "exists" | undefined>
   >({});
   const [songNewPlaylistName, setSongNewPlaylistName] = useState("");
+  const [homePlaylistMenuId, setHomePlaylistMenuId] = useState<string | null>(null);
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const sortMenuRef = useRef<HTMLDivElement | null>(null);
 
   function buildUrl(p: number) {
     const params = new URLSearchParams();
@@ -576,6 +673,7 @@ export default function HomePage() {
 
       if (data.facets?.years) setYearFacet(data.facets.years);
       if (data.facets?.continents) setContinentFacet(data.facets.continents);
+      if (data.facets?.showTypes) setShowTypeFacet(data.facets.showTypes);
       if (mode === "replace") {
         setSongShows(data.song?.items || []);
         setSongTotal(data.song?.total || 0);
@@ -682,9 +780,28 @@ export default function HomePage() {
 
   // Debounce search so we don't re-fetch on every single keystroke.
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedQuery(query.trim()), 300);
+    const t = setTimeout(() => setDebouncedQuery(query.trim()), 220);
     return () => clearTimeout(t);
   }, [query]);
+
+  useEffect(() => {
+    if (!sortMenuOpen) return;
+    function onPointerDown(e: PointerEvent) {
+      const root = sortMenuRef.current;
+      if (!root) return;
+      if (root.contains(e.target as Node)) return;
+      setSortMenuOpen(false);
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setSortMenuOpen(false);
+    }
+    window.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [sortMenuOpen]);
 
   useEffect(() => {
     setShows([]);
@@ -696,29 +813,45 @@ export default function HomePage() {
 
   useEffect(() => {
     let alive = true;
+    const controller = new AbortController();
     async function runSongSearch() {
-      if (!debouncedQuery) {
+      if (!debouncedQuery || debouncedQuery.length < 3) {
         if (!alive) return;
+        setSongSearchLoading(false);
         setSongShows([]);
         setSongTotal(0);
+        setSearchVenueShows([]);
         return;
       }
+      setSongSearchLoading(true);
       try {
-        const res = await fetch(buildSongSearchUrl(1), { cache: "no-store" });
-        if (!res.ok) return;
+        const res = await fetch(buildSongSearchUrl(1), {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (!res.ok) {
+          if (alive) setSongSearchLoading(false);
+          return;
+        }
         const data = (await res.json()) as ShowsResponse;
         if (!alive) return;
         setSongShows(data.song?.items || []);
         setSongTotal(data.song?.total || 0);
+        setSearchVenueShows(data.items || []);
       } catch {
+        if (!alive || controller.signal.aborted) return;
         if (!alive) return;
         setSongShows([]);
         setSongTotal(0);
+        setSearchVenueShows([]);
+      } finally {
+        if (alive) setSongSearchLoading(false);
       }
     }
     runSongSearch();
     return () => {
       alive = false;
+      controller.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [years.join("|"), continents.join("|"), showTypes.join("|"), debouncedQuery, sort]);
@@ -733,7 +866,9 @@ export default function HomePage() {
     }
   }, [debouncedQuery, songTotal, resultFilter]);
 
-  const canInfiniteLoad = !(debouncedQuery && resultFilter === "shows");
+  const canInfiniteLoad = !debouncedQuery;
+  const hasActiveShowFilters =
+    years.length > 0 || continents.length > 0 || showTypes.length > 0;
 
   useEffect(() => {
     const el = sentinelRef.current;
@@ -774,6 +909,13 @@ export default function HomePage() {
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([value, count]) => ({ value, count }));
   }, [continentFacet, continents]);
+  const availableShowTypes = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const o of showTypeFacet) map.set(o.value, o.count);
+    for (const o of SHOW_TYPE_OPTIONS) if (!map.has(o.value)) map.set(o.value, 0);
+    for (const s of showTypes) if (!map.has(s)) map.set(s, 0);
+    return SHOW_TYPE_OPTIONS.map((o) => ({ value: o.value, count: map.get(o.value) || 0 }));
+  }, [showTypeFacet, showTypes]);
 
   const sortedSongShows = useMemo(() => {
     const arr = songShows.slice();
@@ -819,20 +961,30 @@ export default function HomePage() {
         return "Newest";
     }
   }, [sort]);
-  const topSongMatch = sortedSongShows[0] || null;
+  const songShowsWithTrackTitle = useMemo(
+    () =>
+      sortedSongShows.filter((s) => String(s.matchedSongTitle || "").trim().length > 0),
+    [sortedSongShows],
+  );
+  const songResultTotal = songShowsWithTrackTitle.length;
+  const topSongMatch = songShowsWithTrackTitle[0] || null;
   const songAvgMinutesLabel = useMemo(() => {
-    const durations = sortedSongShows
+    const durations = songShowsWithTrackTitle
       .map((s) => s.matchedSongSeconds)
       .filter((n): n is number => typeof n === "number" && Number.isFinite(n) && n > 0);
     if (durations.length === 0) return "n/a";
     const avgSec = Math.round(durations.reduce((a, b) => a + b, 0) / durations.length);
     const mins = Math.max(1, Math.round(avgSec / 60));
     return `${mins} min`;
-  }, [sortedSongShows]);
+  }, [songShowsWithTrackTitle]);
+  const uniqueSongShowCount = useMemo(
+    () => new Set(sortedSongShows.map((s) => s.showKey)).size,
+    [sortedSongShows],
+  );
   const songSuggestions = useMemo<SongSuggestion[]>(() => {
     const byTitle = new Map<string, SongSuggestion>();
-    for (const s of sortedSongShows) {
-      const title = toDisplayTrackTitle(s.matchedSongTitle || debouncedQuery).trim();
+    for (const s of songShowsWithTrackTitle) {
+      const title = toDisplayTrackTitle(s.matchedSongTitle || "").trim();
       if (!title) continue;
       const key = title.toLowerCase();
       const existing = byTitle.get(key);
@@ -849,37 +1001,131 @@ export default function HomePage() {
         lastPlayedDate: String(s.showDate || ""),
       });
     }
+    // Metadata title resolution is intentionally bounded for responsiveness.
+    // When the current query clearly matches one of the resolved titles,
+    // reflect the full backend song-match total for that title.
+    const queryTitle = toDisplayTrackTitle(debouncedQuery).trim();
+    const queryNorm = normalizeSongText(queryTitle);
+    if (queryNorm && songTotal > 0) {
+      let bestKey: string | null = null;
+      for (const [key, suggestion] of byTitle.entries()) {
+        const titleNorm = normalizeSongText(suggestion.title);
+        if (!titleNorm) continue;
+        if (titleNorm === queryNorm) {
+          bestKey = key;
+          break;
+        }
+        if (!bestKey && (titleNorm.includes(queryNorm) || queryNorm.includes(titleNorm))) {
+          bestKey = key;
+        }
+      }
+      if (bestKey) {
+        const current = byTitle.get(bestKey);
+        if (current) current.count = Math.max(current.count, uniqueSongShowCount);
+      }
+    }
     return Array.from(byTitle.values())
       .sort((a, b) => {
+        const aScore = relevanceScore(a.title, debouncedQuery);
+        const bScore = relevanceScore(b.title, debouncedQuery);
+        if (bScore !== aScore) return bScore - aScore;
         if (b.count !== a.count) return b.count - a.count;
         return b.lastPlayedDate.localeCompare(a.lastPlayedDate);
       })
       .slice(0, 6);
-  }, [sortedSongShows, debouncedQuery]);
+  }, [songShowsWithTrackTitle, debouncedQuery, songTotal, uniqueSongShowCount]);
+  const songSuggestionsForDisplay = useMemo<SongSuggestion[]>(() => {
+    if (songSuggestions.length > 0) return songSuggestions;
+    const fallbackTitle = toDisplayTrackTitle(debouncedQuery).trim();
+    if (!fallbackTitle || uniqueSongShowCount <= 0) return [];
+    const lastPlayedDate = String(sortedSongShows[0]?.showDate || "");
+    return [
+      {
+        title: fallbackTitle,
+        count: uniqueSongShowCount,
+        lastPlayedDate,
+      },
+    ];
+  }, [songSuggestions, debouncedQuery, uniqueSongShowCount, sortedSongShows]);
+  const songShowsForDisplay = useMemo<ShowItem[]>(() => {
+    if (songShowsWithTrackTitle.length > 0) return songShowsWithTrackTitle;
+    return sortedSongShows;
+  }, [songShowsWithTrackTitle, sortedSongShows]);
   const showSongSuggestions =
-    resultFilter === "venues" &&
-    query.trim().length > 0 &&
-    debouncedQuery.length > 0 &&
-    songSuggestions.length > 0;
+    query.trim().length > 0;
+  const showSuggestions = useMemo<ShowSuggestion[]>(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    const out: (ShowSuggestion & { score: number })[] = [];
+    const source = searchVenueShows.length > 0 ? searchVenueShows : venueShows;
+    for (const s of source) {
+      const venue = toDisplayTitle(s.title || "");
+      const subtitle = `${formatCardDate(s.showDate)} ${venue}`.trim();
+      const hay = `${s.title || ""} ${s.venueText || ""} ${s.locationText || ""} ${s.showDate || ""}`;
+      if (!queryMatchesByTokens(hay, q)) continue;
+      const score = Math.max(
+        relevanceScore(venue, q),
+        relevanceScore(String(s.city || ""), q),
+        relevanceScore(String(s.state || ""), q),
+        relevanceScore(String(s.country || ""), q),
+        relevanceScore(String(s.venueText || ""), q),
+        relevanceScore(String(s.locationText || ""), q),
+        relevanceScore(String(s.showDate || ""), q),
+      );
+      out.push({
+        showKey: s.showKey,
+        title: venue || "Unknown show",
+        subtitle,
+        lastPlayedDate: s.showDate || "",
+        score,
+      });
+    }
+    return out
+      .sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        return b.lastPlayedDate.localeCompare(a.lastPlayedDate);
+      })
+      .slice(0, 5)
+      .map(({ score: _score, ...rest }) => rest);
+  }, [query, searchVenueShows, venueShows]);
+  const appearsInShowsSuggestions = useMemo<ShowSuggestion[]>(() => {
+    const source = sortedSongShows;
+    if (source.length === 0) return [];
+    return source
+      .slice()
+      .sort((a, b) => String(b.showDate || "").localeCompare(String(a.showDate || "")))
+      .slice(0, 5)
+      .map((s) => {
+        const venue = toDisplayTitle(s.title || "");
+        return {
+          showKey: s.showKey,
+          title: venue || "Unknown show",
+          subtitle: `${formatCardDate(s.showDate)} ${venue}`.trim(),
+          lastPlayedDate: s.showDate || "",
+        };
+      });
+  }, [sortedSongShows]);
+  const showSearchSuggestionsPanel =
+    showSongSuggestions;
   const mostPlayedSongShowKey = useMemo(() => {
-    if (sortedSongShows.length === 0) return "";
+    if (songShowsWithTrackTitle.length === 0) return "";
     let best: ShowItem | null = null;
-    for (const s of sortedSongShows) {
+    for (const s of songShowsWithTrackTitle) {
       if (!best || (s.plays || 0) > (best.plays || 0)) best = s;
     }
     return best?.showKey || "";
-  }, [sortedSongShows]);
+  }, [songShowsWithTrackTitle]);
   const longestSongShowKey = useMemo(() => {
-    if (sortedSongShows.length === 0) return "";
+    if (songShowsWithTrackTitle.length === 0) return "";
     let best: ShowItem | null = null;
-    for (const s of sortedSongShows) {
+    for (const s of songShowsWithTrackTitle) {
       const sec = typeof s.matchedSongSeconds === "number" ? s.matchedSongSeconds : -1;
       const bestSec =
         typeof best?.matchedSongSeconds === "number" ? best.matchedSongSeconds : -1;
       if (!best || sec > bestSec) best = s;
     }
     return best?.showKey || "";
-  }, [sortedSongShows]);
+  }, [songShowsWithTrackTitle]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1088,12 +1334,22 @@ export default function HomePage() {
     setQueue(queue, startIndex < 0 ? 0 : startIndex);
   }
 
+  function playPlaylistFromHome(playlistId: string) {
+    const playlist = playlists.find((pl) => pl.id === playlistId);
+    if (!playlist) return;
+    const queue = playlist.slots
+      .map((slot) => slot.variants[0]?.track)
+      .filter((track): track is Track => Boolean(track?.url));
+    if (queue.length === 0) return;
+    setQueue(queue, 0);
+  }
+
   function applySongSuggestion(title: string) {
     const next = title.trim();
     if (!next) return;
     setQuery(next);
     setDebouncedQuery(next);
-    setResultFilter("shows");
+    router.push(`/songs/${encodeURIComponent(next)}`);
   }
 
   return (
@@ -1120,62 +1376,160 @@ export default function HomePage() {
               </Link>
             </div>
 
-            <div className="-mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-1">
+            {homePlaylistMenuId && (
+              <button
+                type="button"
+                aria-label="Close playlist menu"
+                className="fixed inset-0 z-20"
+                onClick={() => setHomePlaylistMenuId(null)}
+              />
+            )}
+
+            <div className="space-y-2">
               {featuredPlaylists.length === 0 ? (
                 <Link
                   href="/playlists"
-                  className="min-w-[176px] snap-start rounded-2xl border border-[#de78e5] bg-linear-to-br from-[rgba(223,119,229,0.1)] to-[rgba(26,157,177,0.1)] p-3"
+                  className="flex items-center justify-between rounded-[16px] border border-white/20 bg-white/5 p-3 backdrop-blur-[6px]"
                 >
-                  <div className="mb-3 flex h-[135px] items-center justify-center rounded-md bg-linear-to-br from-[#6d24a4] to-[#2a0f53] text-4xl text-white/60">
-                    ♪
+                  <div className="min-w-0">
+                    <div className="truncate text-[18px] font-medium [font-family:var(--font-roboto-condensed)]">
+                      Create your first playlist
+                    </div>
+                    <div className="mt-1 text-[12px] text-white/70">Tap to get started</div>
                   </div>
-                  <div className="line-clamp-2 text-[16px] leading-[1.1] font-semibold">
-                    Create your first playlist
+                  <div className="ml-4 flex shrink-0 items-center gap-4 text-white">
+                    <FontAwesomeIcon icon={faCirclePlay} className="text-[24px]" />
+                    <FontAwesomeIcon icon={faEllipsisVertical} className="text-[18px] text-white/75" />
                   </div>
-                  <div className="mt-2 text-sm text-white/80">Tap to get started</div>
                 </Link>
               ) : (
                 featuredPlaylists.map((p) => {
-                  const firstUrl = p.slots[0]?.variants[0]?.track?.url;
-                  const identifier = getArchiveIdentifier(firstUrl);
-                  const art = identifier
-                    ? `https://archive.org/services/img/${encodeURIComponent(identifier)}`
-                    : "";
-                  const imageSrc =
-                    art && !shouldUseDefaultArtwork(identifier)
-                      ? art
-                      : DEFAULT_ARTWORK_SRC;
                   const versions = p.slots.reduce(
                     (sum, slot) => sum + slot.variants.length,
                     0,
                   );
+                  const chainCount = new Set(
+                    p.slots.map((s) => s.linkGroupId).filter(Boolean),
+                  ).size;
+                  const totalSeconds = p.slots.reduce(
+                    (sum, slot) => sum + (parseLengthToSeconds(slot.variants[0]?.track.length) ?? 0),
+                    0,
+                  );
+                  const duration = formatShowLength(totalSeconds);
                   return (
-                    <Link
+                    <div
                       key={p.id}
-                      href={`/playlists/${p.id}`}
-                      className="min-w-[176px] snap-start rounded-2xl border border-[#de78e5] bg-linear-to-br from-[rgba(223,119,229,0.1)] to-[rgba(26,157,177,0.1)] p-3"
+                      className="relative flex items-center justify-between rounded-[16px] border border-white/20 bg-white/5 p-3 backdrop-blur-[6px]"
                     >
-                      <div className="mb-3 h-[135px] overflow-hidden rounded-md bg-linear-to-br from-[#6d24a4] to-[#2a0f53]">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={imageSrc}
-                          alt=""
-                          className="h-full w-full object-cover"
-                          onError={(e) => {
-                            const img = e.currentTarget;
-                            if (img.src.endsWith(DEFAULT_ARTWORK_SRC)) return;
-                            img.src = DEFAULT_ARTWORK_SRC;
-                          }}
-                        />
+                      <Link href={`/playlists/${p.id}`} className="min-w-0 flex-1">
+                        <div className="truncate text-[18px] font-medium text-white [font-family:var(--font-roboto-condensed)]">
+                          {p.name}
+                        </div>
+                        <div className="mt-1 flex flex-wrap items-center gap-x-[6px] text-[12px] font-medium text-white/70 [font-family:var(--font-roboto-condensed)]">
+                          <span>
+                            {p.slots.length} Track{p.slots.length === 1 ? "" : "s"}
+                          </span>
+                          <span className="size-[3px] rounded-full bg-white/60" />
+                          <span>
+                            {versions} Version{versions === 1 ? "" : "s"}
+                          </span>
+                          <span className="size-[3px] rounded-full bg-white/60" />
+                          <span>
+                            {chainCount} Chain{chainCount === 1 ? "" : "s"}
+                          </span>
+                          {duration ? (
+                            <>
+                              <span className="size-[3px] rounded-full bg-white/60" />
+                              <span>{duration}</span>
+                            </>
+                          ) : null}
+                        </div>
+                      </Link>
+                      <div className="ml-4 flex shrink-0 items-center gap-4 text-white">
+                        <button
+                          type="button"
+                          aria-label={`Play playlist ${p.name}`}
+                          className="text-[26px] text-white"
+                          onClick={() => playPlaylistFromHome(p.id)}
+                        >
+                          <FontAwesomeIcon icon={faCirclePlay} />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="Playlist options"
+                          className="text-[20px] text-white/90"
+                          onClick={() =>
+                            setHomePlaylistMenuId((prev) => (prev === p.id ? null : p.id))
+                          }
+                        >
+                          <FontAwesomeIcon icon={faEllipsisVertical} />
+                        </button>
                       </div>
-                      <div className="line-clamp-2 text-[16px] leading-[1.1] font-semibold">
-                        {p.name}
-                      </div>
-                      <div className="mt-2 text-sm text-white/80">
-                        {p.slots.length} Tracks • {versions} Versions
-                      </div>
-                      <div className="mt-1 text-[16px] text-white/90">Jackthe5nack</div>
-                    </Link>
+                      {homePlaylistMenuId === p.id && (
+                        <div className="absolute right-3 top-10 z-30 w-44 rounded-[12px] border border-white/15 bg-[#16052c] p-1.5 shadow-[0_8px_18px_rgba(0,0,0,0.45)]">
+                          <button
+                            type="button"
+                            className="flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-left text-[14px] text-white/90 hover:bg-white/10 [font-family:var(--font-roboto-condensed)]"
+                            onClick={async () => {
+                              const shareUrl =
+                                typeof window !== "undefined"
+                                  ? `${window.location.origin}/playlists/${p.id}`
+                                  : "";
+                              const shareTitle = `Playlist: ${p.name}`;
+                              const shareText = `Check out my playlist "${p.name}"`;
+                              try {
+                                if (
+                                  typeof navigator !== "undefined" &&
+                                  typeof navigator.share === "function"
+                                ) {
+                                  await navigator.share({
+                                    title: shareTitle,
+                                    text: shareText,
+                                    url: shareUrl,
+                                  });
+                                } else if (
+                                  typeof navigator !== "undefined" &&
+                                  navigator.clipboard?.writeText
+                                ) {
+                                  await navigator.clipboard.writeText(shareUrl);
+                                }
+                              } catch {
+                                // ignore user-cancelled share sheets and clipboard failures
+                              }
+                              setHomePlaylistMenuId(null);
+                            }}
+                          >
+                            <FontAwesomeIcon icon={faPaperPlane} className="text-[12px]" />
+                            <span>Share playlist</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="mt-1 flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-left text-[14px] text-white/90 hover:bg-white/10 [font-family:var(--font-roboto-condensed)]"
+                            onClick={() => {
+                              const nextName = prompt("Rename playlist", p.name)?.trim();
+                              if (!nextName) return;
+                              renamePlaylist(p.id, nextName);
+                              setHomePlaylistMenuId(null);
+                            }}
+                          >
+                            <FontAwesomeIcon icon={faPen} className="text-[11px]" />
+                            <span>Rename playlist</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="mt-1 flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-left text-[14px] text-rose-200 hover:bg-rose-500/20 [font-family:var(--font-roboto-condensed)]"
+                            onClick={() => {
+                              if (!confirm(`Delete playlist "${p.name}"?`)) return;
+                              deletePlaylist(p.id);
+                              setHomePlaylistMenuId(null);
+                            }}
+                          >
+                            <FontAwesomeIcon icon={faTrash} className="text-[12px]" />
+                            <span>Delete playlist</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   );
                 })
               )}
@@ -1187,7 +1541,7 @@ export default function HomePage() {
               <h2 className="text-[34px] leading-none font-semibold">Shows</h2>
             </div>
 
-            <div className="mb-3">
+            <div className="relative mb-3">
               <div className="relative">
                 <FontAwesomeIcon
                   icon={faMagnifyingGlass}
@@ -1196,11 +1550,14 @@ export default function HomePage() {
                 <input
                   id="search"
                   value={query}
-                  onChange={(e) => setQuery(e.target.value)}
+                  onChange={(e) => {
+                    setQuery(e.target.value);
+                    setResultFilter("venues");
+                  }}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" && songSuggestions.length > 0) {
+                    if (e.key === "Enter" && songSuggestionsForDisplay.length > 0) {
                       e.preventDefault();
-                      applySongSuggestion(songSuggestions[0].title);
+                      applySongSuggestion(songSuggestionsForDisplay[0].title);
                     }
                   }}
                   placeholder="Search songs, shows, venues, etc"
@@ -1208,109 +1565,145 @@ export default function HomePage() {
                   autoComplete="off"
                 />
               </div>
-              {showSongSuggestions && (
-                <div className="mt-2 overflow-hidden rounded-xl border border-white/30 bg-[rgba(8,0,23,0.95)]">
-                  {songSuggestions.map((suggestion) => (
+              {showSearchSuggestionsPanel && (
+                <div className="absolute inset-x-0 top-full z-50 mt-2 overflow-hidden rounded-[14px] border border-white/20 bg-[rgba(14,2,36,0.96)] shadow-[0_12px_32px_rgba(0,0,0,0.5)] backdrop-blur-[10px]">
+                  <div className="px-4 pb-1 pt-3 text-[11px] tracking-[0.2px] text-white/70 uppercase">Songs</div>
+                  {songSuggestionsForDisplay.map((suggestion) => (
                     <button
                       key={suggestion.title.toLowerCase()}
                       type="button"
-                      className="block w-full border-b border-white/10 px-4 py-3 text-left transition hover:bg-white/10"
+                      className="mx-1 block w-[calc(100%-8px)] rounded-[10px] px-3 py-2.5 text-left transition hover:bg-white/10"
                       onClick={() => applySongSuggestion(suggestion.title)}
                     >
-                      <div className="truncate text-sm text-white">{suggestion.title}</div>
-                      <div className="text-xs text-white/70">
+                      <div className="truncate text-[14px] leading-[1.15] text-white">{suggestion.title}</div>
+                      <div className="mt-0.5 text-[12px] text-white/65">
                         {suggestion.count} match{suggestion.count === 1 ? "" : "es"} • Last played:{" "}
                         {formatCardDate(suggestion.lastPlayedDate)}
                       </div>
                     </button>
                   ))}
-                  <button
-                    type="button"
-                    className="flex w-full items-center justify-between px-4 py-3 text-left text-sm text-white transition hover:bg-white/10"
-                    onClick={() => setResultFilter("shows")}
-                  >
-                    <span>See all song matches</span>
-                    <div className="flex items-center gap-2">
-                      <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-white/80">
-                        {songTotal}
-                      </span>
-                      <FontAwesomeIcon icon={faChevronRight} className="text-xs text-white" />
+                  {songSearchLoading && songSuggestionsForDisplay.length === 0 ? (
+                    <div className="px-4 pb-3 text-[12px] text-white/60">Searching songs...</div>
+                  ) : null}
+                  {!songSearchLoading && songSuggestionsForDisplay.length === 0 ? (
+                    <div className="px-4 pb-3 text-[12px] text-white/60">No matching songs yet.</div>
+                  ) : null}
+                  <div className="mt-1 px-4 pb-1 pt-2 text-[11px] tracking-[0.2px] text-white/70 uppercase">
+                    Appears in these shows
+                  </div>
+                  {(appearsInShowsSuggestions.length > 0
+                    ? appearsInShowsSuggestions
+                    : showSuggestions
+                  ).map((suggestion) => (
+                    <button
+                      key={suggestion.showKey}
+                      type="button"
+                      className="mx-1 block w-[calc(100%-8px)] rounded-[10px] px-3 py-2.5 text-left transition hover:bg-white/10"
+                      onClick={() => {
+                        rememberRecentShow(suggestion.showKey);
+                        router.push(`/show/${encodeURIComponent(suggestion.showKey)}`);
+                      }}
+                    >
+                      <div className="truncate text-[14px] leading-[1.15] text-white">{suggestion.title}</div>
+                      <div className="mt-0.5 text-[12px] text-white/65">
+                        Last played: {formatCardDate(suggestion.lastPlayedDate)}
+                      </div>
+                    </button>
+                  ))}
+                  {uniqueSongShowCount > 0 ? (
+                    <button
+                      type="button"
+                      className="mx-2 mt-1 mb-2 flex w-[calc(100%-16px)] items-center justify-between rounded-[10px] border border-white/15 bg-white/5 px-3 py-2.5 text-left text-[13px] text-white transition hover:bg-white/10"
+                      onClick={() => {
+                        const target = toDisplayTrackTitle(query || debouncedQuery).trim();
+                        if (!target) return;
+                        router.push(`/songs/${encodeURIComponent(target)}`);
+                      }}
+                    >
+                      <span>View all shows</span>
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-full bg-white/10 px-2 py-[2px] text-[11px] text-white/85">
+                          {uniqueSongShowCount}
+                        </span>
+                        <FontAwesomeIcon icon={faChevronRight} className="text-xs text-white" />
+                      </div>
+                    </button>
+                  ) : null}
+                  {appearsInShowsSuggestions.length === 0 && showSuggestions.length === 0 ? (
+                    <div className="px-4 pb-3 text-[12px] text-white/60">
+                      No matching shows yet.
                     </div>
-                  </button>
+                  ) : null}
                 </div>
               )}
             </div>
 
-            <div className="mb-3 grid grid-cols-4 gap-2">
-              {QUICK_SHOW_FILTERS.map((opt) => {
-                const active = showTypes.includes(opt.value) && showTypes.length === 1;
-                return (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    className={`rounded-xl px-2 py-2 text-center transition ${
-                      active ? `${opt.activeClass} text-white` : "bg-white/10 text-white"
-                    }`}
-                    onClick={() => {
-                      if (active) {
-                        setShowTypes([]);
-                        return;
-                      }
-                      setShowTypes([opt.value]);
-                    }}
-                  >
-                    <div className={`text-[18px] ${active ? "text-white" : opt.inactiveIconClass}`}>
-                      <QuickFilterIcon icon={opt.icon} className="h-[18px] w-[23px]" />
-                    </div>
-                    <div className="text-[13px]">{opt.label}</div>
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="mb-3 flex items-center gap-2">
-              <button
-                type="button"
-                aria-label="Toggle advanced filters"
-                className="rounded-full border border-white px-3 py-2 text-[12px] text-white"
-                onClick={() => setAdvancedFiltersOpen((v) => !v)}
-              >
-                <FontAwesomeIcon icon={faSliders} />
-              </button>
-              <button
-                type="button"
-                className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-[12px] ${
-                  showTab === "favorites"
-                    ? "border-white bg-white text-[#080017]"
-                    : "border-white text-white"
-                }`}
-                onClick={() =>
-                  setShowTab((prev) => (prev === "favorites" ? "all" : "favorites"))
-                }
-              >
-                <span>Saved</span>
-                <FontAwesomeIcon icon={faBookmark} />
-              </button>
-              <label className="inline-flex items-center gap-2 rounded-full border border-white px-3 py-2 text-[12px] text-white">
-                <span>{sortLabel}</span>
-                <FontAwesomeIcon icon={faChevronDown} />
-                <select
-                  id="sort"
-                  className="w-0 appearance-none bg-transparent text-transparent"
-                  value={sort}
-                  onChange={(e) => setSort(e.target.value)}
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  aria-label="Toggle advanced filters"
+                  className={`rounded-full border px-3 py-2 text-[12px] transition ${
+                    advancedFiltersOpen
+                      ? "border-white bg-white text-[#080017]"
+                      : "border-white bg-transparent text-white"
+                  }`}
+                  onClick={() => setAdvancedFiltersOpen((v) => !v)}
                 >
-                  <option value="newest">Newest</option>
-                  <option value="oldest">Oldest</option>
-                  <option value="most_played">Most played</option>
-                  <option value="least_played">Least played</option>
-                  <option value="show_length_longest">Longest show</option>
-                  <option value="show_length_shortest">Shortest show</option>
-                </select>
-              </label>
+                  <FontAwesomeIcon icon={faSliders} />
+                </button>
+                <button
+                  type="button"
+                  className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-[12px] ${
+                    showTab === "favorites"
+                      ? "border-white bg-white text-[#080017]"
+                      : "border-white text-white"
+                  }`}
+                  onClick={() =>
+                    setShowTab((prev) => (prev === "favorites" ? "all" : "favorites"))
+                  }
+                >
+                  <span>Saved</span>
+                  <FontAwesomeIcon icon={faBookmark} />
+                </button>
+              </div>
+              <div ref={sortMenuRef} className="relative">
+                <button
+                  id="sort"
+                  type="button"
+                  aria-label="Sort shows"
+                  aria-haspopup="menu"
+                  aria-expanded={sortMenuOpen}
+                  className="inline-flex items-center gap-2 rounded-full border border-white px-3 py-2 text-[12px] text-white"
+                  onClick={() => setSortMenuOpen((v) => !v)}
+                >
+                  <span>{sortLabel}</span>
+                  <FontAwesomeIcon icon={faChevronDown} />
+                </button>
+                {sortMenuOpen && (
+                  <div className="absolute right-0 top-9 z-30 w-44 rounded-[12px] border border-white/15 bg-[#16052c] p-1.5 shadow-[0_8px_18px_rgba(0,0,0,0.45)]">
+                    {SORT_OPTIONS.map((opt) => {
+                      const active = sort === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          className={`flex w-full items-center rounded-[10px] px-2.5 py-2 text-left text-[14px] [font-family:var(--font-roboto-condensed)] ${
+                            active ? "bg-white/15 text-white" : "text-white/90 hover:bg-white/10"
+                          }`}
+                          onClick={() => {
+                            setSort(opt.value);
+                            setSortMenuOpen(false);
+                          }}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
-
-            <div className="mb-3 text-[12px] font-medium text-white">{venueShows.length} Shows</div>
 
             {advancedFiltersOpen && (
               <div className="mb-4">
@@ -1336,15 +1729,17 @@ export default function HomePage() {
                   <MultiSelectDropdown
                     id="showTypes"
                     label=""
-                    options={SHOW_TYPE_OPTIONS}
+                    options={availableShowTypes}
                     value={showTypes}
                     onChange={setShowTypes}
-                    minWidthClass="min-w-[132px]"
+                    minWidthClass="min-w-[102px]"
                     emptyLabel="Show Type"
                   />
                 </div>
               </div>
             )}
+
+            <div className="mb-3 text-[12px] font-medium text-white">{venueTotal} Shows</div>
 
             {error && (
               <div className="mb-3 rounded-xl border border-red-400/30 bg-red-600/15 p-3 text-sm text-red-100">
@@ -1372,9 +1767,9 @@ export default function HomePage() {
                   <span className="w-2" />
                 </div>
 
-                <div className="mb-2 text-xs font-medium text-white">{songTotal} Shows</div>
+                <div className="mb-2 text-xs font-medium text-white">{uniqueSongShowCount} Shows</div>
                 <div className="space-y-2">
-                  {sortedSongShows.map((s) => {
+                  {songShowsForDisplay.map((s) => {
                     const songTitle = toDisplayTrackTitle(s.matchedSongTitle || debouncedQuery);
                     const timeLabel = displaySongLength(s.matchedSongLength, s.matchedSongSeconds);
                     const isMostPlayed = s.showKey === mostPlayedSongShowKey;
@@ -1576,7 +1971,7 @@ export default function HomePage() {
                   })}
                 </div>
 
-                {venueShows.length === 0 && (
+                {!loading && !error && hasActiveShowFilters && venueShows.length === 0 && (
                   <div className="mt-3 rounded-xl border border-white/15 bg-white/5 p-4 text-sm text-white/70">
                     No shows found for this filter.
                   </div>

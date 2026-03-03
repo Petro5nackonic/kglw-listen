@@ -419,6 +419,13 @@ function filterByShowTypes(
   });
 }
 
+function showTypeLabelForShow(show: ShowListItem): "Rave" | "Acoustic" | "Orchestra" | "Standard" {
+  if (show.specialTag === "RAVE") return "Rave";
+  if (show.specialTag === "ACOUSTIC") return "Acoustic";
+  if (show.specialTag === "ORCHESTRA") return "Orchestra";
+  return "Standard";
+}
+
 type Continent = "North America" | "South America" | "Europe" | "Asia" | "Africa" | "Oceania" | "Unknown";
 
 function continentFromVenueCoverageTitle(venue?: string, coverage?: string, title?: string): Continent {
@@ -698,6 +705,42 @@ function sortShows(shows: ShowListItem[], sort: string): ShowListItem[] {
   });
 }
 
+function tokenizeSearchInput(input: string): string[] {
+  const tokens = String(input || "")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/g)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 2)
+    .slice(0, 5);
+  return tokens;
+}
+
+function buildSongTokenQuery(input: string): string {
+  const tokens = tokenizeSearchInput(input);
+  if (tokens.length === 0) return "";
+  return tokens.map((t) => `text:${t}*`).join(" AND ");
+}
+
+function tokenPrefixMatch(text: string, tokens: string[]): boolean {
+  if (tokens.length === 0) return false;
+  const words = String(text || "")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/g)
+    .map((w) => w.trim())
+    .filter(Boolean);
+  if (words.length === 0) return false;
+  return tokens.every((t) => words.some((w) => w.startsWith(t)));
+}
+
+function queryMatchesByTokens(text: string, rawQuery: string): boolean {
+  const q = String(rawQuery || "").toLowerCase().trim();
+  if (!q) return true;
+  if (String(text || "").toLowerCase().includes(q)) return true;
+  const tokens = tokenizeSearchInput(q);
+  if (tokens.length === 0) return false;
+  return tokenPrefixMatch(text, tokens);
+}
+
 function parseLengthToSeconds(raw: unknown): number | null {
   if (raw == null) return null;
   const s = String(raw).trim();
@@ -877,13 +920,20 @@ async function fetchSongMatchInfo(
     const data = (await res.json()) as { files?: IaMetadataFile[] };
     const files: IaMetadataFile[] = Array.isArray(data?.files) ? data.files : [];
 
+    const queryTokens = tokenizeSearchInput(queryLower);
     let best: { seconds: number; title: string; length: string; url: string } | null = null;
     for (const f of files) {
       const name = String(f?.name || "");
       if (!name || !isAudioName(name)) continue;
       const rawTitle = String(f?.title || f?.name || "");
-      const title = rawTitle.toLowerCase();
-      if (!title.includes(queryLower) && !name.toLowerCase().includes(queryLower)) continue;
+      const searchable = `${rawTitle} ${name}`;
+      if (
+        !tokenPrefixMatch(searchable, queryTokens) &&
+        !rawTitle.toLowerCase().includes(queryLower) &&
+        !name.toLowerCase().includes(queryLower)
+      ) {
+        continue;
+      }
 
       const sec = parseLengthToSeconds(f?.length);
       if (sec == null) continue;
@@ -1047,12 +1097,11 @@ export async function GET(req: NextRequest) {
   const shows = buildShowsFromRecordings(recordings);
   const kglwSpecialTagsByDate = await getKglwSpecialTagsByDate();
   const taggedShows = applySpecialTagsToShows(shows, kglwSpecialTagsByDate);
-  const typedShows = filterByShowTypes(taggedShows, showTypes);
-  const sortedShows = sortShows(typedShows, sort);
+  const sortedShowsForQuery = sortShows(taggedShows.slice(), sort);
 
   const qLower = query.toLowerCase();
-  const searchedShows = query
-    ? sortedShows.filter((s) => {
+  const searchedShowsForFacets = query
+    ? sortedShowsForQuery.filter((s) => {
         const normalizedShowKey = String(s.showKey || "").replaceAll("-", " ");
         const haystack = [
           s.showDate,
@@ -1069,9 +1118,10 @@ export async function GET(req: NextRequest) {
           .filter(Boolean)
           .join(" ")
           .toLowerCase();
-        return haystack.includes(qLower);
+        return queryMatchesByTokens(haystack, qLower);
       })
-    : sortedShows;
+    : sortedShowsForQuery;
+  const searchedShows = filterByShowTypes(searchedShowsForFacets, showTypes);
 
   // Song/track matches come from Archive full-text indexing.
   // This catches shows where the query appears in tracklists/metadata even when
@@ -1080,15 +1130,16 @@ export async function GET(req: NextRequest) {
   if (query && page === 1) {
     const songDocs: IaDoc[] = [];
     const songTerm = query.replace(/"/g, "").trim();
+    const songTokenQuery = buildSongTokenQuery(songTerm);
 
-    if (songTerm) {
+    if (songTerm && songTokenQuery) {
       const SONG_ROWS = 500;
       const MAX_SONG_DOCS = 1500;
       const MAX_SONG_PAGES = Math.ceil(MAX_SONG_DOCS / SONG_ROWS);
       let songPage = 1;
 
       while (songPage <= MAX_SONG_PAGES) {
-        const songQ = `${q} AND text:("${songTerm}")`;
+        const songQ = `${q} AND (${songTokenQuery})`;
         const songUrl =
           "https://archive.org/advancedsearch.php" +
           `?q=${encodeURIComponent(songQ)}` +
@@ -1152,6 +1203,16 @@ export async function GET(req: NextRequest) {
     const c = s.continent;
     if (c && c !== "Unknown") continentCounts.set(c, (continentCounts.get(c) || 0) + 1);
   }
+  const showTypeCounts = new Map<string, number>([
+    ["Rave", 0],
+    ["Acoustic", 0],
+    ["Orchestra", 0],
+    ["Standard", 0],
+  ]);
+  for (const s of searchedShowsForFacets) {
+    const label = showTypeLabelForShow(s);
+    showTypeCounts.set(label, (showTypeCounts.get(label) || 0) + 1);
+  }
 
   const facets = {
     years: Array.from(yearCounts.entries())
@@ -1160,6 +1221,7 @@ export async function GET(req: NextRequest) {
     continents: Array.from(continentCounts.entries())
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([value, count]) => ({ value, count })),
+    showTypes: Array.from(showTypeCounts.entries()).map(([value, count]) => ({ value, count })),
   };
 
   // App pagination
