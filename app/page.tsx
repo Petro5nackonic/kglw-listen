@@ -623,9 +623,6 @@ export default function HomePage() {
   const router = useRouter();
   const setQueue = usePlayer((s) => s.setQueue);
   const playlists = usePlaylists((s) => s.playlists);
-  const ensureFlightB741Playlist = usePlaylists((s) => s.ensureFlightB741Playlist);
-  const ensureMindFuzzLiveCompPlaylist = usePlaylists((s) => s.ensureMindFuzzLiveCompPlaylist);
-  const ensureRequestedAlbumPlaylists = usePlaylists((s) => s.ensureRequestedAlbumPlaylists);
   const addTrackToPlaylist = usePlaylists((s) => s.addTrack);
   const createPlaylist = usePlaylists((s) => s.createPlaylist);
   const renamePlaylist = usePlaylists((s) => s.renamePlaylist);
@@ -692,32 +689,6 @@ export default function HomePage() {
   const sortMenuRef = useRef<HTMLDivElement | null>(null);
   const didHydrateInitialShowsRef = useRef(false);
   const didRunFilterReloadRef = useRef(false);
-
-  useEffect(() => {
-    const required = [
-      "flight b741 live comp.",
-      "i'm in your mind fuzz live comp.",
-      "infest the rats' nest",
-      "i'm in your mind fuzz",
-      "nonagon infinity",
-      "petrodragonic apocalypse",
-      "the silver chord",
-    ];
-    const existing = new Set(playlists.map((p) => p.name.trim().toLowerCase()));
-    const missingAny = required.some((name) => !existing.has(name));
-    if (!missingAny) return;
-    const timeout = window.setTimeout(() => {
-      void ensureFlightB741Playlist();
-      void ensureMindFuzzLiveCompPlaylist();
-      void ensureRequestedAlbumPlaylists();
-    }, 1600);
-    return () => window.clearTimeout(timeout);
-  }, [
-    playlists,
-    ensureFlightB741Playlist,
-    ensureMindFuzzLiveCompPlaylist,
-    ensureRequestedAlbumPlaylists,
-  ]);
 
   function buildUrl(p: number) {
     const params = new URLSearchParams();

@@ -8,11 +8,13 @@ import { toDisplayTrackTitle } from "@/utils/displayTitle";
 
 type PlaylistsState = {
   playlists: Playlist[];
+  dismissedPrebuiltNames: string[];
   createPlaylist: (
     name: string,
     options?: { source?: "user" | "prebuilt"; prebuiltKind?: "album-live-comp" },
   ) => string;
   createDemoPlaylist: () => string;
+  syncPrebuiltPlaylistsFromServer: () => Promise<void>;
   ensureFlightB741Playlist: () => Promise<void>;
   ensureMindFuzzLiveCompPlaylist: () => Promise<void>;
   ensureRequestedAlbumPlaylists: () => Promise<void>;
@@ -167,6 +169,17 @@ const FLIGHT_B741_TRACK_ORDER = [
   "Rats in the Sky",
   "Daily Blues",
 ];
+const STATIC_PREBUILT_SEED_DEFS: Array<{ name: string; tracks: string[]; chainFirstCount?: number }> = [
+  { name: FLIGHT_B741_PLAYLIST_NAME, tracks: FLIGHT_B741_TRACK_ORDER },
+  { name: MIND_FUZZ_LIVE_COMP_NAME, tracks: MIND_FUZZ_LIVE_COMP_TRACK_ORDER, chainFirstCount: 4 },
+  { name: "Infest the Rats' Nest", tracks: REQUESTED_ALBUM_TRACK_FALLBACKS["infest the rats' nest"] || [] },
+  { name: "Nonagon Infinity", tracks: REQUESTED_ALBUM_TRACK_FALLBACKS["nonagon infinity"] || [] },
+  {
+    name: "Petrodragonic Apocalypse",
+    tracks: REQUESTED_ALBUM_TRACK_FALLBACKS["petrodragonic apocalypse"] || [],
+  },
+  { name: "The Silver Chord", tracks: REQUESTED_ALBUM_TRACK_FALLBACKS["the silver chord"] || [] },
+];
 
 let defaultAlbumSeedInFlight: Promise<void> | null = null;
 let flightB741SeedInFlight: Promise<void> | null = null;
@@ -201,6 +214,46 @@ type LegacyPlaylist = {
   tracks?: LegacyPlaylistTrack[];
   slots?: Playlist["slots"];
 };
+
+type ApiPrebuiltSlot = {
+  canonicalTitle: string;
+  variants: Track[];
+  chainGroup?: string;
+  chainOrder?: number;
+};
+
+type ApiPrebuiltPlaylist = {
+  name: string;
+  prebuiltKind: "album-live-comp";
+  slots: ApiPrebuiltSlot[];
+};
+
+function buildStaticPrebuiltSeedPlaylists(now = Date.now()): Playlist[] {
+  return STATIC_PREBUILT_SEED_DEFS.filter((def) => def.tracks.length > 0).map((def) => {
+    const linkGroupId = def.chainFirstCount ? safeUUID() : undefined;
+    const slots: PlaylistSlot[] = def.tracks.map((title, idx) => ({
+      id: safeUUID(),
+      canonicalTitle: normalizeSongToken(title) || canonicalTrackTitle({ title, url: "" }),
+      addedAt: now,
+      updatedAt: now,
+      linkGroupId: linkGroupId && idx < (def.chainFirstCount || 0) ? linkGroupId : undefined,
+      chainOrder: linkGroupId && idx < (def.chainFirstCount || 0) ? idx + 1 : undefined,
+      variants: [
+        { id: safeUUID(), addedAt: now, track: { title, url: "" } },
+        { id: safeUUID(), addedAt: now, track: { title, url: "" } },
+      ],
+    }));
+    return {
+      id: safeUUID(),
+      name: def.name,
+      createdAt: now,
+      updatedAt: now,
+      source: "prebuilt",
+      prebuiltKind: "album-live-comp",
+      slots,
+    };
+  });
+}
 
 function migratePlaylist(raw: LegacyPlaylist): Playlist {
   const inferredPrebuilt =
@@ -250,7 +303,8 @@ function migratePlaylist(raw: LegacyPlaylist): Playlist {
 export const usePlaylists = create<PlaylistsState>()(
   persist(
     (set, get) => ({
-      playlists: [],
+      playlists: buildStaticPrebuiltSeedPlaylists(),
+      dismissedPrebuiltNames: [],
 
       createPlaylist: (name, options) => {
         const normalized = normalizeName(name);
@@ -377,6 +431,95 @@ export const usePlaylists = create<PlaylistsState>()(
 
         set({ playlists: [playlist, ...get().playlists] });
         return id;
+      },
+
+      syncPrebuiltPlaylistsFromServer: async () => {
+        if (typeof window === "undefined") return;
+        try {
+          const res = await fetch("/api/prebuilt-playlists", { cache: "no-store" });
+          if (!res.ok) return;
+          const data = (await res.json()) as {
+            playlists?: ApiPrebuiltPlaylist[];
+          };
+          const incoming = Array.isArray(data?.playlists) ? data.playlists : [];
+          if (incoming.length === 0) return;
+
+          const dismissed = new Set(
+            (get().dismissedPrebuiltNames || []).map((n) => n.trim().toLowerCase()),
+          );
+          const now = Date.now();
+          const current = get().playlists.slice();
+
+          for (const payload of incoming) {
+            const name = String(payload?.name || "").trim();
+            if (!name) continue;
+            if (dismissed.has(name.toLowerCase())) continue;
+            const rawSlots = Array.isArray(payload?.slots) ? payload.slots : [];
+            if (rawSlots.length === 0) continue;
+
+            const chainGroupIds = new Map<string, string>();
+            const slots: PlaylistSlot[] = rawSlots
+              .map((slot) => {
+                const variants = Array.isArray(slot?.variants) ? slot.variants : [];
+                if (variants.length === 0) return null;
+                const chainKey = String(slot?.chainGroup || "").trim();
+                const linkGroupId = chainKey
+                  ? (chainGroupIds.get(chainKey) ||
+                    (() => {
+                      const id = safeUUID();
+                      chainGroupIds.set(chainKey, id);
+                      return id;
+                    })())
+                  : undefined;
+                return {
+                  id: safeUUID(),
+                  canonicalTitle: String(slot?.canonicalTitle || "").trim() || canonicalTrackTitle(variants[0]),
+                  addedAt: now,
+                  updatedAt: now,
+                  linkGroupId,
+                  chainOrder:
+                    typeof slot?.chainOrder === "number" && Number.isFinite(slot.chainOrder)
+                      ? slot.chainOrder
+                      : undefined,
+                  variants: variants.map((track) => ({
+                    id: safeUUID(),
+                    addedAt: now,
+                    track,
+                  })),
+                } as PlaylistSlot;
+              })
+              .filter(Boolean) as PlaylistSlot[];
+            if (slots.length === 0) continue;
+
+            const existingIdx = current.findIndex((p) => p.name.trim().toLowerCase() === name.toLowerCase());
+            if (existingIdx >= 0) {
+              const existing = current[existingIdx];
+              if (existing.source && existing.source !== "prebuilt") continue;
+              current[existingIdx] = {
+                ...existing,
+                name,
+                updatedAt: now,
+                source: "prebuilt",
+                prebuiltKind: payload.prebuiltKind || "album-live-comp",
+                slots,
+              };
+            } else {
+              current.unshift({
+                id: safeUUID(),
+                name,
+                createdAt: now,
+                updatedAt: now,
+                source: "prebuilt",
+                prebuiltKind: payload.prebuiltKind || "album-live-comp",
+                slots,
+              });
+            }
+          }
+
+          set({ playlists: current });
+        } catch {
+          // Ignore transient network errors.
+        }
       },
 
       ensureFlightB741Playlist: async () => {
@@ -1216,7 +1359,21 @@ export const usePlaylists = create<PlaylistsState>()(
       },
 
       deletePlaylist: (playlistId) => {
-        set({ playlists: get().playlists.filter((p) => p.id !== playlistId) });
+        const target = get().playlists.find((p) => p.id === playlistId) || null;
+        const nextDismissed =
+          target?.source === "prebuilt"
+            ? Array.from(
+                new Set(
+                  (get().dismissedPrebuiltNames || []).concat(
+                    String(target.name || "").trim().toLowerCase(),
+                  ),
+                ),
+              )
+            : get().dismissedPrebuiltNames;
+        set({
+          playlists: get().playlists.filter((p) => p.id !== playlistId),
+          dismissedPrebuiltNames: nextDismissed,
+        });
       },
 
       addTrack: (playlistId, track) => {
@@ -1498,16 +1655,24 @@ export const usePlaylists = create<PlaylistsState>()(
     }),
     {
       name: "kglw.playlists.v1",
-      version: 2,
+      version: 3,
       storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({ playlists: state.playlists }),
+      partialize: (state) => ({
+        playlists: state.playlists,
+        dismissedPrebuiltNames: state.dismissedPrebuiltNames,
+      }),
       migrate: (persisted: unknown) => {
         const data = (persisted || {}) as {
           playlists?: LegacyPlaylist[];
+          dismissedPrebuiltNames?: string[];
         };
         const playlists = Array.isArray(data.playlists) ? data.playlists : [];
+        const dismissedPrebuiltNames = Array.isArray(data.dismissedPrebuiltNames)
+          ? data.dismissedPrebuiltNames.map((v) => String(v || "").trim().toLowerCase()).filter(Boolean)
+          : [];
         return {
           playlists: playlists.map(migratePlaylist),
+          dismissedPrebuiltNames: Array.from(new Set(dismissedPrebuiltNames)),
         };
       },
     },

@@ -425,6 +425,7 @@ export default function PlaylistDetailPage() {
     [playlist],
   );
   const isPrebuiltPlaylist = playlist?.source === "prebuilt";
+  const showAddTracksCta = !isPrebuiltPlaylist && playableSlots.length === 0;
   const totalDurationLabel = useMemo(() => {
     const totalSeconds = playableSlots.reduce(
       (sum, item) => sum + parseTrackSeconds(item.track.length),
@@ -918,7 +919,7 @@ export default function PlaylistDetailPage() {
               <FontAwesomeIcon icon={faMagnifyingGlass} className="text-[18px] text-white/90" />
             </div>
           )}
-          {playableSlots.length === 0 && (
+          {showAddTracksCta && (
             <div className="mt-4 rounded-xl border border-dashed border-white/15 bg-black/20 p-4 text-sm text-white/70">
               Empty playlist. Tap "Add tracks" to search and add songs.
             </div>
@@ -928,21 +929,23 @@ export default function PlaylistDetailPage() {
 
       <div
         className={`mx-auto w-full max-w-[393px] px-6 pb-8 ${
-          playableSlots.length === 0 && !chainPickerOpen ? "min-h-[calc(100vh-360px)] flex flex-col justify-center" : ""
+          showAddTracksCta && !chainPickerOpen ? "min-h-[calc(100vh-360px)] flex flex-col justify-center" : ""
         }`}
       >
-        <div className={playableSlots.length === 0 && !chainPickerOpen ? "" : "mb-3"}>
-          <button
-            type="button"
-            className="w-full rounded-[12px] border border-[#5A22C9] bg-[#5A22C9] px-4 py-3 text-[14px] text-white [font-family:var(--font-roboto-condensed)] hover:bg-[#6a33d9]"
-            onClick={() => {
-              setAddTracksOpen(true);
-              setAddTracksError(null);
-            }}
-          >
-            Add tracks
-          </button>
-        </div>
+        {showAddTracksCta ? (
+          <div className={showAddTracksCta && !chainPickerOpen ? "" : "mb-3"}>
+            <button
+              type="button"
+              className="w-full rounded-[12px] border border-[#5A22C9] bg-[#5A22C9] px-4 py-3 text-[14px] text-white [font-family:var(--font-roboto-condensed)] hover:bg-[#6a33d9]"
+              onClick={() => {
+                setAddTracksOpen(true);
+                setAddTracksError(null);
+              }}
+            >
+              Add tracks
+            </button>
+          </div>
+        ) : null}
         {chainPickerOpen ? (
           <section className="mt-4 space-y-3 [font-family:var(--font-roboto-condensed)]">
             {playableSlots.map((item, idx) => {

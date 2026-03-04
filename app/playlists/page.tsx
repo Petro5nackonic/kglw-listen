@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { useRouter } from "next/navigation";
 
 import { CreatePlaylistForm } from "@/components/playlists/CreatePlaylistForm";
@@ -30,15 +30,6 @@ export default function PlaylistsPage() {
   const createPlaylist = usePlaylists((s) => s.createPlaylist);
   const createDemoPlaylist = usePlaylists((s) => s.createDemoPlaylist);
   const deletePlaylist = usePlaylists((s) => s.deletePlaylist);
-  const ensureFlightB741Playlist = usePlaylists((s) => s.ensureFlightB741Playlist);
-  const ensureMindFuzzLiveCompPlaylist = usePlaylists((s) => s.ensureMindFuzzLiveCompPlaylist);
-  const ensureRequestedAlbumPlaylists = usePlaylists((s) => s.ensureRequestedAlbumPlaylists);
-
-  useEffect(() => {
-    void ensureFlightB741Playlist();
-    void ensureMindFuzzLiveCompPlaylist();
-    void ensureRequestedAlbumPlaylists();
-  }, [ensureFlightB741Playlist, ensureMindFuzzLiveCompPlaylist, ensureRequestedAlbumPlaylists]);
 
   const prebuiltPlaylists = useMemo(
     () => playlists.filter((p) => p.source === "prebuilt"),
