@@ -1687,6 +1687,11 @@ export default function HomePage() {
                                   src={src}
                                   alt=""
                                   className="aspect-square w-full rounded-[8px] border border-white/15 object-cover"
+                                  onError={(e) => {
+                                    const img = e.currentTarget;
+                                    if (img.src.endsWith(DEFAULT_ARTWORK_SRC)) return;
+                                    img.src = DEFAULT_ARTWORK_SRC;
+                                  }}
                                 />
                               ))}
                             </div>
@@ -1835,6 +1840,11 @@ export default function HomePage() {
                                   src={src}
                                   alt=""
                                   className="aspect-square w-full rounded-[8px] border border-white/15 object-cover"
+                                  onError={(e) => {
+                                    const img = e.currentTarget;
+                                    if (img.src.endsWith(DEFAULT_ARTWORK_SRC)) return;
+                                    img.src = DEFAULT_ARTWORK_SRC;
+                                  }}
                                 />
                               ))}
                             </div>
