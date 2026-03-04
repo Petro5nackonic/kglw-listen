@@ -181,14 +181,9 @@ async function fetchLiveVariants(origin: string, songName: string): Promise<Trac
     const fallback: Track[] = [];
     for (const item of items) {
       let resolvedUrl = String(item?.matchedSongUrl || "").trim();
-      let resolvedLength = String(item?.matchedSongLength || "").trim() || undefined;
-      if (!resolvedUrl && item?.defaultId) {
-        const fallbackUrl = await resolvePlayableUrl(origin, item.defaultId, songName);
-        if (fallbackUrl?.url) {
-          resolvedUrl = fallbackUrl.url;
-          resolvedLength = fallbackUrl.length || resolvedLength;
-        }
-      }
+      const resolvedLength = String(item?.matchedSongLength || "").trim() || undefined;
+      // Keep this endpoint fast in production: skip expensive metadata fallback here.
+      // Client-side prebuilt ensure logic remains the deep fallback.
       if (!resolvedUrl || seenUrl.has(resolvedUrl)) continue;
       seenUrl.add(resolvedUrl);
       const titleRaw = String(item?.matchedSongTitle || songName);
@@ -212,9 +207,29 @@ async function fetchLiveVariants(origin: string, songName: string): Promise<Trac
       } else {
         fallback.push(candidate);
       }
-      if (exactish.length + fallback.length >= 16) break;
+      if (exactish.length + fallback.length >= 8) break;
     }
-    return exactish.concat(fallback).slice(0, 5);
+    const quick = exactish.concat(fallback).slice(0, 3);
+    if (quick.length > 0) return quick;
+
+    // Single cheap fallback attempt using one top identifier only.
+    const first = items[0];
+    const fallbackId = String(first?.defaultId || "").trim();
+    if (!fallbackId) return [];
+    const resolved = await resolvePlayableUrl(origin, fallbackId, songName);
+    if (!resolved?.url) return [];
+    return [
+      {
+        title: songName,
+        url: resolved.url,
+        length: resolved.length,
+        track: "1",
+        showKey: String(first?.showKey || "").trim() || undefined,
+        showDate: String(first?.showDate || "").trim() || undefined,
+        venueText: String(first?.title || "").trim() || undefined,
+        artwork: String(first?.artwork || "").trim() || undefined,
+      },
+    ];
   } catch {
     return [];
   }
@@ -223,23 +238,24 @@ async function fetchLiveVariants(origin: string, songName: string): Promise<Trac
 async function buildPayload(origin: string): Promise<CachedPayload> {
   const playlists: ApiPrebuiltPlaylist[] = [];
   for (const def of PREBUILT_DEFS) {
-    const slots: ApiPrebuiltSlot[] = [];
-    for (let i = 0; i < def.tracks.length; i += 1) {
-      const trackTitle = def.tracks[i];
-      const variants = await fetchLiveVariants(origin, trackTitle);
-      if (variants.length < 1) {
-        slots.length = 0;
-        break;
-      }
-      const fused = variants.length >= 2 ? variants : [variants[0], variants[0]];
-      slots.push({
-        canonicalTitle: normalizeSongToken(trackTitle),
-        variants: fused.slice(0, 5),
-        chainGroup: def.chainFirstCount && i < def.chainFirstCount ? "intro" : undefined,
-        chainOrder: def.chainFirstCount && i < def.chainFirstCount ? i + 1 : undefined,
-      });
-    }
-    if (slots.length !== def.tracks.length) continue;
+    const slotsSettled = await Promise.allSettled(
+      def.tracks.map(async (trackTitle, i) => {
+        const variants = await fetchLiveVariants(origin, trackTitle);
+        if (variants.length < 1) return null;
+        const fused = variants.length >= 2 ? variants : [variants[0], variants[0]];
+        return {
+          canonicalTitle: normalizeSongToken(trackTitle),
+          variants: fused.slice(0, 5),
+          chainGroup: def.chainFirstCount && i < def.chainFirstCount ? "intro" : undefined,
+          chainOrder: def.chainFirstCount && i < def.chainFirstCount ? i + 1 : undefined,
+        } as ApiPrebuiltSlot;
+      }),
+    );
+    const slots = slotsSettled
+      .map((s) => (s.status === "fulfilled" ? s.value : null))
+      .filter(Boolean) as ApiPrebuiltSlot[];
+    // Allow partial albums so users always get playable content.
+    if (slots.length < 3) continue;
     playlists.push({
       name: def.name,
       prebuiltKind: "album-live-comp",
@@ -258,8 +274,12 @@ export async function GET(request: Request) {
     const origin = new URL(request.url).origin;
     buildInFlight = buildPayload(origin)
       .then((result) => {
-        cached = result;
-        return result;
+        if (result.playlists.length > 0) {
+          cached = result;
+          return result;
+        }
+        // Never replace a good cache with an empty payload.
+        return cached || result;
       })
       .finally(() => {
         buildInFlight = null;
