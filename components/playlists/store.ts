@@ -239,8 +239,8 @@ function buildStaticPrebuiltSeedPlaylists(now = Date.now()): Playlist[] {
       linkGroupId: linkGroupId && idx < (def.chainFirstCount || 0) ? linkGroupId : undefined,
       chainOrder: linkGroupId && idx < (def.chainFirstCount || 0) ? idx + 1 : undefined,
       variants: [
-        { id: safeUUID(), addedAt: now, track: { title, url: "" } },
-        { id: safeUUID(), addedAt: now, track: { title, url: "" } },
+        { id: safeUUID(), addedAt: now, track: { title, url: "", artwork: "/api/default-artwork" } },
+        { id: safeUUID(), addedAt: now, track: { title, url: "", artwork: "/api/default-artwork" } },
       ],
     }));
     return {
