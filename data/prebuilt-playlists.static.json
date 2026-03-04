@@ -1,4 +1,244 @@
 {
-  "generatedAt": 1772654310797,
-  "playlists": []
+  "generatedAt": 1772653701870,
+  "playlists": [
+    {
+      "name": "I'm In Your Mind Fuzz Live Comp.",
+      "prebuiltKind": "album-live-comp",
+      "slots": [
+        {
+          "canonicalTitle": "i m in your mind fuzz",
+          "variants": [
+            {
+              "title": "I'm In Your Mind Fuzz",
+              "url": "https://archive.org/download/kglw2022-10-23.vwmule/kglw2022-10-23.vwmule.t04.flac",
+              "length": "1218.3",
+              "track": "1",
+              "showKey": "2022-10-23|the-anthem",
+              "showDate": "2022-10-23",
+              "venueText": "King Gizzard & The Lizard Wizard Live at The Anthem on 2022-10-23",
+              "artwork": "https://archive.org/services/img/kglw2022-10-23.vwmule"
+            },
+            {
+              "title": "I'm In Your Mind Fuzz",
+              "url": "https://archive.org/download/kglw2022-10-23.vwmule/kglw2022-10-23.vwmule.t04.mp3",
+              "length": "1218.34",
+              "track": "1",
+              "showKey": "2022-10-23|the-anthem",
+              "showDate": "2022-10-23",
+              "venueText": "King Gizzard & The Lizard Wizard Live at The Anthem on 2022-10-23",
+              "artwork": "https://archive.org/services/img/kglw2022-10-23.vwmule"
+            }
+          ],
+          "chainGroup": "intro",
+          "chainOrder": 4
+        },
+        {
+          "canonicalTitle": "empty",
+          "variants": [
+            {
+              "title": "Empty",
+              "url": "https://archive.org/download/kglw2025-08-16.SBD.wav/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Field%20of%20Vision%20'25%20-%2005%20Empty%20(Live%20at%20Field%20of%20Vision%20'25).flac",
+              "length": "310.41",
+              "track": "1",
+              "showKey": "2025-08-16|field-of-vision-at-meadow-creek",
+              "showDate": "2025-08-16",
+              "venueText": "King Gizzard & The Lizard Wizard Live at Field of Vision at Meadow Creek on 2025-08-16",
+              "artwork": "https://archive.org/services/img/kglw2025-08-16.SBD.wav"
+            },
+            {
+              "title": "Empty",
+              "url": "https://archive.org/download/kglw2025-08-16.SBD.wav/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Field%20of%20Vision%20'25%20-%2005%20Empty%20(Live%20at%20Field%20of%20Vision%20'25).mp3",
+              "length": "05:10",
+              "track": "1",
+              "showKey": "2025-08-16|field-of-vision-at-meadow-creek",
+              "showDate": "2025-08-16",
+              "venueText": "King Gizzard & The Lizard Wizard Live at Field of Vision at Meadow Creek on 2025-08-16",
+              "artwork": "https://archive.org/services/img/kglw2025-08-16.SBD.wav"
+            }
+          ]
+        },
+        {
+          "canonicalTitle": "hot water",
+          "variants": [
+            {
+              "title": "Hot Water",
+              "url": "https://archive.org/download/kglw2024-05-31.Brighton24/16%20-%20Hot%20Water.flac",
+              "length": "561.17",
+              "track": "1",
+              "showKey": "2024-05-31|brighton-dome",
+              "showDate": "2024-05-31",
+              "venueText": "King Gizzard & The Lizard Wizard Live at Brighton Dome on 2024-05-31",
+              "artwork": "https://archive.org/services/img/kglw2024-05-31.Brighton24"
+            },
+            {
+              "title": "Hot Water",
+              "url": "https://archive.org/download/kglw2024-05-31.Brighton24/16%20-%20Hot%20Water.mp3",
+              "length": "09:21",
+              "track": "1",
+              "showKey": "2024-05-31|brighton-dome",
+              "showDate": "2024-05-31",
+              "venueText": "King Gizzard & The Lizard Wizard Live at Brighton Dome on 2024-05-31",
+              "artwork": "https://archive.org/services/img/kglw2024-05-31.Brighton24"
+            }
+          ]
+        },
+        {
+          "canonicalTitle": "am i in heaven",
+          "variants": [
+            {
+              "title": "Am I In Heaven ?",
+              "url": "https://archive.org/download/kglw2023-06-12.leary/kglw2023-06-12.vwmule.t15.flac",
+              "length": "476.97",
+              "track": "1",
+              "showKey": "2023-06-12|the-salt-shed",
+              "showDate": "2023-06-12",
+              "venueText": "King Gizzard & The Lizard Wizard Live at The Salt Shed on 2023-06-12",
+              "artwork": "https://archive.org/services/img/kglw2023-06-12.leary"
+            },
+            {
+              "title": "Am I In Heaven ?",
+              "url": "https://archive.org/download/kglw2023-06-12.leary/kglw2023-06-12.vwmule.t15.mp3",
+              "length": "07:57",
+              "track": "1",
+              "showKey": "2023-06-12|the-salt-shed",
+              "showDate": "2023-06-12",
+              "venueText": "King Gizzard & The Lizard Wizard Live at The Salt Shed on 2023-06-12",
+              "artwork": "https://archive.org/services/img/kglw2023-06-12.leary"
+            }
+          ]
+        },
+        {
+          "canonicalTitle": "slow jam 1",
+          "variants": [
+            {
+              "title": "Slow Jam 1",
+              "url": "https://archive.org/download/kglw2025-06-08.night.SBD.flac/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Red%20Rocks%20'23%20-%2036%20Slow%20Jam%201%20(Live%20at%20Red%20Rocks%20'23).flac",
+              "length": "740.11",
+              "track": "1",
+              "showKey": "2023-06-08|red-rocks",
+              "showDate": "2023-06-08",
+              "venueText": "King Gizzard & The Lizard Wizard Live at Red Rocks Amphitheatre on 2023-06-08",
+              "artwork": "https://archive.org/services/img/kglw2025-06-08.night.SBD.flac"
+            },
+            {
+              "title": "Slow Jam 1",
+              "url": "https://archive.org/download/kglw2025-06-08.night.SBD.flac/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Red%20Rocks%20'23%20-%2036%20Slow%20Jam%201%20(Live%20at%20Red%20Rocks%20'23).mp3",
+              "length": "12:20",
+              "track": "1",
+              "showKey": "2023-06-08|red-rocks",
+              "showDate": "2023-06-08",
+              "venueText": "King Gizzard & The Lizard Wizard Live at Red Rocks Amphitheatre on 2023-06-08",
+              "artwork": "https://archive.org/services/img/kglw2025-06-08.night.SBD.flac"
+            }
+          ]
+        },
+        {
+          "canonicalTitle": "satan speeds up",
+          "variants": [
+            {
+              "title": "Satan Speeds Up",
+              "url": "https://archive.org/download/kglw2025-06-08.day.SBD.flac/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Red%20Rocks%20'23%20-%2022%20Satan%20Speeds%20Up%20(Live%20at%20Red%20Rocks%20'23).flac",
+              "length": "305.38",
+              "track": "1",
+              "showKey": "2023-06-08|red-rocks",
+              "showDate": "2023-06-08",
+              "venueText": "King Gizzard & The Lizard Wizard Live at Red Rocks Amphitheatre on 2023-06-08",
+              "artwork": "https://archive.org/services/img/kglw2025-06-08.day.SBD.flac"
+            },
+            {
+              "title": "Satan Speeds Up",
+              "url": "https://archive.org/download/kglw2025-06-08.day.SBD.flac/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Red%20Rocks%20'23%20-%2022%20Satan%20Speeds%20Up%20(Live%20at%20Red%20Rocks%20'23).mp3",
+              "length": "05:05",
+              "track": "1",
+              "showKey": "2023-06-08|red-rocks",
+              "showDate": "2023-06-08",
+              "venueText": "King Gizzard & The Lizard Wizard Live at Red Rocks Amphitheatre on 2023-06-08",
+              "artwork": "https://archive.org/services/img/kglw2025-06-08.day.SBD.flac"
+            }
+          ]
+        },
+        {
+          "canonicalTitle": "her and i slow jam 2",
+          "variants": [
+            {
+              "title": "Her And I (Slow Jam 2)",
+              "url": "https://archive.org/download/kglw2023-06-04/kglw2023-06-04t15.flac",
+              "length": "517.65",
+              "track": "1",
+              "showKey": "2023-06-04|the-caverns-ampitheater-outdoor-stage",
+              "showDate": "2023-06-04",
+              "venueText": "King Gizzard & The Lizard Wizard Live at The Caverns Ampitheater Outdoor Stage on 2023-06-04",
+              "artwork": "https://archive.org/services/img/kglw2023-06-04"
+            },
+            {
+              "title": "Her And I (Slow Jam 2)",
+              "url": "https://archive.org/download/kglw2023-06-04/kglw2023-06-04t15.mp3",
+              "length": "08:38",
+              "track": "1",
+              "showKey": "2023-06-04|the-caverns-ampitheater-outdoor-stage",
+              "showDate": "2023-06-04",
+              "venueText": "King Gizzard & The Lizard Wizard Live at The Caverns Ampitheater Outdoor Stage on 2023-06-04",
+              "artwork": "https://archive.org/services/img/kglw2023-06-04"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Petrodragonic Apocalypse",
+      "prebuiltKind": "album-live-comp",
+      "slots": [
+        {
+          "canonicalTitle": "gila monster",
+          "variants": [
+            {
+              "title": "Gila Monster",
+              "url": "https://archive.org/download/kglw2023-06-21.MC59W/08-Gila%20Monster.flac",
+              "length": "281.41",
+              "track": "1",
+              "showKey": "2023-06-21|hollywood-bowl",
+              "showDate": "2023-06-21",
+              "venueText": "King Gizzard & The Lizard Wizard Live at Hollywood Bowl on 2023-06-21",
+              "artwork": "https://archive.org/services/img/kglw2023-06-21.MC59W"
+            },
+            {
+              "title": "Gila Monster",
+              "url": "https://archive.org/download/kglw2023-06-21.MC59W/08-Gila%20Monster.mp3",
+              "length": "04:41",
+              "track": "1",
+              "showKey": "2023-06-21|hollywood-bowl",
+              "showDate": "2023-06-21",
+              "venueText": "King Gizzard & The Lizard Wizard Live at Hollywood Bowl on 2023-06-21",
+              "artwork": "https://archive.org/services/img/kglw2023-06-21.MC59W"
+            }
+          ]
+        },
+        {
+          "canonicalTitle": "dragon",
+          "variants": [
+            {
+              "title": "Dragon",
+              "url": "https://archive.org/download/kglw2025-07-28.SchoepsMK41.Burns.Flac24/KingGizzard2025-07-28-t-17.flac",
+              "length": "671.96",
+              "track": "1",
+              "showKey": "2025-07-28|the-mann-music-center",
+              "showDate": "2025-07-28",
+              "venueText": "King Gizzard & The Lizard Wizard Live at The Mann Music Center on 2025-07-28",
+              "artwork": "https://archive.org/services/img/kglw2025-07-28.SchoepsMK41.Burns.Flac24"
+            },
+            {
+              "title": "Dragon",
+              "url": "https://archive.org/download/kglw2025-07-28.SchoepsMK41.Burns.Flac24/KingGizzard2025-07-28-t-17.mp3",
+              "length": "11:12",
+              "track": "1",
+              "showKey": "2025-07-28|the-mann-music-center",
+              "showDate": "2025-07-28",
+              "venueText": "King Gizzard & The Lizard Wizard Live at The Mann Music Center on 2025-07-28",
+              "artwork": "https://archive.org/services/img/kglw2025-07-28.SchoepsMK41.Burns.Flac24"
+            }
+          ]
+        }
+      ]
+    }
+  ]
 }
