@@ -207,60 +207,68 @@ export function PlayerBar() {
 
   if (!hasQueue) return null;
 
+  const audioElements = (
+    <>
+      <audio
+        ref={audioRef}
+        preload="auto"
+        onTimeUpdate={(e) => setCurrent((e.target as HTMLAudioElement).currentTime)}
+        onLoadedMetadata={(e) => setDuration((e.target as HTMLAudioElement).duration || 0)}
+        onEnded={() => next?.()}
+        onError={() => {
+          const a = audioRef.current;
+          if (!a || !src) return;
+
+          const maybeMp3 = toMp3FallbackUrl(src);
+          const canFallback =
+            maybeMp3 &&
+            maybeMp3 !== src &&
+            /\.flac(\?.*)?$/i.test(src) &&
+            !fallbackTriedRef.current.has(src);
+
+          if (canFallback) {
+            fallbackTriedRef.current.add(src);
+            a.src = maybeMp3;
+            a.load();
+            if (playing) {
+              a.play().catch((err) => console.error("MP3 fallback play() failed:", err));
+            }
+            return;
+          }
+          console.error("AUDIO ERROR", a?.error, a?.src);
+        }}
+      />
+      <audio ref={preloadAudioRef} preload="auto" className="hidden" />
+    </>
+  );
+
   if (minimized) {
     return (
-      <button
-        type="button"
-        onClick={openCurrentShow}
-        className="fixed bottom-4 right-4 z-30 h-14 w-14 overflow-hidden rounded-xl border border-white/20 bg-black/80 shadow-[0_8px_24px_rgba(0,0,0,0.45)] backdrop-blur"
-        title={currentTrack?.showKey ? "Open current show" : "Show unavailable"}
-      >
-        {artworkSrc ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={artworkSrc} alt="" className="h-full w-full object-cover" />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-xs text-white/70">
-            Now
-          </div>
-        )}
-      </button>
+      <>
+        {audioElements}
+        <button
+          type="button"
+          onClick={openCurrentShow}
+          className="fixed bottom-4 right-4 z-30 h-14 w-14 overflow-hidden rounded-xl border border-white/20 bg-black/80 shadow-[0_8px_24px_rgba(0,0,0,0.45)] backdrop-blur"
+          title={currentTrack?.showKey ? "Open current show" : "Show unavailable"}
+        >
+          {artworkSrc ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={artworkSrc} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center text-xs text-white/70">
+              Now
+            </div>
+          )}
+        </button>
+      </>
     );
   }
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-white/10 bg-black/80 backdrop-blur">
       <div className="mx-auto max-w-3xl p-3">
-        {/* Hidden audio element */}
-        <audio
-          ref={audioRef}
-          preload="auto"
-          onTimeUpdate={(e) => setCurrent((e.target as HTMLAudioElement).currentTime)}
-          onLoadedMetadata={(e) => setDuration((e.target as HTMLAudioElement).duration || 0)}
-          onEnded={() => next?.()}
-          onError={() => {
-            const a = audioRef.current;
-            if (!a || !src) return;
-
-            const maybeMp3 = toMp3FallbackUrl(src);
-            const canFallback =
-              maybeMp3 &&
-              maybeMp3 !== src &&
-              /\.flac(\?.*)?$/i.test(src) &&
-              !fallbackTriedRef.current.has(src);
-
-            if (canFallback) {
-              fallbackTriedRef.current.add(src);
-              a.src = maybeMp3;
-              a.load();
-              if (playing) {
-                a.play().catch((err) => console.error("MP3 fallback play() failed:", err));
-              }
-              return;
-            }
-            console.error("AUDIO ERROR", a?.error, a?.src);
-          }}
-        />
-        <audio ref={preloadAudioRef} preload="auto" className="hidden" />
+        {audioElements}
 
         {/* Full-width scrubber row (mobile friendly) */}
         <div className="mb-2 flex items-center gap-3 px-1">
