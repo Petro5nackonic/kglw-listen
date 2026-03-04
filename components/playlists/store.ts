@@ -51,6 +51,10 @@ function slotMatchesCanonical(slot: PlaylistSlot, canonical: string): boolean {
   return slot.variants.some((v) => canonicalTrackTitle(v.track) === canonical);
 }
 
+function slotHasPlayableVariant(slot: PlaylistSlot): boolean {
+  return slot.variants.some((v) => Boolean(String(v?.track?.url || "").trim()));
+}
+
 const DEFAULT_ALBUM_SEED_KEY = "kglw.defaultAlbumPlaylistsSeed.v2";
 const DEFAULT_STUDIO_ALBUM_TITLES = [
   "12 Bar Bruise",
@@ -532,7 +536,7 @@ export const usePlaylists = create<PlaylistsState>()(
             (p) =>
               p.name.trim().toLowerCase() === FLIGHT_B741_PLAYLIST_NAME.toLowerCase() &&
               p.slots.length === FLIGHT_B741_TRACK_ORDER.length &&
-              p.slots.every((s) => s.variants.length >= 2),
+              p.slots.every((s) => s.variants.length >= 2 && slotHasPlayableVariant(s)),
           );
           if (existingReady) {
             window.localStorage.setItem(FLIGHT_B741_SEEDED_KEY, "1");
@@ -744,7 +748,8 @@ export const usePlaylists = create<PlaylistsState>()(
               return false;
             }
             if (p.slots.length !== MIND_FUZZ_LIVE_COMP_TRACK_ORDER.length) return false;
-            if (!p.slots.every((s) => s.variants.length >= 2)) return false;
+            if (!p.slots.every((s) => s.variants.length >= 2 && slotHasPlayableVariant(s)))
+              return false;
             const firstFour = p.slots.slice(0, 4);
             if (firstFour.length < 4) return false;
             const chainId = firstFour[0]?.linkGroupId;
@@ -900,7 +905,7 @@ export const usePlaylists = create<PlaylistsState>()(
           if (
             !createdBeforeChain ||
             createdBeforeChain.slots.length !== MIND_FUZZ_LIVE_COMP_TRACK_ORDER.length ||
-            !createdBeforeChain.slots.every((s) => s.variants.length >= 2)
+            !createdBeforeChain.slots.every((s) => s.variants.length >= 2 && slotHasPlayableVariant(s))
           ) {
             get().deletePlaylist(playlistId);
             return;
@@ -921,7 +926,7 @@ export const usePlaylists = create<PlaylistsState>()(
           if (
             !created ||
             created.slots.length !== MIND_FUZZ_LIVE_COMP_TRACK_ORDER.length ||
-            !created.slots.every((s) => s.variants.length >= 2) ||
+            !created.slots.every((s) => s.variants.length >= 2 && slotHasPlayableVariant(s)) ||
             !chainReady
           ) {
             get().deletePlaylist(playlistId);
@@ -954,7 +959,7 @@ export const usePlaylists = create<PlaylistsState>()(
                 pl.source === "prebuilt" &&
                 pl.prebuiltKind === "album-live-comp" &&
                 pl.slots.length > 0 &&
-                pl.slots.every((s) => s.variants.length >= 2),
+                pl.slots.every((s) => s.variants.length >= 2 && slotHasPlayableVariant(s)),
             );
           });
           if (allReady) {
@@ -1127,7 +1132,7 @@ export const usePlaylists = create<PlaylistsState>()(
               existing.source === "prebuilt" &&
               existing.prebuiltKind === "album-live-comp" &&
               existing.slots.length > 0 &&
-              existing.slots.every((s) => s.variants.length >= 2)
+              existing.slots.every((s) => s.variants.length >= 2 && slotHasPlayableVariant(s))
             ) {
               continue;
             }
@@ -1162,7 +1167,7 @@ export const usePlaylists = create<PlaylistsState>()(
             if (
               !created ||
               created.slots.length !== tracks.length ||
-              !created.slots.every((s) => s.variants.length >= 2)
+              !created.slots.every((s) => s.variants.length >= 2 && slotHasPlayableVariant(s))
             ) {
               get().deletePlaylist(playlistId);
               continue;
@@ -1177,7 +1182,7 @@ export const usePlaylists = create<PlaylistsState>()(
                 p.source === "prebuilt" &&
                 p.prebuiltKind === "album-live-comp" &&
                 p.slots.length > 0 &&
-                p.slots.every((s) => s.variants.length >= 2),
+                p.slots.every((s) => s.variants.length >= 2 && slotHasPlayableVariant(s)),
             );
             return Boolean(pl);
           });

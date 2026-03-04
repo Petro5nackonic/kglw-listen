@@ -30,3 +30,8 @@ a {
   color: inherit;
   text-decoration: none;
 }
+
+nextjs-portal {
+  left: unset !important;
+  top: unset !important;
+}

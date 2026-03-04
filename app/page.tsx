@@ -623,6 +623,10 @@ export default function HomePage() {
   const router = useRouter();
   const setQueue = usePlayer((s) => s.setQueue);
   const playlists = usePlaylists((s) => s.playlists);
+  const syncPrebuiltPlaylistsFromServer = usePlaylists((s) => s.syncPrebuiltPlaylistsFromServer);
+  const ensureFlightB741Playlist = usePlaylists((s) => s.ensureFlightB741Playlist);
+  const ensureMindFuzzLiveCompPlaylist = usePlaylists((s) => s.ensureMindFuzzLiveCompPlaylist);
+  const ensureRequestedAlbumPlaylists = usePlaylists((s) => s.ensureRequestedAlbumPlaylists);
   const addTrackToPlaylist = usePlaylists((s) => s.addTrack);
   const createPlaylist = usePlaylists((s) => s.createPlaylist);
   const renamePlaylist = usePlaylists((s) => s.renamePlaylist);
@@ -687,6 +691,11 @@ export default function HomePage() {
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const sortMenuRef = useRef<HTMLDivElement | null>(null);
+  const compCarouselRef = useRef<HTMLDivElement | null>(null);
+  const compDraggingRef = useRef(false);
+  const compDragStartXRef = useRef(0);
+  const compDragStartScrollLeftRef = useRef(0);
+  const [canScrollCompsNext, setCanScrollCompsNext] = useState(false);
   const didHydrateInitialShowsRef = useRef(false);
   const didRunFilterReloadRef = useRef(false);
 
@@ -1059,7 +1068,30 @@ export default function HomePage() {
     }
     return shows;
   }, [shows, showTab, favoriteSet, recentSet, recentShows]);
-  const featuredPlaylists = useMemo(() => playlists.slice(0, 10), [playlists]);
+  const prebuiltPlaylists = useMemo(
+    () =>
+      playlists.filter(
+        (p) =>
+          p.source === "prebuilt" ||
+          p.prebuiltKind === "album-live-comp" ||
+          PREBUILT_PLAYLIST_NAME_SET.has(p.name.trim().toLowerCase()),
+      ),
+    [playlists],
+  );
+  const featuredUserPlaylists = useMemo(
+    () =>
+      playlists
+        .filter(
+          (p) =>
+            !(
+              p.source === "prebuilt" ||
+              p.prebuiltKind === "album-live-comp" ||
+              PREBUILT_PLAYLIST_NAME_SET.has(p.name.trim().toLowerCase())
+            ),
+        )
+        .slice(0, 10),
+    [playlists],
+  );
   const sortLabel = useMemo(() => {
     switch (sort) {
       case "oldest":
@@ -1306,6 +1338,69 @@ export default function HomePage() {
     }
   }, [venueShows, router]);
 
+  useEffect(() => {
+    const el = compCarouselRef.current;
+    if (!el) {
+      setCanScrollCompsNext(false);
+      return;
+    }
+    const update = () => {
+      const maxLeft = Math.max(0, el.scrollWidth - el.clientWidth);
+      setCanScrollCompsNext(el.scrollLeft < maxLeft - 2);
+    };
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    return () => {
+      el.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+    };
+  }, [prebuiltPlaylists.length]);
+
+  function scrollCompsNextPage() {
+    const el = compCarouselRef.current;
+    if (!el) return;
+    const delta = Math.max(320, Math.floor(el.clientWidth * 0.88));
+    el.scrollBy({ left: delta, behavior: "smooth" });
+  }
+
+  function onCompCarouselPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    const el = compCarouselRef.current;
+    if (!el) return;
+    const target = e.target as HTMLElement | null;
+    if (
+      target?.closest(
+        "button, a, input, select, textarea, [role='button'], [data-no-drag]",
+      )
+    ) {
+      return;
+    }
+    compDraggingRef.current = true;
+    compDragStartXRef.current = e.clientX;
+    compDragStartScrollLeftRef.current = el.scrollLeft;
+    el.classList.add("cursor-grabbing");
+    try {
+      el.setPointerCapture(e.pointerId);
+    } catch {
+      // Ignore if pointer capture is unavailable.
+    }
+  }
+
+  function onCompCarouselPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (!compDraggingRef.current) return;
+    const el = compCarouselRef.current;
+    if (!el) return;
+    const dx = e.clientX - compDragStartXRef.current;
+    el.scrollLeft = compDragStartScrollLeftRef.current - dx;
+  }
+
+  function onCompCarouselPointerEnd() {
+    compDraggingRef.current = false;
+    const el = compCarouselRef.current;
+    if (!el) return;
+    el.classList.remove("cursor-grabbing");
+  }
+
   function persistFavorites(next: string[]) {
     setFavoriteShows(next);
     localStorage.setItem(FAVORITE_SHOWS_KEY, JSON.stringify(next));
@@ -1472,12 +1567,40 @@ export default function HomePage() {
     setQueue(queue, startIndex < 0 ? 0 : startIndex);
   }
 
-  function playPlaylistFromHome(playlistId: string) {
+  async function playPlaylistFromHome(playlistId: string) {
     const playlist = playlists.find((pl) => pl.id === playlistId);
     if (!playlist) return;
-    const queue = playlist.slots
-      .map((slot) => slot.variants[0]?.track)
-      .filter((track): track is Track => Boolean(track?.url));
+
+    const isPrebuilt =
+      playlist.source === "prebuilt" ||
+      playlist.prebuiltKind === "album-live-comp" ||
+      PREBUILT_PLAYLIST_NAME_SET.has(playlist.name.trim().toLowerCase());
+
+    const buildQueue = (pl: typeof playlist): Track[] =>
+      pl.slots
+        .map((slot) => {
+          const playable = slot.variants
+            .map((v) => v.track)
+            .filter((t): t is Track => Boolean(String(t?.url || "").trim()));
+          if (playable.length === 0) return null;
+          if (!isPrebuilt) return playable[0];
+          const randomIndex = Math.floor(Math.random() * playable.length);
+          return playable[randomIndex] || playable[0];
+        })
+        .filter((track): track is Track => Boolean(track?.url));
+
+    let queue = buildQueue(playlist);
+    if (isPrebuilt && queue.length === 0) {
+      await syncPrebuiltPlaylistsFromServer();
+      await ensureFlightB741Playlist();
+      await ensureMindFuzzLiveCompPlaylist();
+      await ensureRequestedAlbumPlaylists();
+      const refreshed = usePlaylists
+        .getState()
+        .playlists.find((pl) => pl.id === playlistId || pl.name === playlist.name);
+      if (refreshed) queue = buildQueue(refreshed);
+    }
+
     if (queue.length === 0) return;
     setQueue(queue, 0);
   }
@@ -1502,6 +1625,126 @@ export default function HomePage() {
 
       <div className="mx-auto w-full max-w-[1140px] px-4 pb-28 pt-[74px] md:px-6">
         <div className="space-y-10">
+          {prebuiltPlaylists.length > 0 ? (
+            <section>
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-[34px] leading-none font-semibold">KGLW Live Comps.</h2>
+                <Link
+                  href="/playlists"
+                  className="inline-flex items-center gap-2 rounded-full border-2 border-[#5a22c9] px-4 py-2 text-sm"
+                >
+                  <span>See All</span>
+                  <span className="text-[13px]">›</span>
+                </Link>
+              </div>
+
+              <div className="relative">
+              <div
+                ref={compCarouselRef}
+                className="cursor-grab overflow-x-auto pb-1 select-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                onPointerDown={onCompCarouselPointerDown}
+                onPointerMove={onCompCarouselPointerMove}
+                onPointerUp={onCompCarouselPointerEnd}
+                onPointerCancel={onCompCarouselPointerEnd}
+                onPointerLeave={onCompCarouselPointerEnd}
+              >
+                <div className="grid w-max auto-cols-[minmax(300px,300px)] grid-flow-col grid-rows-2 gap-3 md:auto-cols-[minmax(340px,340px)]">
+                  {prebuiltPlaylists.map((p) => {
+                    const versions = p.slots.reduce((sum, slot) => sum + slot.variants.length, 0);
+                    const previewThumbs = p.slots
+                      .flatMap((slot) => slot.variants.map((v) => v.track))
+                      .slice(0, 4)
+                      .map((t) => {
+                        const id = getArchiveIdentifier(t.url);
+                        if (t.artwork) return t.artwork;
+                        if (!id) return DEFAULT_ARTWORK_SRC;
+                        return `https://archive.org/services/img/${encodeURIComponent(id)}`;
+                      });
+                    while (previewThumbs.length < 4) previewThumbs.push(DEFAULT_ARTWORK_SRC);
+                    const chainCount = new Set(p.slots.map((s) => s.linkGroupId).filter(Boolean)).size;
+                    const totalSeconds = p.slots.reduce(
+                      (sum, slot) => sum + (parseLengthToSeconds(slot.variants[0]?.track.length) ?? 0),
+                      0,
+                    );
+                    const duration = formatShowLength(totalSeconds);
+                    return (
+                      <div
+                        key={p.id}
+                        className={`relative rounded-[16px] border border-[#7c50d8]/65 bg-linear-to-br from-[#1b0d33] via-[#180b2d] to-[#0f0820] p-3 backdrop-blur-[6px] ${
+                          homePlaylistMenuId === p.id ? "z-[90]" : "z-0"
+                        }`}
+                      >
+                        <div className="mb-2 inline-flex rounded-full border border-[#8f68dd]/60 bg-[#5A22C9]/20 px-2 py-1 text-[10px] tracking-[0.16em] text-[#d8c3ff] uppercase">
+                          Pre-built live comp
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <div className="flex min-w-0 flex-1 items-center gap-3">
+                            <div className="grid w-20 shrink-0 grid-cols-2 gap-1.5">
+                              {previewThumbs.map((src, idx) => (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  key={`${p.id}-home-thumb-${idx}`}
+                                  src={src}
+                                  alt=""
+                                  className="aspect-square w-full rounded-[8px] border border-white/15 object-cover"
+                                />
+                              ))}
+                            </div>
+                            <Link href={`/playlists/${p.id}`} className="min-w-0 flex-1">
+                              <div className="truncate text-[18px] font-medium text-white [font-family:var(--font-roboto-condensed)]">
+                                {p.name}
+                              </div>
+                              <div className="mt-1 flex flex-wrap items-center gap-x-[6px] text-[12px] font-medium text-white/70 [font-family:var(--font-roboto-condensed)]">
+                                <span>
+                                  {p.slots.length} Track{p.slots.length === 1 ? "" : "s"}
+                                </span>
+                                <span className="size-[3px] rounded-full bg-white/60" />
+                                <span>
+                                  {versions} Version{versions === 1 ? "" : "s"}
+                                </span>
+                                <span className="size-[3px] rounded-full bg-white/60" />
+                                <span>
+                                  {chainCount} Chain{chainCount === 1 ? "" : "s"}
+                                </span>
+                                {duration ? (
+                                  <>
+                                    <span className="size-[3px] rounded-full bg-white/60" />
+                                    <span>{duration}</span>
+                                  </>
+                                ) : null}
+                              </div>
+                            </Link>
+                          </div>
+                          <div className="ml-4 flex shrink-0 items-center gap-4 text-white">
+                            <button
+                              type="button"
+                              aria-label={`Play playlist ${p.name}`}
+                              className="text-[26px] text-white"
+                              onClick={() => playPlaylistFromHome(p.id)}
+                            >
+                              <FontAwesomeIcon icon={faCirclePlay} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              {canScrollCompsNext ? (
+                <button
+                  type="button"
+                  aria-label="Next live comps"
+                  className="absolute top-1/2 right-0 hidden -translate-y-1/2 rounded-full border border-white/25 bg-black/55 px-3 py-2 text-sm text-white shadow-[0_8px_18px_rgba(0,0,0,0.35)] backdrop-blur md:flex"
+                  onClick={scrollCompsNextPage}
+                >
+                  ›
+                </button>
+              ) : null}
+              </div>
+            </section>
+          ) : null}
+
           <section>
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-[34px] leading-none font-semibold">Playlists</h2>
@@ -1524,7 +1767,7 @@ export default function HomePage() {
             )}
 
             <div className="space-y-2">
-              {featuredPlaylists.length === 0 ? (
+              {featuredUserPlaylists.length === 0 ? (
                 <button
                   type="button"
                   className="flex w-full items-center justify-center rounded-[16px] border border-white/20 bg-white/5 p-3 backdrop-blur-[6px]"
@@ -1541,11 +1784,8 @@ export default function HomePage() {
                   </div>
                 </button>
               ) : (
-                featuredPlaylists.map((p) => {
-                  const isPrebuilt =
-                    p.source === "prebuilt" ||
-                    p.prebuiltKind === "album-live-comp" ||
-                    PREBUILT_PLAYLIST_NAME_SET.has(p.name.trim().toLowerCase());
+                featuredUserPlaylists.map((p) => {
+                  const isPrebuilt = false;
                   const versions = p.slots.reduce(
                     (sum, slot) => sum + slot.variants.length,
                     0,
