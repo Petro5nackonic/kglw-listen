@@ -55,6 +55,13 @@ function slotHasPlayableVariant(slot: PlaylistSlot): boolean {
   return slot.variants.some((v) => Boolean(String(v?.track?.url || "").trim()));
 }
 
+function isPrebuiltPlaylist(playlist: Pick<Playlist, "source" | "prebuiltKind"> | undefined): boolean {
+  return Boolean(
+    playlist &&
+      (playlist.source === "prebuilt" || playlist.prebuiltKind === "album-live-comp"),
+  );
+}
+
 const DEFAULT_ALBUM_SEED_KEY = "kglw.defaultAlbumPlaylistsSeed.v2";
 const DEFAULT_STUDIO_ALBUM_TITLES = [
   "12 Bar Bruise",
@@ -1667,9 +1674,35 @@ export const usePlaylists = create<PlaylistsState>()(
       version: 3,
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
-        playlists: state.playlists,
+        // Persist user playlists only. Prebuilt entries are reconstructed/synced.
+        playlists: state.playlists.filter((p) => !isPrebuiltPlaylist(p)),
         dismissedPrebuiltNames: state.dismissedPrebuiltNames,
       }),
+      merge: (persisted: unknown, current: PlaylistsState): PlaylistsState => {
+        const data = (persisted || {}) as {
+          playlists?: LegacyPlaylist[];
+          dismissedPrebuiltNames?: string[];
+        };
+        const persistedPlaylists = Array.isArray(data.playlists)
+          ? data.playlists.map(migratePlaylist)
+          : [];
+        const userPlaylists = persistedPlaylists.filter((p) => !isPrebuiltPlaylist(p));
+        const seededPrebuilt = current.playlists.filter((p) => isPrebuiltPlaylist(p));
+        const dismissedPrebuiltNames = Array.isArray(data.dismissedPrebuiltNames)
+          ? Array.from(
+              new Set(
+                data.dismissedPrebuiltNames
+                  .map((v) => String(v || "").trim().toLowerCase())
+                  .filter(Boolean),
+              ),
+            )
+          : current.dismissedPrebuiltNames;
+        return {
+          ...current,
+          playlists: [...seededPrebuilt, ...userPlaylists],
+          dismissedPrebuiltNames,
+        };
+      },
       migrate: (persisted: unknown) => {
         const data = (persisted || {}) as {
           playlists?: LegacyPlaylist[];
@@ -1690,7 +1723,7 @@ export const usePlaylists = create<PlaylistsState>()(
           };
         }
         return {
-          playlists: playlists.map(migratePlaylist),
+          playlists: playlists.map(migratePlaylist).filter((p) => !isPrebuiltPlaylist(p)),
           dismissedPrebuiltNames: Array.from(new Set(dismissedPrebuiltNames)),
         };
       },
