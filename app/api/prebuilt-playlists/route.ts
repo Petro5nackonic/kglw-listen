@@ -215,8 +215,45 @@ async function fetchLiveVariants(origin: string, songName: string): Promise<Trac
     // Single cheap fallback attempt using one top identifier only.
     const first = items[0];
     const fallbackId = String(first?.defaultId || "").trim();
-    if (!fallbackId) return [];
-    const resolved = await resolvePlayableUrl(origin, fallbackId, songName);
+    if (fallbackId) {
+      const resolved = await resolvePlayableUrl(origin, fallbackId, songName);
+      if (resolved?.url) {
+        return [
+          {
+            title: songName,
+            url: resolved.url,
+            length: resolved.length,
+            track: "1",
+            showKey: String(first?.showKey || "").trim() || undefined,
+            showDate: String(first?.showDate || "").trim() || undefined,
+            venueText: String(first?.title || "").trim() || undefined,
+            artwork: String(first?.artwork || "").trim() || undefined,
+          },
+        ];
+      }
+    }
+
+    // Last-chance fallback: one direct IA identifier search, then resolve one playable URL.
+    const token = normalizeSongToken(songName).split(" ").find(Boolean) || "";
+    if (!token) return [];
+    const q = [
+      "mediatype:(audio OR etree)",
+      "(collection:(KingGizzardAndTheLizardWizard) OR identifier:(kglw*))",
+      `text:${token}*`,
+    ].join(" AND ");
+    const searchUrl =
+      "https://archive.org/advancedsearch.php" +
+      `?q=${encodeURIComponent(q)}` +
+      "&fl[]=identifier&fl[]=title&rows=1&page=1&output=json&sort[]=downloads%20desc";
+    const searchRes = await fetch(searchUrl, { cache: "no-store" });
+    if (!searchRes.ok) return [];
+    const searchData = (await searchRes.json()) as {
+      response?: { docs?: Array<{ identifier?: string; title?: string }> };
+    };
+    const doc = Array.isArray(searchData?.response?.docs) ? searchData.response.docs[0] : undefined;
+    const id = String(doc?.identifier || "").trim();
+    if (!id) return [];
+    const resolved = await resolvePlayableUrl(origin, id, songName);
     if (!resolved?.url) return [];
     return [
       {
@@ -224,10 +261,7 @@ async function fetchLiveVariants(origin: string, songName: string): Promise<Trac
         url: resolved.url,
         length: resolved.length,
         track: "1",
-        showKey: String(first?.showKey || "").trim() || undefined,
-        showDate: String(first?.showDate || "").trim() || undefined,
-        venueText: String(first?.title || "").trim() || undefined,
-        artwork: String(first?.artwork || "").trim() || undefined,
+        venueText: String(doc?.title || "").trim() || undefined,
       },
     ];
   } catch {
@@ -254,8 +288,8 @@ async function buildPayload(origin: string): Promise<CachedPayload> {
     const slots = slotsSettled
       .map((s) => (s.status === "fulfilled" ? s.value : null))
       .filter(Boolean) as ApiPrebuiltSlot[];
-    // Allow partial albums so users always get playable content.
-    if (slots.length < 3) continue;
+    // Allow very partial albums so users always get some playable content.
+    if (slots.length < 1) continue;
     playlists.push({
       name: def.name,
       prebuiltKind: "album-live-comp",
