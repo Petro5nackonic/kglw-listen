@@ -68,6 +68,14 @@ function getArchiveIdentifier(url?: string): string {
   return match?.[1] ? decodeURIComponent(match[1]) : "";
 }
 
+function getTrackThumb(url?: string, artwork?: string): string {
+  const fromArtwork = String(artwork || "").trim();
+  if (fromArtwork) return fromArtwork;
+  const id = getArchiveIdentifier(url);
+  if (!id) return "/api/default-artwork";
+  return `https://archive.org/services/img/${encodeURIComponent(id)}`;
+}
+
 function tryNormalizeShowDate(input: string): string {
   if (!input) return "";
 
@@ -416,6 +424,7 @@ export default function PlaylistDetailPage() {
     () => (playlist?.slots || []).reduce((sum, s) => sum + s.variants.length, 0),
     [playlist],
   );
+  const isPrebuiltPlaylist = playlist?.source === "prebuilt";
   const totalDurationLabel = useMemo(() => {
     const totalSeconds = playableSlots.reduce(
       (sum, item) => sum + parseTrackSeconds(item.track.length),
@@ -429,6 +438,14 @@ export default function PlaylistDetailPage() {
     if (!identifier) return "";
     return `https://archive.org/services/img/${encodeURIComponent(identifier)}`;
   }, [playableSlots]);
+  const prebuiltPreviewThumbs = useMemo(() => {
+    if (!isPrebuiltPlaylist || !playlist) return [] as string[];
+    const thumbs = playlist.slots
+      .flatMap((slot) => slot.variants.map((v) => getTrackThumb(v.track.url, v.track.artwork)))
+      .slice(0, 4);
+    while (thumbs.length < 4) thumbs.push("/api/default-artwork");
+    return thumbs;
+  }, [isPrebuiltPlaylist, playlist]);
   const renderItems = useMemo<PlaylistRenderItem[]>(() => {
     const out: PlaylistRenderItem[] = [];
     let i = 0;
@@ -763,9 +780,16 @@ export default function PlaylistDetailPage() {
           <section className="mt-9 isolate pb-4">
             <div className="relative z-[2] mb-[-16px] rounded-[16px] border border-white/20 bg-white/5 p-4 backdrop-blur-[6px]">
               <div className="flex items-start justify-between gap-3">
-                <h1 className="truncate text-[20px] leading-[1.05] font-medium [font-family:var(--font-roboto)]">
-                  {playlist.name}
-                </h1>
+                <div className="min-w-0">
+                  <h1 className="truncate text-[20px] leading-[1.05] font-medium [font-family:var(--font-roboto)]">
+                    {playlist.name}
+                  </h1>
+                  {isPrebuiltPlaylist ? (
+                    <div className="mt-2 inline-flex rounded-full border border-[#8f68dd]/60 bg-[#5A22C9]/20 px-2 py-1 text-[10px] tracking-[0.16em] text-[#d8c3ff] uppercase">
+                      Pre-built live comp
+                    </div>
+                  ) : null}
+                </div>
                 <div className="relative flex items-center gap-2">
                   <FontAwesomeIcon icon={faBookmark} className="mt-1 text-[20px] text-white/90" />
                   <button
@@ -846,6 +870,19 @@ export default function PlaylistDetailPage() {
                 <span className="size-[4px] shrink-0 rounded-full bg-white/55" />
                 <span>{totalDurationLabel}</span>
               </div>
+              {isPrebuiltPlaylist ? (
+                <div className="mt-4 grid w-24 grid-cols-2 gap-1.5">
+                  {prebuiltPreviewThumbs.map((src, idx) => (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      key={`${playlist.id}-preview-${idx}`}
+                      src={src}
+                      alt=""
+                      className="aspect-square w-full rounded-[8px] border border-white/15 object-cover"
+                    />
+                  ))}
+                </div>
+              ) : null}
             </div>
             {playableSlots.length > 0 && (
               <div className="relative z-[1] -mt-[1px] mb-[-16px] rounded-bl-[16px] rounded-br-[16px] border border-white/20 px-4 pb-3 pt-7 backdrop-blur-[6px]">

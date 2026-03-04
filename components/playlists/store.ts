@@ -8,8 +8,15 @@ import { toDisplayTrackTitle } from "@/utils/displayTitle";
 
 type PlaylistsState = {
   playlists: Playlist[];
-  createPlaylist: (name: string) => string;
+  createPlaylist: (
+    name: string,
+    options?: { source?: "user" | "prebuilt"; prebuiltKind?: "album-live-comp" },
+  ) => string;
   createDemoPlaylist: () => string;
+  ensureFlightB741Playlist: () => Promise<void>;
+  ensureMindFuzzLiveCompPlaylist: () => Promise<void>;
+  ensureRequestedAlbumPlaylists: () => Promise<void>;
+  seedDefaultAlbumPlaylists: () => Promise<void>;
   renamePlaylist: (playlistId: string, name: string) => void;
   deletePlaylist: (playlistId: string) => void;
 
@@ -42,6 +49,142 @@ function slotMatchesCanonical(slot: PlaylistSlot, canonical: string): boolean {
   return slot.variants.some((v) => canonicalTrackTitle(v.track) === canonical);
 }
 
+const DEFAULT_ALBUM_SEED_KEY = "kglw.defaultAlbumPlaylistsSeed.v2";
+const DEFAULT_STUDIO_ALBUM_TITLES = [
+  "12 Bar Bruise",
+  "Eyes Like the Sky",
+  "Float Along — Fill Your Lungs",
+  "Oddments",
+  "I'm in Your Mind Fuzz",
+  "Quarters!",
+  "Paper Mache Dream Balloon",
+  "Nonagon Infinity",
+  "Flying Microtonal Banana",
+  "Murder of the Universe",
+  "Sketches of Brunswick East",
+  "Polygondwanaland",
+  "Gumboot Soup",
+  "Fishing for Fishies",
+  "Infest the Rats' Nest",
+  "K.G.",
+  "L.W.",
+  "Butterfly 3000",
+  "Made in Timeland",
+  "Omnium Gatherum",
+  "Ice, Death, Planets, Lungs, Mushrooms And Lava",
+  "Laminated Denim",
+  "Changes",
+  "PetroDragonic Apocalypse",
+  "The Silver Cord",
+];
+const FLIGHT_B741_PLAYLIST_NAME = "Flight B741 Live Comp.";
+const FLIGHT_B741_SEEDED_KEY = "kglw.flightB741Seeded.v1";
+const MIND_FUZZ_LIVE_COMP_NAME = "I'm In Your Mind Fuzz Live Comp.";
+const MIND_FUZZ_LIVE_COMP_SEEDED_KEY = "kglw.mindFuzzLiveCompSeeded.v1";
+const MIND_FUZZ_LIVE_COMP_TRACK_ORDER = [
+  "I'm In Your Mind",
+  "I'm Not In Your Mind",
+  "Cellophane",
+  "I'm In Your Mind Fuzz",
+  "Empty",
+  "Hot Water",
+  "Am I In Heaven ?",
+  "Slow Jam 1",
+  "Satan Speeds Up",
+  "Her And I (Slow Jam 2)",
+];
+const REQUESTED_ALBUMS_SEEDED_KEY = "kglw.requestedAlbumPlaylistsSeed.v1";
+const REQUESTED_PREBUILT_ALBUMS = [
+  "Infest the Rats' Nest",
+  "I'm in Your Mind Fuzz",
+  "Nonagon Infinity",
+  "PetroDragonic Apocalypse",
+  "The Silver Chord",
+];
+const REQUESTED_ALBUM_TRACK_FALLBACKS: Record<string, string[]> = {
+  "infest the rats' nest": [
+    "Planet B",
+    "Mars for the Rich",
+    "Organ Farmer",
+    "Superbug",
+    "Venusian 1",
+    "Perihelion",
+    "Venusian 2",
+    "Self-Immolate",
+    "Hell",
+  ],
+  "i'm in your mind fuzz": [
+    "I'm in Your Mind",
+    "I'm Not in Your Mind",
+    "Cellophane",
+    "I'm in Your Mind Fuzz",
+    "Empty",
+    "Hot Water",
+    "Am I in Heaven?",
+    "Slow Jam 1",
+    "Satan Speeds Up",
+    "Her and I (Slow Jam 2)",
+  ],
+  "nonagon infinity": [
+    "Robot Stop",
+    "Big Fig Wasp",
+    "Gamma Knife",
+    "People-Vultures",
+    "Mr. Beat",
+    "Evil Death Roll",
+    "Invisible Face",
+    "Wah Wah",
+    "Road Train",
+  ],
+  "petrodragonic apocalypse": [
+    "Motor Spirit",
+    "Supercell",
+    "Converge",
+    "Witchcraft",
+    "Gila Monster",
+    "Dragon",
+    "Flamethrower",
+  ],
+  "the silver chord": [
+    "Theia",
+    "The Silver Cord",
+    "Set",
+    "Chang'e",
+    "Gilgamesh",
+    "Swan Song",
+    "Extinction",
+  ],
+};
+const FLIGHT_B741_TRACK_ORDER = [
+  "Mirage City",
+  "Antarctica",
+  "Raw Feel",
+  "Field of Vision",
+  "Hog Calling Contest",
+  "Le Risque",
+  "Flight b741",
+  "Sad Pilot",
+  "Rats in the Sky",
+  "Daily Blues",
+];
+
+let defaultAlbumSeedInFlight: Promise<void> | null = null;
+let flightB741SeedInFlight: Promise<void> | null = null;
+let mindFuzzLiveCompSeedInFlight: Promise<void> | null = null;
+let requestedAlbumsSeedInFlight: Promise<void> | null = null;
+
+function toApiSlug(input: string): string {
+  return encodeURIComponent(String(input || "").trim()).replace(/%20/g, "+");
+}
+
+function normalizeSongToken(input: string): string {
+  return String(input || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 type LegacyPlaylistTrack = {
   id: string;
   addedAt: number;
@@ -53,17 +196,27 @@ type LegacyPlaylist = {
   name: string;
   createdAt: number;
   updatedAt: number;
+  source?: "user" | "prebuilt";
+  prebuiltKind?: "album-live-comp";
   tracks?: LegacyPlaylistTrack[];
   slots?: Playlist["slots"];
 };
 
 function migratePlaylist(raw: LegacyPlaylist): Playlist {
+  const inferredPrebuilt =
+    !raw.source &&
+    String(raw.name || "").trim().toLowerCase() === FLIGHT_B741_PLAYLIST_NAME.toLowerCase();
+  const source = raw.source || (inferredPrebuilt ? "prebuilt" : "user");
+  const prebuiltKind = raw.prebuiltKind || (inferredPrebuilt ? "album-live-comp" : undefined);
+
   if (Array.isArray(raw.slots)) {
     return {
       id: raw.id,
       name: raw.name,
       createdAt: raw.createdAt,
       updatedAt: raw.updatedAt,
+      source,
+      prebuiltKind,
       slots: raw.slots,
     };
   }
@@ -88,6 +241,8 @@ function migratePlaylist(raw: LegacyPlaylist): Playlist {
     name: raw.name,
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,
+    source,
+    prebuiltKind,
     slots,
   };
 }
@@ -97,7 +252,7 @@ export const usePlaylists = create<PlaylistsState>()(
     (set, get) => ({
       playlists: [],
 
-      createPlaylist: (name) => {
+      createPlaylist: (name, options) => {
         const normalized = normalizeName(name);
         const id = safeUUID();
         const now = Date.now();
@@ -107,6 +262,8 @@ export const usePlaylists = create<PlaylistsState>()(
           name: normalized || "New playlist",
           createdAt: now,
           updatedAt: now,
+          source: options?.source || "user",
+          prebuiltKind: options?.prebuiltKind,
           slots: [],
         };
 
@@ -130,6 +287,7 @@ export const usePlaylists = create<PlaylistsState>()(
           name: "Demo: Fused + Chained",
           createdAt: now,
           updatedAt: now,
+          source: "user",
           slots: [
             {
               id: safeUUID(),
@@ -219,6 +377,829 @@ export const usePlaylists = create<PlaylistsState>()(
 
         set({ playlists: [playlist, ...get().playlists] });
         return id;
+      },
+
+      ensureFlightB741Playlist: async () => {
+        if (typeof window === "undefined") return;
+        if (flightB741SeedInFlight) return flightB741SeedInFlight;
+        if (window.localStorage.getItem(FLIGHT_B741_SEEDED_KEY) === "1") return;
+
+        flightB741SeedInFlight = (async () => {
+          const existingReady = get().playlists.find(
+            (p) =>
+              p.name.trim().toLowerCase() === FLIGHT_B741_PLAYLIST_NAME.toLowerCase() &&
+              p.slots.length === FLIGHT_B741_TRACK_ORDER.length &&
+              p.slots.every((s) => s.variants.length >= 2),
+          );
+          if (existingReady) {
+            window.localStorage.setItem(FLIGHT_B741_SEEDED_KEY, "1");
+            return;
+          }
+
+          async function fetchMostPlayedVariants(songName: string): Promise<Track[]> {
+            try {
+              async function resolvePlayableUrl(
+                identifier: string,
+                preferredTitle: string,
+              ): Promise<{ url: string; length?: string; title?: string } | null> {
+                try {
+                  const id = String(identifier || "").trim();
+                  if (!id) return null;
+                  const res = await fetch(`/api/ia/show-metadata?id=${encodeURIComponent(id)}`, {
+                    cache: "no-store",
+                  });
+                  if (!res.ok) return null;
+                  const data = (await res.json()) as {
+                    files?: Array<{ name?: string; title?: string; length?: string }>;
+                  };
+                  const files = Array.isArray(data?.files) ? data.files : [];
+                  const token = normalizeSongToken(preferredTitle);
+                  const audio = files.filter((f) => {
+                    const name = String(f?.name || "").toLowerCase();
+                    return (
+                      name.endsWith(".mp3") ||
+                      name.endsWith(".flac") ||
+                      name.endsWith(".ogg") ||
+                      name.endsWith(".m4a") ||
+                      name.endsWith(".wav")
+                    );
+                  });
+                  if (audio.length === 0) return null;
+                  const exact =
+                    audio.find((f) => {
+                      const hay = normalizeSongToken(`${f?.title || ""} ${f?.name || ""}`);
+                      return token && hay && (hay.includes(token) || token.includes(hay));
+                    }) || audio[0];
+                  const fileName = String(exact?.name || "").trim();
+                  if (!fileName) return null;
+                  return {
+                    url: `https://archive.org/download/${encodeURIComponent(id)}/${encodeURIComponent(fileName)}`,
+                    length: String(exact?.length || "").trim() || undefined,
+                    title: String(exact?.title || "").trim() || undefined,
+                  };
+                } catch {
+                  return null;
+                }
+              }
+
+              const url = `/api/ia/shows?page=1&sort=most_played&query=${encodeURIComponent(songName)}`;
+              const res = await fetch(url, { cache: "no-store" });
+              if (!res.ok) return [];
+              const data = (await res.json()) as {
+                song?: {
+                  items?: Array<{
+                    defaultId?: string;
+                    showKey?: string;
+                    showDate?: string;
+                    title?: string;
+                    artwork?: string;
+                    matchedSongTitle?: string | null;
+                    matchedSongLength?: string | null;
+                    matchedSongUrl?: string | null;
+                  }>;
+                };
+              };
+              const items = Array.isArray(data?.song?.items) ? data.song.items : [];
+              const queryToken = normalizeSongToken(songName);
+              const strong: Track[] = [];
+              const weak: Track[] = [];
+              const seenUrl = new Set<string>();
+              for (const item of items) {
+                let resolvedUrl = String(item?.matchedSongUrl || "").trim();
+                let resolvedLength = String(item?.matchedSongLength || "").trim() || undefined;
+                let resolvedTitle = String(item?.matchedSongTitle || "").trim() || undefined;
+                if (!resolvedUrl && item?.defaultId) {
+                  const fallback = await resolvePlayableUrl(item.defaultId, songName);
+                  if (fallback?.url) {
+                    resolvedUrl = fallback.url;
+                    resolvedLength = fallback.length || resolvedLength;
+                    resolvedTitle = fallback.title || resolvedTitle;
+                  }
+                }
+                if (!resolvedUrl || seenUrl.has(resolvedUrl)) continue;
+                const matchedTitle = String(item?.matchedSongTitle || "");
+                const matchedNorm = normalizeSongToken(matchedTitle);
+                seenUrl.add(resolvedUrl);
+                // Use the canonical studio title for all variants so they fuse into one slot.
+                const candidate: Track = {
+                  title: songName,
+                  url: resolvedUrl,
+                  length: resolvedLength,
+                  track: "1",
+                  showKey: String(item?.showKey || "").trim() || undefined,
+                  showDate: String(item?.showDate || "").trim() || undefined,
+                  venueText: String(item?.title || "").trim() || undefined,
+                  artwork: String(item?.artwork || "").trim() || undefined,
+                };
+                if (
+                  queryToken &&
+                  matchedNorm &&
+                  (matchedNorm.includes(queryToken) || queryToken.includes(matchedNorm))
+                ) {
+                  strong.push(candidate);
+                } else {
+                  weak.push(candidate);
+                }
+                if (strong.length + weak.length >= 12) break;
+              }
+              const merged = strong.concat(weak).slice(0, 5);
+              if (merged.length >= 2) return merged;
+
+              // Fallback: direct IA identifier search by song text, then resolve playable URL.
+              const firstToken = queryToken.split(" ").filter(Boolean)[0] || queryToken;
+              if (!firstToken) return merged;
+              const q = [
+                "mediatype:(audio OR etree)",
+                "(collection:(KingGizzardAndTheLizardWizard) OR identifier:(kglw*))",
+                `text:${firstToken}*`,
+              ].join(" AND ");
+              const searchUrl =
+                "https://archive.org/advancedsearch.php" +
+                `?q=${encodeURIComponent(q)}` +
+                "&fl[]=identifier&rows=60&page=1&output=json&sort[]=downloads%20desc";
+              const searchRes = await fetch(searchUrl, { cache: "no-store" });
+              if (!searchRes.ok) return merged;
+              const searchData = (await searchRes.json()) as {
+                response?: { docs?: Array<{ identifier?: string }> };
+              };
+              const docs = Array.isArray(searchData?.response?.docs)
+                ? searchData.response.docs
+                : [];
+              const fallbackOut = merged.slice();
+              for (const doc of docs) {
+                if (fallbackOut.length >= 5) break;
+                const identifier = String(doc?.identifier || "").trim();
+                if (!identifier) continue;
+                const fallback = await resolvePlayableUrl(identifier, songName);
+                if (!fallback?.url || seenUrl.has(fallback.url)) continue;
+                seenUrl.add(fallback.url);
+                fallbackOut.push({
+                  title: songName,
+                  url: fallback.url,
+                  length: fallback.length,
+                  track: "1",
+                });
+              }
+              return fallbackOut.slice(0, 5);
+            } catch {
+              return [];
+            }
+          }
+
+          // Build deterministic track -> variants map in album order.
+          const variantsByTrack: Track[][] = [];
+          for (const song of FLIGHT_B741_TRACK_ORDER) {
+            const variants = await fetchMostPlayedVariants(song);
+            if (variants.length < 1) {
+              variantsByTrack.length = 0;
+              break;
+            }
+            variantsByTrack.push(variants.slice(0, 5));
+          }
+          if (variantsByTrack.length !== FLIGHT_B741_TRACK_ORDER.length) return;
+
+          const existingByName = new Map(
+            get().playlists.map((p) => [p.name.trim().toLowerCase(), p]),
+          );
+          const existing =
+            existingByName.get(FLIGHT_B741_PLAYLIST_NAME.toLowerCase()) ||
+            existingByName.get("flight b741");
+          if (existing) get().deletePlaylist(existing.id);
+
+          const playlistId = get().createPlaylist(FLIGHT_B741_PLAYLIST_NAME, {
+            source: "prebuilt",
+            prebuiltKind: "album-live-comp",
+          });
+          for (const variants of variantsByTrack) {
+            get().addTrack(playlistId, variants[0]);
+            const fused = variants.length >= 2 ? variants : [variants[0], variants[0]];
+            for (const variant of fused.slice(1)) {
+              get().addTrack(playlistId, variant);
+            }
+          }
+
+          const created = get().playlists.find((p) => p.id === playlistId);
+          if (!created || created.slots.length !== FLIGHT_B741_TRACK_ORDER.length) {
+            get().deletePlaylist(playlistId);
+            return;
+          }
+          window.localStorage.setItem(FLIGHT_B741_SEEDED_KEY, "1");
+        })().finally(() => {
+          flightB741SeedInFlight = null;
+        });
+
+        return flightB741SeedInFlight;
+      },
+
+      ensureMindFuzzLiveCompPlaylist: async () => {
+        if (typeof window === "undefined") return;
+        if (mindFuzzLiveCompSeedInFlight) return mindFuzzLiveCompSeedInFlight;
+
+        mindFuzzLiveCompSeedInFlight = (async () => {
+          const existingReady = get().playlists.find((p) => {
+            if (p.name.trim().toLowerCase() !== MIND_FUZZ_LIVE_COMP_NAME.toLowerCase()) {
+              return false;
+            }
+            if (p.slots.length !== MIND_FUZZ_LIVE_COMP_TRACK_ORDER.length) return false;
+            if (!p.slots.every((s) => s.variants.length >= 2)) return false;
+            const firstFour = p.slots.slice(0, 4);
+            if (firstFour.length < 4) return false;
+            const chainId = firstFour[0]?.linkGroupId;
+            if (!chainId) return false;
+            return firstFour.every((s, idx) => s.linkGroupId === chainId && s.chainOrder === idx + 1);
+          });
+          if (existingReady) {
+            window.localStorage.setItem(MIND_FUZZ_LIVE_COMP_SEEDED_KEY, "1");
+            return;
+          }
+          if (window.localStorage.getItem(MIND_FUZZ_LIVE_COMP_SEEDED_KEY) === "1") {
+            window.localStorage.removeItem(MIND_FUZZ_LIVE_COMP_SEEDED_KEY);
+          }
+
+          const existingByName = get().playlists.find(
+            (p) => p.name.trim().toLowerCase() === MIND_FUZZ_LIVE_COMP_NAME.toLowerCase(),
+          );
+          if (existingByName) get().deletePlaylist(existingByName.id);
+
+          async function fetchLiveVariants(songName: string): Promise<Track[]> {
+            try {
+              async function resolvePlayableUrl(
+                identifier: string,
+                preferredTitle: string,
+              ): Promise<{ url: string; length?: string; title?: string } | null> {
+                try {
+                  const id = String(identifier || "").trim();
+                  if (!id) return null;
+                  const res = await fetch(`/api/ia/show-metadata?id=${encodeURIComponent(id)}`, {
+                    cache: "no-store",
+                  });
+                  if (!res.ok) return null;
+                  const data = (await res.json()) as {
+                    files?: Array<{ name?: string; title?: string; length?: string }>;
+                  };
+                  const files = Array.isArray(data?.files) ? data.files : [];
+                  const token = normalizeSongToken(preferredTitle);
+                  const audio = files.filter((f) => {
+                    const name = String(f?.name || "").toLowerCase();
+                    return (
+                      name.endsWith(".mp3") ||
+                      name.endsWith(".flac") ||
+                      name.endsWith(".ogg") ||
+                      name.endsWith(".m4a") ||
+                      name.endsWith(".wav")
+                    );
+                  });
+                  if (audio.length === 0) return null;
+                  const best =
+                    audio.find((f) => {
+                      const hay = normalizeSongToken(`${f?.title || ""} ${f?.name || ""}`);
+                      return token && hay && (hay.includes(token) || token.includes(hay));
+                    }) || audio[0];
+                  const fileName = String(best?.name || "").trim();
+                  if (!fileName) return null;
+                  return {
+                    url: `https://archive.org/download/${encodeURIComponent(id)}/${encodeURIComponent(fileName)}`,
+                    length: String(best?.length || "").trim() || undefined,
+                    title: String(best?.title || "").trim() || undefined,
+                  };
+                } catch {
+                  return null;
+                }
+              }
+
+              const url = `/api/ia/shows?page=1&sort=most_played&query=${encodeURIComponent(songName)}`;
+              const res = await fetch(url, { cache: "no-store" });
+              if (!res.ok) return [];
+              const data = (await res.json()) as {
+                song?: {
+                  items?: Array<{
+                    defaultId?: string;
+                    showKey?: string;
+                    showDate?: string;
+                    title?: string;
+                    artwork?: string;
+                    matchedSongTitle?: string | null;
+                    matchedSongLength?: string | null;
+                    matchedSongUrl?: string | null;
+                  }>;
+                };
+              };
+              const items = Array.isArray(data?.song?.items) ? data.song.items : [];
+              const queryToken = normalizeSongToken(songName);
+              const seenUrl = new Set<string>();
+              const exactish: Track[] = [];
+              const fallback: Track[] = [];
+              for (const item of items) {
+                let u = String(item?.matchedSongUrl || "").trim();
+                let resolvedLength = String(item?.matchedSongLength || "").trim() || undefined;
+                if (!u && item?.defaultId) {
+                  const resolved = await resolvePlayableUrl(item.defaultId, songName);
+                  if (resolved?.url) {
+                    u = resolved.url;
+                    resolvedLength = resolved.length || resolvedLength;
+                  }
+                }
+                if (!u || seenUrl.has(u)) continue;
+                const titleRaw = String(item?.matchedSongTitle || songName);
+                const titleNorm = normalizeSongToken(titleRaw);
+                seenUrl.add(u);
+                const candidate: Track = {
+                  title: songName,
+                  url: u,
+                  length: resolvedLength,
+                  track: "1",
+                  showKey: String(item?.showKey || "").trim() || undefined,
+                  showDate: String(item?.showDate || "").trim() || undefined,
+                  venueText: String(item?.title || "").trim() || undefined,
+                  artwork: String(item?.artwork || "").trim() || undefined,
+                };
+                if (
+                  queryToken &&
+                  titleNorm &&
+                  (titleNorm.includes(queryToken) || queryToken.includes(titleNorm))
+                ) {
+                  exactish.push(candidate);
+                } else {
+                  fallback.push(candidate);
+                }
+                if (exactish.length + fallback.length >= 16) break;
+              }
+              return exactish.concat(fallback).slice(0, 5);
+            } catch {
+              return [];
+            }
+          }
+
+          const variantsByTrack: Track[][] = [];
+          for (const song of MIND_FUZZ_LIVE_COMP_TRACK_ORDER) {
+            const variants = await fetchLiveVariants(song);
+            if (variants.length < 1) {
+              variantsByTrack.length = 0;
+              break;
+            }
+            variantsByTrack.push(variants.slice(0, 5));
+          }
+          if (variantsByTrack.length !== MIND_FUZZ_LIVE_COMP_TRACK_ORDER.length) return;
+
+          const playlistId = get().createPlaylist(MIND_FUZZ_LIVE_COMP_NAME, {
+            source: "prebuilt",
+            prebuiltKind: "album-live-comp",
+          });
+          for (const variants of variantsByTrack) {
+            get().addTrack(playlistId, variants[0]);
+            const fused = variants.length >= 2 ? variants : [variants[0], variants[0]];
+            for (const variant of fused.slice(1)) {
+              get().addTrack(playlistId, variant);
+            }
+          }
+
+          const createdBeforeChain = get().playlists.find((p) => p.id === playlistId);
+          if (
+            !createdBeforeChain ||
+            createdBeforeChain.slots.length !== MIND_FUZZ_LIVE_COMP_TRACK_ORDER.length ||
+            !createdBeforeChain.slots.every((s) => s.variants.length >= 2)
+          ) {
+            get().deletePlaylist(playlistId);
+            return;
+          }
+
+          const chainIds = createdBeforeChain.slots.slice(0, 4).map((s) => s.id);
+          if (chainIds.length === 4) {
+            get().setChain(playlistId, chainIds);
+          }
+
+          const created = get().playlists.find((p) => p.id === playlistId);
+          const firstFour = created?.slots.slice(0, 4) || [];
+          const chainId = firstFour[0]?.linkGroupId;
+          const chainReady =
+            firstFour.length === 4 &&
+            Boolean(chainId) &&
+            firstFour.every((s, idx) => s.linkGroupId === chainId && s.chainOrder === idx + 1);
+          if (
+            !created ||
+            created.slots.length !== MIND_FUZZ_LIVE_COMP_TRACK_ORDER.length ||
+            !created.slots.every((s) => s.variants.length >= 2) ||
+            !chainReady
+          ) {
+            get().deletePlaylist(playlistId);
+            return;
+          }
+
+          window.localStorage.setItem(MIND_FUZZ_LIVE_COMP_SEEDED_KEY, "1");
+        })().finally(() => {
+          mindFuzzLiveCompSeedInFlight = null;
+        });
+
+        return mindFuzzLiveCompSeedInFlight;
+      },
+
+      ensureRequestedAlbumPlaylists: async () => {
+        if (typeof window === "undefined") return;
+        if (requestedAlbumsSeedInFlight) return requestedAlbumsSeedInFlight;
+
+        requestedAlbumsSeedInFlight = (async () => {
+          const requestedByName = new Set(
+            REQUESTED_PREBUILT_ALBUMS.map((name) => name.trim().toLowerCase()),
+          );
+          const existingByName = new Map(
+            get().playlists.map((p) => [p.name.trim().toLowerCase(), p]),
+          );
+          const allReady = REQUESTED_PREBUILT_ALBUMS.every((albumTitle) => {
+            const pl = existingByName.get(albumTitle.trim().toLowerCase());
+            return Boolean(
+              pl &&
+                pl.source === "prebuilt" &&
+                pl.prebuiltKind === "album-live-comp" &&
+                pl.slots.length > 0 &&
+                pl.slots.every((s) => s.variants.length >= 2),
+            );
+          });
+          if (allReady) {
+            window.localStorage.setItem(REQUESTED_ALBUMS_SEEDED_KEY, "1");
+            return;
+          }
+          if (window.localStorage.getItem(REQUESTED_ALBUMS_SEEDED_KEY) === "1") {
+            // Stale seed marker: required playlists are missing/incomplete, so reseed.
+            window.localStorage.removeItem(REQUESTED_ALBUMS_SEEDED_KEY);
+          }
+
+          async function fetchAlbumTracks(albumTitle: string): Promise<string[]> {
+            const key = albumTitle.toLowerCase();
+            const attempts =
+              key === "the silver chord"
+                ? [albumTitle, "The Silver Cord"]
+                : [albumTitle];
+            for (const title of attempts) {
+              try {
+                const url =
+                  `https://kglw.net/api/v2/albums/album_title/${toApiSlug(title)}.json` +
+                  "?artist_id=1&order_by=position&direction=asc";
+                const res = await fetch(url, { cache: "no-store" });
+                if (!res.ok) continue;
+                const data = (await res.json()) as {
+                  error?: boolean;
+                  data?: Array<{
+                    song_name?: string;
+                    islive?: number | string;
+                    position?: number | string;
+                  }>;
+                };
+                if (data?.error) continue;
+                const rows = Array.isArray(data?.data) ? data.data : [];
+                const ordered = rows
+                  .filter((r) => Number(r?.islive ?? 0) === 0)
+                  .sort((a, b) => Number(a?.position ?? 0) - Number(b?.position ?? 0));
+                const out: string[] = [];
+                const seen = new Set<string>();
+                for (const row of ordered) {
+                  const song = String(row?.song_name || "").trim();
+                  if (!song) continue;
+                  const key = song.toLowerCase();
+                  if (seen.has(key)) continue;
+                  seen.add(key);
+                  out.push(song);
+                }
+                if (out.length > 0) return out;
+              } catch {
+                // continue trying fallback title
+              }
+            }
+            return REQUESTED_ALBUM_TRACK_FALLBACKS[key] || [];
+          }
+
+          async function fetchLiveVariants(songName: string): Promise<Track[]> {
+            try {
+              async function resolvePlayableUrl(
+                identifier: string,
+                preferredTitle: string,
+              ): Promise<{ url: string; length?: string; title?: string } | null> {
+                try {
+                  const id = String(identifier || "").trim();
+                  if (!id) return null;
+                  const res = await fetch(`/api/ia/show-metadata?id=${encodeURIComponent(id)}`, {
+                    cache: "no-store",
+                  });
+                  if (!res.ok) return null;
+                  const data = (await res.json()) as {
+                    files?: Array<{ name?: string; title?: string; length?: string }>;
+                  };
+                  const files = Array.isArray(data?.files) ? data.files : [];
+                  const token = normalizeSongToken(preferredTitle);
+                  const audio = files.filter((f) => {
+                    const name = String(f?.name || "").toLowerCase();
+                    return (
+                      name.endsWith(".mp3") ||
+                      name.endsWith(".flac") ||
+                      name.endsWith(".ogg") ||
+                      name.endsWith(".m4a") ||
+                      name.endsWith(".wav")
+                    );
+                  });
+                  if (audio.length === 0) return null;
+                  const best =
+                    audio.find((f) => {
+                      const hay = normalizeSongToken(`${f?.title || ""} ${f?.name || ""}`);
+                      return token && hay && (hay.includes(token) || token.includes(hay));
+                    }) || audio[0];
+                  const fileName = String(best?.name || "").trim();
+                  if (!fileName) return null;
+                  return {
+                    url: `https://archive.org/download/${encodeURIComponent(id)}/${encodeURIComponent(fileName)}`,
+                    length: String(best?.length || "").trim() || undefined,
+                    title: String(best?.title || "").trim() || undefined,
+                  };
+                } catch {
+                  return null;
+                }
+              }
+
+              const url = `/api/ia/shows?page=1&sort=most_played&query=${encodeURIComponent(songName)}`;
+              const res = await fetch(url, { cache: "no-store" });
+              if (!res.ok) return [];
+              const data = (await res.json()) as {
+                song?: {
+                  items?: Array<{
+                    defaultId?: string;
+                    showKey?: string;
+                    showDate?: string;
+                    title?: string;
+                    artwork?: string;
+                    matchedSongTitle?: string | null;
+                    matchedSongLength?: string | null;
+                    matchedSongUrl?: string | null;
+                  }>;
+                };
+              };
+              const items = Array.isArray(data?.song?.items) ? data.song.items : [];
+              const queryToken = normalizeSongToken(songName);
+              const seenUrl = new Set<string>();
+              const exactish: Track[] = [];
+              const fallback: Track[] = [];
+              for (const item of items) {
+                let u = String(item?.matchedSongUrl || "").trim();
+                let resolvedLength = String(item?.matchedSongLength || "").trim() || undefined;
+                if (!u && item?.defaultId) {
+                  const resolved = await resolvePlayableUrl(item.defaultId, songName);
+                  if (resolved?.url) {
+                    u = resolved.url;
+                    resolvedLength = resolved.length || resolvedLength;
+                  }
+                }
+                if (!u || seenUrl.has(u)) continue;
+                const titleRaw = String(item?.matchedSongTitle || songName);
+                const titleNorm = normalizeSongToken(titleRaw);
+                seenUrl.add(u);
+                const candidate: Track = {
+                  title: songName,
+                  url: u,
+                  length: resolvedLength,
+                  track: "1",
+                  showKey: String(item?.showKey || "").trim() || undefined,
+                  showDate: String(item?.showDate || "").trim() || undefined,
+                  venueText: String(item?.title || "").trim() || undefined,
+                  artwork: String(item?.artwork || "").trim() || undefined,
+                };
+                if (
+                  queryToken &&
+                  titleNorm &&
+                  (titleNorm.includes(queryToken) || queryToken.includes(titleNorm))
+                ) {
+                  exactish.push(candidate);
+                } else {
+                  fallback.push(candidate);
+                }
+                if (exactish.length + fallback.length >= 14) break;
+              }
+              return exactish.concat(fallback).slice(0, 5);
+            } catch {
+              return [];
+            }
+          }
+
+          for (const albumTitle of REQUESTED_PREBUILT_ALBUMS) {
+            const albumKey = albumTitle.trim().toLowerCase();
+            const existing = existingByName.get(albumKey);
+            if (
+              existing &&
+              existing.source === "prebuilt" &&
+              existing.prebuiltKind === "album-live-comp" &&
+              existing.slots.length > 0 &&
+              existing.slots.every((s) => s.variants.length >= 2)
+            ) {
+              continue;
+            }
+            if (existing && requestedByName.has(albumKey)) get().deletePlaylist(existing.id);
+
+            const tracks = await fetchAlbumTracks(albumTitle);
+            if (tracks.length === 0) continue;
+
+            const variantsByTrack: Track[][] = [];
+            for (const song of tracks) {
+              const variants = await fetchLiveVariants(song);
+              if (variants.length < 1) {
+                variantsByTrack.length = 0;
+                break;
+              }
+              variantsByTrack.push(variants.slice(0, 5));
+            }
+            if (variantsByTrack.length !== tracks.length) continue;
+
+            const playlistId = get().createPlaylist(albumTitle, {
+              source: "prebuilt",
+              prebuiltKind: "album-live-comp",
+            });
+            for (const variants of variantsByTrack) {
+              get().addTrack(playlistId, variants[0]);
+              const fused = variants.length >= 2 ? variants : [variants[0], variants[0]];
+              for (const variant of fused.slice(1)) {
+                get().addTrack(playlistId, variant);
+              }
+            }
+            const created = get().playlists.find((p) => p.id === playlistId);
+            if (
+              !created ||
+              created.slots.length !== tracks.length ||
+              !created.slots.every((s) => s.variants.length >= 2)
+            ) {
+              get().deletePlaylist(playlistId);
+              continue;
+            }
+            existingByName.set(albumKey, created);
+          }
+
+          const finished = REQUESTED_PREBUILT_ALBUMS.every((albumTitle) => {
+            const pl = get().playlists.find(
+              (p) =>
+                p.name.trim().toLowerCase() === albumTitle.trim().toLowerCase() &&
+                p.source === "prebuilt" &&
+                p.prebuiltKind === "album-live-comp" &&
+                p.slots.length > 0 &&
+                p.slots.every((s) => s.variants.length >= 2),
+            );
+            return Boolean(pl);
+          });
+          if (finished) {
+            window.localStorage.setItem(REQUESTED_ALBUMS_SEEDED_KEY, "1");
+          }
+        })().finally(() => {
+          requestedAlbumsSeedInFlight = null;
+        });
+
+        return requestedAlbumsSeedInFlight;
+      },
+
+      seedDefaultAlbumPlaylists: async () => {
+        if (typeof window === "undefined") return;
+        if (defaultAlbumSeedInFlight) return defaultAlbumSeedInFlight;
+        if (window.localStorage.getItem(DEFAULT_ALBUM_SEED_KEY) === "1") return;
+
+        defaultAlbumSeedInFlight = (async () => {
+          const existing = get().playlists;
+          const existingByName = new Map(existing.map((p) => [p.name.trim().toLowerCase(), p]));
+
+          async function fetchAlbumTracks(albumTitle: string): Promise<string[]> {
+            try {
+              const url =
+                `https://kglw.net/api/v2/albums/album_title/${toApiSlug(albumTitle)}.json` +
+                "?artist_id=1&order_by=position&direction=asc";
+              const res = await fetch(url, { cache: "no-store" });
+              if (!res.ok) return [];
+              const data = (await res.json()) as {
+                error?: boolean;
+                data?: Array<{ song_name?: string; islive?: number | string; position?: number | string }>;
+              };
+              if (data?.error) return [];
+              const rows = Array.isArray(data?.data) ? data.data : [];
+              const ordered = rows
+                .filter((r) => Number(r?.islive ?? 0) === 0)
+                .sort((a, b) => Number(a?.position ?? 0) - Number(b?.position ?? 0));
+              const out: string[] = [];
+              const seen = new Set<string>();
+              for (const row of ordered) {
+                const song = String(row?.song_name || "").trim();
+                if (!song) continue;
+                const key = song.toLowerCase();
+                if (seen.has(key)) continue;
+                seen.add(key);
+                out.push(song);
+              }
+              return out;
+            } catch {
+              return [];
+            }
+          }
+
+          async function fetchLiveVariants(songName: string): Promise<Track[]> {
+            try {
+              const url = `/api/ia/shows?page=1&sort=most_played&query=${encodeURIComponent(songName)}`;
+              const res = await fetch(url, { cache: "no-store" });
+              if (!res.ok) return [];
+              const data = (await res.json()) as {
+                song?: {
+                  items?: Array<{
+                    showKey?: string;
+                    showDate?: string;
+                    title?: string;
+                    artwork?: string;
+                    matchedSongTitle?: string | null;
+                    matchedSongLength?: string | null;
+                    matchedSongUrl?: string | null;
+                  }>;
+                };
+              };
+              const items = Array.isArray(data?.song?.items) ? data.song.items : [];
+              const queryToken = normalizeSongToken(songName);
+              const seenUrl = new Set<string>();
+              const exactish: Track[] = [];
+              const fallback: Track[] = [];
+              for (const item of items) {
+                const u = String(item?.matchedSongUrl || "").trim();
+                if (!u || seenUrl.has(u)) continue;
+                const titleRaw = String(item?.matchedSongTitle || songName);
+                const titleNorm = normalizeSongToken(titleRaw);
+                seenUrl.add(u);
+                const candidate: Track = {
+                  title: toDisplayTrackTitle(titleRaw),
+                  url: u,
+                  length: String(item?.matchedSongLength || "").trim() || undefined,
+                  track: "1",
+                  showKey: String(item?.showKey || "").trim() || undefined,
+                  showDate: String(item?.showDate || "").trim() || undefined,
+                  venueText: String(item?.title || "").trim() || undefined,
+                  artwork: String(item?.artwork || "").trim() || undefined,
+                };
+                if (
+                  queryToken &&
+                  titleNorm &&
+                  (titleNorm.includes(queryToken) || queryToken.includes(titleNorm))
+                ) {
+                  exactish.push(candidate);
+                } else {
+                  fallback.push(candidate);
+                }
+                if (exactish.length + fallback.length >= 12) break;
+              }
+              const merged = exactish.concat(fallback);
+              return merged.slice(0, 4);
+            } catch {
+              return [];
+            }
+          }
+
+          // Process albums sequentially to avoid API bursts.
+          for (const albumTitle of DEFAULT_STUDIO_ALBUM_TITLES) {
+            const tracks = await fetchAlbumTracks(albumTitle);
+            if (tracks.length === 0) continue;
+
+            const existingPlaylist = existingByName.get(albumTitle.toLowerCase());
+            if (existingPlaylist && existingPlaylist.slots.length === tracks.length) {
+              continue;
+            }
+            if (existingPlaylist && existingPlaylist.slots.length !== tracks.length) {
+              get().deletePlaylist(existingPlaylist.id);
+            }
+
+            const variantsByTrack: Track[][] = [];
+            for (const song of tracks) {
+              const variants = await fetchLiveVariants(song);
+              if (variants.length === 0) {
+                variantsByTrack.length = 0;
+                break;
+              }
+              variantsByTrack.push(variants);
+            }
+            // Never create partial albums.
+            if (variantsByTrack.length !== tracks.length) continue;
+
+            const playlistId = get().createPlaylist(albumTitle, {
+              source: "prebuilt",
+              prebuiltKind: "album-live-comp",
+            });
+            for (const variants of variantsByTrack) {
+              // First variant creates slot at correct studio-order position.
+              get().addTrack(playlistId, variants[0]);
+              // Remaining variants fuse into the same slot.
+              for (const variant of variants.slice(1)) {
+                get().addTrack(playlistId, variant);
+              }
+            }
+            const created = get().playlists.find((p) => p.id === playlistId);
+            if (!created || created.slots.length !== tracks.length) {
+              // Guard rail: if anything drifted, remove it instead of keeping partial output.
+              get().deletePlaylist(playlistId);
+              continue;
+            }
+
+            // Keep local map in sync for subsequent albums.
+            existingByName.set(albumTitle.toLowerCase(), created);
+          }
+
+          window.localStorage.setItem(DEFAULT_ALBUM_SEED_KEY, "1");
+        })().finally(() => {
+          defaultAlbumSeedInFlight = null;
+        });
+
+        return defaultAlbumSeedInFlight;
       },
 
       renamePlaylist: (playlistId, name) => {

@@ -111,6 +111,10 @@ export function PlayerBar() {
     router.push(`/show/${encodeURIComponent(currentTrack.showKey)}?song=${song}`);
   }
 
+  function restorePlayer() {
+    setMinimized(false);
+  }
+
   function toMp3FallbackUrl(url: string): string {
     const clean = String(url || "");
     if (!clean) return "";
@@ -121,6 +125,12 @@ export function PlayerBar() {
   const [current, setCurrent] = useState(0);
   const [duration, setDuration] = useState(0);
   const [minimized, setMinimized] = useState(false);
+  const progress = useMemo(() => {
+    if (!Number.isFinite(duration) || duration <= 0) return 0;
+    const ratio = current / duration;
+    if (!Number.isFinite(ratio)) return 0;
+    return Math.max(0, Math.min(1, ratio));
+  }, [current, duration]);
 
   // Keep audio element in sync when source changes.
   // Important: do not depend on `playing` here, or pause/play toggles
@@ -248,13 +258,25 @@ export function PlayerBar() {
         {audioElements}
         <button
           type="button"
-          onClick={openCurrentShow}
+          onClick={restorePlayer}
           className="fixed bottom-4 right-4 z-30 h-14 w-14 overflow-hidden rounded-xl border border-white/20 bg-black/80 shadow-[0_8px_24px_rgba(0,0,0,0.45)] backdrop-blur"
-          title={currentTrack?.showKey ? "Open current show" : "Show unavailable"}
+          title="Restore player"
         >
           {artworkSrc ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={artworkSrc} alt="" className="h-full w-full object-cover" />
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={artworkSrc} alt="" className="h-full w-full object-cover" />
+              <div
+                className="pointer-events-none absolute inset-0"
+                style={{
+                  background: `conic-gradient(from 0deg, rgba(0,0,0,0.45) 0deg ${progress * 360}deg, transparent ${progress * 360}deg 360deg)`,
+                }}
+              />
+              <div
+                className="pointer-events-none absolute bottom-0 left-0 h-[3px] bg-[#EFD50F]/90"
+                style={{ width: `${progress * 100}%` }}
+              />
+            </>
           ) : (
             <div className="flex h-full w-full items-center justify-center text-xs text-white/70">
               Now
@@ -266,9 +288,10 @@ export function PlayerBar() {
   }
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-white/10 bg-black/80 backdrop-blur">
-      <div className="mx-auto max-w-3xl p-3">
-        {audioElements}
+    <>
+      {audioElements}
+      <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-white/10 bg-black/80 backdrop-blur">
+        <div className="mx-auto max-w-3xl p-3">
 
         {/* Full-width scrubber row (mobile friendly) */}
         <div className="mb-2 flex items-center gap-3 px-1">
@@ -371,7 +394,8 @@ export function PlayerBar() {
             </button>
           </div>
         </div>
+        </div>
       </div>
-    </div>
+    </>
   );
 }

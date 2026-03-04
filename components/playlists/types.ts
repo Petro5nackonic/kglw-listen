@@ -21,5 +21,7 @@ export type Playlist = {
   name: string;
   createdAt: number;
   updatedAt: number;
+  source?: "user" | "prebuilt";
+  prebuiltKind?: "album-live-comp";
   slots: PlaylistSlot[];
 };

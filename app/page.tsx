@@ -88,6 +88,20 @@ type ShowSuggestion = {
   subtitle: string;
   lastPlayedDate: string;
 };
+type HomeShowsCachePayload = {
+  savedAt: number;
+  sort: string;
+  items: ShowItem[];
+  hasMore: boolean;
+  venueTotal: number;
+  songItems: ShowItem[];
+  songTotal: number;
+  facets?: {
+    years?: { value: string; count: number }[];
+    continents?: { value: string; count: number }[];
+    showTypes?: { value: string; count: number }[];
+  };
+};
 
 const SHOW_TYPE_OPTIONS = [
   { value: "Rave" },
@@ -99,7 +113,18 @@ const SHOW_TYPE_OPTIONS = [
 const FAVORITE_SHOWS_KEY = "kglw.favoriteShows.v1";
 const RECENT_SHOWS_KEY = "kglw.recentShows.v1";
 const SHOW_STATS_CACHE_KEY = "kglw.showStats.v1";
+const HOME_SHOWS_CACHE_KEY = "kglw.homeShows.v1";
+const HOME_SHOWS_CACHE_MAX_AGE_MS = 1000 * 60 * 10;
 const DEFAULT_ARTWORK_SRC = "/api/default-artwork";
+const PREBUILT_PLAYLIST_NAME_SET = new Set([
+  "flight b741 live comp.",
+  "i'm in your mind fuzz live comp.",
+  "infest the rats' nest",
+  "i'm in your mind fuzz",
+  "nonagon infinity",
+  "petrodragonic apocalypse",
+  "the silver chord",
+]);
 const SORT_OPTIONS: { value: string; label: string }[] = [
   { value: "newest", label: "Newest" },
   { value: "oldest", label: "Oldest" },
@@ -598,6 +623,9 @@ export default function HomePage() {
   const router = useRouter();
   const setQueue = usePlayer((s) => s.setQueue);
   const playlists = usePlaylists((s) => s.playlists);
+  const ensureFlightB741Playlist = usePlaylists((s) => s.ensureFlightB741Playlist);
+  const ensureMindFuzzLiveCompPlaylist = usePlaylists((s) => s.ensureMindFuzzLiveCompPlaylist);
+  const ensureRequestedAlbumPlaylists = usePlaylists((s) => s.ensureRequestedAlbumPlaylists);
   const addTrackToPlaylist = usePlaylists((s) => s.addTrack);
   const createPlaylist = usePlaylists((s) => s.createPlaylist);
   const renamePlaylist = usePlaylists((s) => s.renamePlaylist);
@@ -662,6 +690,34 @@ export default function HomePage() {
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const sortMenuRef = useRef<HTMLDivElement | null>(null);
+  const didHydrateInitialShowsRef = useRef(false);
+  const didRunFilterReloadRef = useRef(false);
+
+  useEffect(() => {
+    const required = [
+      "flight b741 live comp.",
+      "i'm in your mind fuzz live comp.",
+      "infest the rats' nest",
+      "i'm in your mind fuzz",
+      "nonagon infinity",
+      "petrodragonic apocalypse",
+      "the silver chord",
+    ];
+    const existing = new Set(playlists.map((p) => p.name.trim().toLowerCase()));
+    const missingAny = required.some((name) => !existing.has(name));
+    if (!missingAny) return;
+    const timeout = window.setTimeout(() => {
+      void ensureFlightB741Playlist();
+      void ensureMindFuzzLiveCompPlaylist();
+      void ensureRequestedAlbumPlaylists();
+    }, 1600);
+    return () => window.clearTimeout(timeout);
+  }, [
+    playlists,
+    ensureFlightB741Playlist,
+    ensureMindFuzzLiveCompPlaylist,
+    ensureRequestedAlbumPlaylists,
+  ]);
 
   function buildUrl(p: number) {
     const params = new URLSearchParams();
@@ -682,6 +738,16 @@ export default function HomePage() {
     params.set("query", debouncedQuery);
     params.set("sort", sort);
     return `/api/ia/shows?${params.toString()}`;
+  }
+
+  function canUseHomeCacheForCurrentFilters() {
+    return (
+      years.length === 0 &&
+      continents.length === 0 &&
+      showTypes.length === 0 &&
+      !debouncedQuery &&
+      sort === "newest"
+    );
   }
 
   async function loadPage(p: number, mode: "append" | "replace") {
@@ -719,6 +785,23 @@ export default function HomePage() {
 
       setHasMore(Boolean(data.hasMore));
       setPage(p);
+      if (p === 1 && mode === "replace" && canUseHomeCacheForCurrentFilters()) {
+        const payload: HomeShowsCachePayload = {
+          savedAt: Date.now(),
+          sort,
+          items: data.items || [],
+          hasMore: Boolean(data.hasMore),
+          venueTotal: data.venueTotal || 0,
+          songItems: data.song?.items || [],
+          songTotal: data.song?.total || 0,
+          facets: data.facets,
+        };
+        try {
+          localStorage.setItem(HOME_SHOWS_CACHE_KEY, JSON.stringify(payload));
+        } catch {
+          // Ignore storage quota / serialization errors.
+        }
+      }
     } catch (e: unknown) {
       if (e instanceof Error) setError(e.message);
       else setError("Failed to load shows");
@@ -728,7 +811,42 @@ export default function HomePage() {
   }
 
   useEffect(() => {
-    loadPage(1, "replace");
+    if (didHydrateInitialShowsRef.current) {
+      loadPage(1, "replace");
+      return;
+    }
+    didHydrateInitialShowsRef.current = true;
+    let hydrated = false;
+    try {
+      const raw = localStorage.getItem(HOME_SHOWS_CACHE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as HomeShowsCachePayload;
+        const isFresh =
+          typeof parsed?.savedAt === "number" &&
+          Date.now() - parsed.savedAt <= HOME_SHOWS_CACHE_MAX_AGE_MS;
+        const validItems = Array.isArray(parsed?.items) ? parsed.items : [];
+        if (
+          isFresh &&
+          parsed?.sort === "newest" &&
+          validItems.length > 0 &&
+          canUseHomeCacheForCurrentFilters()
+        ) {
+          hydrated = true;
+          setShows(validItems);
+          setHasMore(Boolean(parsed.hasMore));
+          setPage(1);
+          setVenueTotal(Number(parsed.venueTotal || 0));
+          setSongShows(Array.isArray(parsed.songItems) ? parsed.songItems : []);
+          setSongTotal(Number(parsed.songTotal || 0));
+          if (parsed.facets?.years) setYearFacet(parsed.facets.years);
+          if (parsed.facets?.continents) setContinentFacet(parsed.facets.continents);
+          if (parsed.facets?.showTypes) setShowTypeFacet(parsed.facets.showTypes);
+        }
+      }
+    } catch {
+      // Ignore bad cache payload and fetch normally.
+    }
+    if (!hydrated) loadPage(1, "replace");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -827,6 +945,10 @@ export default function HomePage() {
   }, [sortMenuOpen]);
 
   useEffect(() => {
+    if (!didRunFilterReloadRef.current) {
+      didRunFilterReloadRef.current = true;
+      return;
+    }
     setShows([]);
     setHasMore(true);
     setPage(1);
@@ -1449,10 +1571,24 @@ export default function HomePage() {
                 </button>
               ) : (
                 featuredPlaylists.map((p) => {
+                  const isPrebuilt =
+                    p.source === "prebuilt" ||
+                    p.prebuiltKind === "album-live-comp" ||
+                    PREBUILT_PLAYLIST_NAME_SET.has(p.name.trim().toLowerCase());
                   const versions = p.slots.reduce(
                     (sum, slot) => sum + slot.variants.length,
                     0,
                   );
+                  const previewThumbs = p.slots
+                    .flatMap((slot) => slot.variants.map((v) => v.track))
+                    .slice(0, 4)
+                    .map((t) => {
+                      const id = getArchiveIdentifier(t.url);
+                      if (t.artwork) return t.artwork;
+                      if (!id) return DEFAULT_ARTWORK_SRC;
+                      return `https://archive.org/services/img/${encodeURIComponent(id)}`;
+                    });
+                  while (previewThumbs.length < 4) previewThumbs.push(DEFAULT_ARTWORK_SRC);
                   const chainCount = new Set(
                     p.slots.map((s) => s.linkGroupId).filter(Boolean),
                   ).size;
@@ -1464,53 +1600,79 @@ export default function HomePage() {
                   return (
                     <div
                       key={p.id}
-                      className={`relative flex items-center justify-between rounded-[16px] border border-white/20 bg-white/5 p-3 backdrop-blur-[6px] ${
+                      className={`relative rounded-[16px] p-3 backdrop-blur-[6px] ${
+                        isPrebuilt
+                          ? "border border-[#7c50d8]/65 bg-linear-to-br from-[#1b0d33] via-[#180b2d] to-[#0f0820]"
+                          : "border border-white/20 bg-white/5"
+                      } ${
                         homePlaylistMenuId === p.id ? "z-[90]" : "z-0"
                       }`}
                     >
-                      <Link href={`/playlists/${p.id}`} className="min-w-0 flex-1">
-                        <div className="truncate text-[18px] font-medium text-white [font-family:var(--font-roboto-condensed)]">
-                          {p.name}
+                      {isPrebuilt ? (
+                        <div className="mb-2 inline-flex rounded-full border border-[#8f68dd]/60 bg-[#5A22C9]/20 px-2 py-1 text-[10px] tracking-[0.16em] text-[#d8c3ff] uppercase">
+                          Pre-built live comp
                         </div>
-                        <div className="mt-1 flex flex-wrap items-center gap-x-[6px] text-[12px] font-medium text-white/70 [font-family:var(--font-roboto-condensed)]">
-                          <span>
-                            {p.slots.length} Track{p.slots.length === 1 ? "" : "s"}
-                          </span>
-                          <span className="size-[3px] rounded-full bg-white/60" />
-                          <span>
-                            {versions} Version{versions === 1 ? "" : "s"}
-                          </span>
-                          <span className="size-[3px] rounded-full bg-white/60" />
-                          <span>
-                            {chainCount} Chain{chainCount === 1 ? "" : "s"}
-                          </span>
-                          {duration ? (
-                            <>
-                              <span className="size-[3px] rounded-full bg-white/60" />
-                              <span>{duration}</span>
-                            </>
+                      ) : null}
+                      <div className="flex items-center justify-between">
+                        <div className="flex min-w-0 flex-1 items-center gap-3">
+                          {isPrebuilt ? (
+                            <div className="grid w-20 shrink-0 grid-cols-2 gap-1.5">
+                              {previewThumbs.map((src, idx) => (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  key={`${p.id}-home-thumb-${idx}`}
+                                  src={src}
+                                  alt=""
+                                  className="aspect-square w-full rounded-[8px] border border-white/15 object-cover"
+                                />
+                              ))}
+                            </div>
                           ) : null}
+                          <Link href={`/playlists/${p.id}`} className="min-w-0 flex-1">
+                            <div className="truncate text-[18px] font-medium text-white [font-family:var(--font-roboto-condensed)]">
+                              {p.name}
+                            </div>
+                            <div className="mt-1 flex flex-wrap items-center gap-x-[6px] text-[12px] font-medium text-white/70 [font-family:var(--font-roboto-condensed)]">
+                              <span>
+                                {p.slots.length} Track{p.slots.length === 1 ? "" : "s"}
+                              </span>
+                              <span className="size-[3px] rounded-full bg-white/60" />
+                              <span>
+                                {versions} Version{versions === 1 ? "" : "s"}
+                              </span>
+                              <span className="size-[3px] rounded-full bg-white/60" />
+                              <span>
+                                {chainCount} Chain{chainCount === 1 ? "" : "s"}
+                              </span>
+                              {duration ? (
+                                <>
+                                  <span className="size-[3px] rounded-full bg-white/60" />
+                                  <span>{duration}</span>
+                                </>
+                              ) : null}
+                            </div>
+                          </Link>
                         </div>
-                      </Link>
-                      <div className="ml-4 flex shrink-0 items-center gap-4 text-white">
-                        <button
-                          type="button"
-                          aria-label={`Play playlist ${p.name}`}
-                          className="text-[26px] text-white"
-                          onClick={() => playPlaylistFromHome(p.id)}
-                        >
-                          <FontAwesomeIcon icon={faCirclePlay} />
-                        </button>
-                        <button
-                          type="button"
-                          aria-label="Playlist options"
-                          className="text-[20px] text-white/90"
-                          onClick={() =>
-                            setHomePlaylistMenuId((prev) => (prev === p.id ? null : p.id))
-                          }
-                        >
-                          <FontAwesomeIcon icon={faEllipsisVertical} />
-                        </button>
+                        <div className="ml-4 flex shrink-0 items-center gap-4 text-white">
+                          <button
+                            type="button"
+                            aria-label={`Play playlist ${p.name}`}
+                            className="text-[26px] text-white"
+                            onClick={() => playPlaylistFromHome(p.id)}
+                          >
+                            <FontAwesomeIcon icon={faCirclePlay} />
+                          </button>
+                          <button
+                            type="button"
+                            aria-label="Playlist options"
+                            className="text-[20px] text-white/90"
+                            onClick={() =>
+                              setHomePlaylistMenuId((prev) => (prev === p.id ? null : p.id))
+                            }
+                          >
+                            <FontAwesomeIcon icon={faEllipsisVertical} />
+                          </button>
+                        </div>
                       </div>
                       {homePlaylistMenuId === p.id && (
                         <div className="absolute right-3 top-10 z-[95] w-44 rounded-[12px] border border-white/15 bg-[#16052c] p-1.5 shadow-[0_8px_18px_rgba(0,0,0,0.45)]">

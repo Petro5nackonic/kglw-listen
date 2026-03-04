@@ -48,6 +48,15 @@ type IaMetadataResponse = {
 
 const FAVORITE_SHOWS_KEY = "kglw.favoriteShows.v1";
 const DEFAULT_ARTWORK_SRC = "/api/default-artwork";
+const SHOW_DETAILS_CACHE_PREFIX = "kglw.showDetails.v1:";
+const SHOW_META_CACHE_PREFIX = "kglw.showMeta.v1:";
+const SHOW_DETAILS_CACHE_MAX_AGE_MS = 1000 * 60 * 60 * 12;
+const SHOW_META_CACHE_MAX_AGE_MS = 1000 * 60 * 60 * 12;
+
+type CachedEntry<T> = {
+  savedAt: number;
+  data: T;
+};
 
 function safeDecode(input: string) {
   try {
@@ -139,6 +148,35 @@ function venueFromTitle(title?: string): string {
     /live\s+(?:at|in)\s+(.+?)(?:\s+on\s+(?:19|20)\d{2}[-/.]\d{1,2}[-/.]\d{1,2}|\(|$)/i,
   );
   return m?.[1]?.trim() || "";
+}
+
+function readCacheEntry<T>(key: string, maxAgeMs: number): T | null {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as CachedEntry<T>;
+    if (
+      !parsed ||
+      typeof parsed !== "object" ||
+      typeof parsed.savedAt !== "number" ||
+      !("data" in parsed)
+    ) {
+      return null;
+    }
+    if (Date.now() - parsed.savedAt > maxAgeMs) return null;
+    return parsed.data;
+  } catch {
+    return null;
+  }
+}
+
+function writeCacheEntry<T>(key: string, data: T) {
+  try {
+    const payload: CachedEntry<T> = { savedAt: Date.now(), data };
+    localStorage.setItem(key, JSON.stringify(payload));
+  } catch {
+    // Ignore storage failures.
+  }
 }
 
 function normalizeLooseText(input: string): string {
@@ -285,10 +323,15 @@ export default function ShowPage() {
     let alive = true;
 
     async function run() {
-      setLoading(true);
+      const detailsCacheKey = `${SHOW_DETAILS_CACHE_PREFIX}${showKey}`;
+      const cachedShow = showKey
+        ? readCacheEntry<ShowApiResponse>(detailsCacheKey, SHOW_DETAILS_CACHE_MAX_AGE_MS)
+        : null;
+      const hydratedFromCache = Boolean(cachedShow);
+      setLoading(!hydratedFromCache);
       setError(null);
-      setShow(null);
-      setSelectedId(null);
+      setShow(cachedShow || null);
+      setSelectedId(cachedShow?.defaultId ?? cachedShow?.sources?.[0]?.identifier ?? null);
       setMeta(null);
 
       // Guard: if we still don't have a key, show a real error instead of calling API with undefined
@@ -309,6 +352,7 @@ export default function ShowPage() {
         if (!alive) return;
         setShow(data);
         setSelectedId(data.defaultId ?? data.sources?.[0]?.identifier ?? null);
+        writeCacheEntry(detailsCacheKey, data);
       } catch (e: unknown) {
         if (!alive) return;
         if (e instanceof Error) setError(e.message);
@@ -330,7 +374,12 @@ export default function ShowPage() {
 
     async function run() {
       if (!selectedId) return;
-      setMeta(null);
+      const metadataCacheKey = `${SHOW_META_CACHE_PREFIX}${selectedId}`;
+      const cachedMeta = readCacheEntry<IaMetadataResponse>(
+        metadataCacheKey,
+        SHOW_META_CACHE_MAX_AGE_MS,
+      );
+      setMeta(cachedMeta || null);
 
       try {
         const res = await fetch(
@@ -343,6 +392,7 @@ export default function ShowPage() {
 
         if (!alive) return;
         setMeta(data);
+        writeCacheEntry(metadataCacheKey, data);
       } catch (e: unknown) {
         if (!alive) return;
         if (e instanceof Error) setError(e.message);
