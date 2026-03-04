@@ -1071,10 +1071,17 @@ export default function HomePage() {
   const prebuiltPlaylists = useMemo(
     () =>
       playlists.filter(
-        (p) =>
-          p.source === "prebuilt" ||
-          p.prebuiltKind === "album-live-comp" ||
-          PREBUILT_PLAYLIST_NAME_SET.has(p.name.trim().toLowerCase()),
+        (p) => {
+          const isPrebuilt =
+            p.source === "prebuilt" ||
+            p.prebuiltKind === "album-live-comp" ||
+            PREBUILT_PLAYLIST_NAME_SET.has(p.name.trim().toLowerCase());
+          if (!isPrebuilt) return false;
+          // Never show non-functional placeholder prebuilt cards.
+          return p.slots.some((slot) =>
+            slot.variants.some((v) => Boolean(String(v.track?.url || "").trim())),
+          );
+        },
       ),
     [playlists],
   );
