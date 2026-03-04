@@ -111,6 +111,54 @@ function normalizeSongToken(input: string): string {
     .trim();
 }
 
+function trackTitleMatchScore(songName: string, trackTitle: string): number {
+  const needle = normalizeSongToken(songName);
+  const hay = normalizeSongToken(trackTitle);
+  if (!needle || !hay) return 0;
+  if (hay.includes(needle) || needle.includes(hay)) return 100;
+  const parts = needle.split(" ").filter((p) => p.length >= 3);
+  let overlap = 0;
+  for (const p of parts) {
+    if (hay.includes(p)) overlap += 1;
+  }
+  return overlap;
+}
+
+async function resolveTrackFromItemApi(
+  origin: string,
+  identifier: string,
+  songName: string,
+): Promise<{ url: string; length?: string; title?: string } | null> {
+  try {
+    const id = String(identifier || "").trim();
+    if (!id) return null;
+    const res = await fetch(`${origin}/api/ia/item?id=${encodeURIComponent(id)}`, {
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      tracks?: Array<{ title?: string; url?: string; length?: string }>;
+    };
+    const tracks = Array.isArray(data?.tracks) ? data.tracks : [];
+    const playable = tracks
+      .map((t) => ({
+        ...t,
+        score: trackTitleMatchScore(songName, String(t?.title || "")),
+      }))
+      .filter((t) => Boolean(String(t?.url || "").trim()))
+      .sort((a, b) => b.score - a.score);
+    const best = playable[0];
+    if (!best?.url) return null;
+    return {
+      url: String(best.url),
+      length: String(best.length || "").trim() || undefined,
+      title: String(best.title || "").trim() || undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function resolvePlayableUrl(
   origin: string,
   identifier: string,
@@ -181,12 +229,20 @@ async function fetchLiveVariants(origin: string, songName: string): Promise<Trac
     const fallback: Track[] = [];
     for (const item of items) {
       let resolvedUrl = String(item?.matchedSongUrl || "").trim();
-      const resolvedLength = String(item?.matchedSongLength || "").trim() || undefined;
-      // Keep this endpoint fast in production: skip expensive metadata fallback here.
-      // Client-side prebuilt ensure logic remains the deep fallback.
+      let resolvedLength = String(item?.matchedSongLength || "").trim() || undefined;
+      let resolvedTitle = String(item?.matchedSongTitle || "").trim() || undefined;
+      const defaultId = String(item?.defaultId || "").trim();
+      if (!resolvedUrl && defaultId) {
+        const resolved = await resolveTrackFromItemApi(origin, defaultId, songName);
+        if (resolved?.url) {
+          resolvedUrl = resolved.url;
+          resolvedLength = resolved.length || resolvedLength;
+          resolvedTitle = resolved.title || resolvedTitle;
+        }
+      }
       if (!resolvedUrl || seenUrl.has(resolvedUrl)) continue;
       seenUrl.add(resolvedUrl);
-      const titleRaw = String(item?.matchedSongTitle || songName);
+      const titleRaw = resolvedTitle || String(item?.matchedSongTitle || songName);
       const titleNorm = normalizeSongToken(titleRaw);
       const candidate: Track = {
         title: songName,
