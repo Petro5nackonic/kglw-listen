@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faMapPin } from "@fortawesome/pro-solid-svg-icons";
 import { usePlayer } from "@/components/player/store";
 import { usePlaylists } from "@/components/playlists/store";
 import { toDisplayTitle, toDisplayTrackTitle } from "@/utils/displayTitle";
@@ -254,6 +256,10 @@ export default function ShowPage() {
     url: string;
     length?: string;
     track: string;
+    showKey?: string;
+    showDate?: string;
+    venueText?: string;
+    artwork?: string;
   } | null>(null);
   const [showPlaylistPicker, setShowPlaylistPicker] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState("");
@@ -596,6 +602,10 @@ export default function ShowPage() {
                 url: t.url,
                 length: t.length,
                 track: String(idx + 1),
+                showKey,
+                showDate,
+                venueText,
+                artwork: heroImageSrc,
               };
 
               return (
@@ -604,9 +614,9 @@ export default function ShowPage() {
                   ref={(el) => {
                     trackRefs.current[idx] = el;
                   }}
-                  className={`flex items-center justify-between gap-2 rounded-lg px-1 py-1 transition ${
-                    isCurrent ? "bg-white/10" : "hover:bg-white/6"
-                  } ${focusedTrackIdx === idx ? "bg-fuchsia-500/10 ring-1 ring-fuchsia-400/50" : ""}`}
+                  className={`flex items-center justify-between gap-2 rounded-lg px-1 py-1 transition hover:bg-white/6 ${
+                    focusedTrackIdx === idx ? "bg-fuchsia-500/10 ring-1 ring-fuchsia-400/50" : ""
+                  }`}
                 >
                   <button
                     type="button"
@@ -617,6 +627,10 @@ export default function ShowPage() {
                           url: x.url,
                           length: x.length,
                           track: String(i + 1),
+                          showKey,
+                          showDate,
+                          venueText,
+                          artwork: heroImageSrc,
                         })),
                         idx,
                       );
@@ -624,7 +638,11 @@ export default function ShowPage() {
                     }}
                     className="flex min-w-0 flex-1 items-center justify-between gap-3 px-1 py-1 text-left"
                   >
-                    <span className="truncate text-[16px] leading-none [font-family:var(--font-roboto-condensed)]">
+                    <span
+                      className={`truncate text-[16px] leading-none [font-family:var(--font-roboto-condensed)] ${
+                        isCurrent ? "text-[#EFD50F]" : "text-white"
+                      }`}
+                    >
                       {displayTrackTitle(t.title)}
                     </span>
                     {t.length ? (
@@ -666,7 +684,7 @@ export default function ShowPage() {
           onClick={() => closeSheet()}
         >
           <div
-            className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-[393px] rounded-t-2xl border border-white/15 bg-[#080017] px-6 pb-10 pt-6 shadow-[0_-4px_16px_rgba(0,0,0,0.4)]"
+            className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-[393px] rounded-t-2xl border border-white/15 bg-[#080017] px-6 pb-10 pt-6 shadow-[0_-4px_16px_rgba(0,0,0,0.4)] [font-family:var(--font-roboto-condensed)]"
             onClick={(e) => e.stopPropagation()}
           >
             {!showPlaylistPicker ? (
@@ -681,8 +699,9 @@ export default function ShowPage() {
                     </div>
                   </div>
                   <div className="flex items-center justify-between text-sm text-white/45">
-                    <div className="min-w-0 truncate">
-                      pin {venueText}
+                    <div className="min-w-0 truncate flex items-center gap-1.5">
+                      <FontAwesomeIcon icon={faMapPin} className="text-[11px]" />
+                      <span>{venueText}</span>
                     </div>
                     <div className="shrink-0">{showDate}</div>
                   </div>
@@ -741,7 +760,7 @@ export default function ShowPage() {
 
                 <button
                   type="button"
-                  className="mt-5 w-full text-center text-[20px] text-white/90 hover:text-white transition"
+                  className="mt-5 w-full text-center text-[16px] text-white/90 hover:text-white transition"
                   onClick={() => closeSheet()}
                 >
                   Cancel
@@ -870,7 +889,7 @@ export default function ShowPage() {
 
                 <button
                   type="button"
-                  className="mt-5 w-full text-center text-[20px] text-white/90 hover:text-white transition"
+                  className="mt-5 w-full text-center text-[16px] text-white/90 hover:text-white transition"
                   onClick={() => setShowPlaylistPicker(false)}
                 >
                   Done

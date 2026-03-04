@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faBookmark,
+  faCirclePlus,
   faChain,
   faChevronLeft,
   faEllipsisVertical,
@@ -18,6 +19,7 @@ import {
   faPlay,
   faShuffle,
   faTrash,
+  faXmark,
   faXmarkCircle,
 } from "@fortawesome/pro-solid-svg-icons";
 
@@ -39,6 +41,25 @@ function parseTrackSeconds(length?: string): number {
   if (parts.length === 2) return parts[0] * 60 + parts[1];
   if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
   return 0;
+}
+
+function isAudioName(name: string): boolean {
+  const n = String(name || "").toLowerCase();
+  return (
+    n.endsWith(".mp3") ||
+    n.endsWith(".flac") ||
+    n.endsWith(".ogg") ||
+    n.endsWith(".m4a") ||
+    n.endsWith(".wav")
+  );
+}
+
+function normalizeLooseText(input: string): string {
+  return String(input || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function getArchiveIdentifier(url?: string): string {
@@ -151,6 +172,23 @@ type PlaylistRenderItem =
   | { type: "linked-group"; startIdx: number; groupId: string; items: LinkedTrackItem[] };
 type ForcedVariantBySlotId = Record<string, string>;
 const CHAIN_HINT_DISMISSED_KEY = "kglw.playlists.chainHintDismissed.v1";
+
+type AddTracksShowItem = {
+  showKey: string;
+  showDate: string;
+  title: string;
+  defaultId: string;
+  artwork?: string;
+  matchedSongTitle?: string | null;
+  matchedSongLength?: string | null;
+  matchedSongUrl?: string | null;
+};
+
+type AddTracksResponse = {
+  song?: {
+    items: AddTracksShowItem[];
+  };
+};
 
 function shuffleArray<T>(items: T[]): T[] {
   const out = items.slice();
@@ -293,6 +331,7 @@ function resolveSlotTrack(slot: PlaylistSlot, forcedVariantId?: string): Track |
 
 export default function PlaylistDetailPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const params = useParams<{ id?: string | string[] }>();
   const playlistId = Array.isArray(params?.id)
     ? params.id[0] || ""
@@ -310,6 +349,7 @@ export default function PlaylistDetailPage() {
   const playlist = usePlaylists((s) =>
     s.playlists.find((p) => p.id === playlistId),
   );
+  const addTrack = usePlaylists((s) => s.addTrack);
   const removeTrack = usePlaylists((s) => s.removeTrack);
   const deletePlaylist = usePlaylists((s) => s.deletePlaylist);
   const renamePlaylist = usePlaylists((s) => s.renamePlaylist);
@@ -325,7 +365,15 @@ export default function PlaylistDetailPage() {
   const [playlistMenuOpen, setPlaylistMenuOpen] = useState(false);
   const [playlistRenameOpen, setPlaylistRenameOpen] = useState(false);
   const [playlistRenameValue, setPlaylistRenameValue] = useState("");
+  const [autoRenameHandled, setAutoRenameHandled] = useState(false);
   const [playlistDeleteOpen, setPlaylistDeleteOpen] = useState(false);
+  const [addTracksOpen, setAddTracksOpen] = useState(false);
+  const [addTracksQuery, setAddTracksQuery] = useState("");
+  const [addTracksDebouncedQuery, setAddTracksDebouncedQuery] = useState("");
+  const [addTracksLoading, setAddTracksLoading] = useState(false);
+  const [addTracksError, setAddTracksError] = useState<string | null>(null);
+  const [addTracksResults, setAddTracksResults] = useState<AddTracksShowItem[]>([]);
+  const [addingKeys, setAddingKeys] = useState<Record<string, boolean>>({});
   const [chainHintDismissed, setChainHintDismissed] = useState(() => {
     try {
       if (typeof window === "undefined") return false;
@@ -456,6 +504,47 @@ export default function PlaylistDetailPage() {
     setQueue(playbackQueue, safeStart);
   }
 
+  async function resolvePlayableSongForResult(
+    defaultId: string,
+    preferredTitle: string,
+  ): Promise<{ url: string; length?: string; title?: string } | null> {
+    const identifier = String(defaultId || "").trim();
+    if (!identifier) return null;
+    try {
+      const res = await fetch(`/api/ia/show-metadata?id=${encodeURIComponent(identifier)}`, {
+        cache: "no-store",
+      });
+      if (!res.ok) return null;
+      const data = (await res.json()) as {
+        files?: Array<{ name?: string; title?: string; length?: string }>;
+      };
+      const files = Array.isArray(data?.files) ? data.files : [];
+      const tokens = normalizeLooseText(preferredTitle)
+        .split(" ")
+        .filter((t) => t.length >= 2)
+        .slice(0, 6);
+      const audio = files.filter((f) => isAudioName(String(f?.name || "")));
+      if (audio.length === 0) return null;
+
+      const best =
+        audio.find((f) => {
+          const hay = normalizeLooseText(`${f?.title || ""} ${f?.name || ""}`);
+          if (!hay) return false;
+          if (tokens.length === 0) return false;
+          return tokens.every((t) => hay.includes(t));
+        }) || audio[0];
+      const fileName = String(best?.name || "").trim();
+      if (!fileName) return null;
+      return {
+        url: `https://archive.org/download/${encodeURIComponent(identifier)}/${encodeURIComponent(fileName)}`,
+        length: String(best?.length || "").trim() || undefined,
+        title: String(best?.title || "").trim() || undefined,
+      };
+    } catch {
+      return null;
+    }
+  }
+
   const activeTrackUrl = playerPlaying ? playerQueue[playerIndex]?.url || "" : "";
 
   function closeChainEditor() {
@@ -557,6 +646,62 @@ export default function PlaylistDetailPage() {
       cancelled = true;
     };
   }, [playlist?.slots, showTitleByIdentifier]);
+
+  useEffect(() => {
+    if (!hydrated || !playlist || autoRenameHandled) return;
+    if (searchParams?.get("rename") !== "1") return;
+    const suggested = String(searchParams.get("suggested") || playlist.name || "").trim();
+    setPlaylistRenameValue(suggested || playlist.name);
+    setPlaylistRenameOpen(true);
+    setAutoRenameHandled(true);
+  }, [hydrated, playlist, searchParams, autoRenameHandled]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setAddTracksDebouncedQuery(addTracksQuery.trim()), 220);
+    return () => clearTimeout(t);
+  }, [addTracksQuery]);
+
+  useEffect(() => {
+    let alive = true;
+    const controller = new AbortController();
+    async function runSongSearch() {
+      if (!addTracksOpen) return;
+      if (!addTracksDebouncedQuery || addTracksDebouncedQuery.length < 2) {
+        setAddTracksLoading(false);
+        setAddTracksError(null);
+        setAddTracksResults([]);
+        return;
+      }
+      setAddTracksLoading(true);
+      setAddTracksError(null);
+      try {
+        const url = `/api/ia/shows?page=1&sort=newest&query=${encodeURIComponent(addTracksDebouncedQuery)}`;
+        const res = await fetch(url, { cache: "no-store", signal: controller.signal });
+        if (!res.ok) throw new Error(`Search failed (${res.status})`);
+        const data = (await res.json()) as AddTracksResponse;
+        if (!alive) return;
+        const seen = new Set<string>();
+        const deduped = (data.song?.items || []).filter((s) => {
+          const key = `${s.showKey}|${String(s.matchedSongTitle || "").toLowerCase()}|${String(s.matchedSongUrl || "")}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+        setAddTracksResults(deduped.slice(0, 60));
+      } catch (e: unknown) {
+        if (!alive || controller.signal.aborted) return;
+        setAddTracksResults([]);
+        setAddTracksError(e instanceof Error ? e.message : "Failed to search songs");
+      } finally {
+        if (alive) setAddTracksLoading(false);
+      }
+    }
+    runSongSearch();
+    return () => {
+      alive = false;
+      controller.abort();
+    };
+  }, [addTracksOpen, addTracksDebouncedQuery]);
 
   if (!hydrated) {
     return (
@@ -702,40 +847,65 @@ export default function PlaylistDetailPage() {
                 <span>{totalDurationLabel}</span>
               </div>
             </div>
-            <div className="relative z-[1] -mt-[1px] mb-[-16px] rounded-bl-[16px] rounded-br-[16px] border border-white/20 px-4 pb-3 pt-7 backdrop-blur-[6px]">
-              <div className="grid grid-cols-2 gap-4">
-                <button
-                  type="button"
-                  className="flex items-center justify-center gap-1 rounded-[24px] bg-[#5a22c9] px-[14px] py-[10px] text-[14px] font-normal text-white [font-family:var(--font-roboto)]"
-                  onClick={() => playFromIndex(0)}
-                  disabled={playableSlots.length === 0}
-                >
-                  Play
-                  <FontAwesomeIcon icon={faCirclePlay} className="text-[18px]" />
-                </button>
-                <button
-                  type="button"
-                  className="flex items-center justify-center gap-1 rounded-[24px] bg-linear-to-r from-[#5a22c9] to-[#c86c45] px-[14px] py-[10px] text-[14px] font-normal text-white [font-family:var(--font-roboto)]"
-                  onClick={() => playFromIndex(getRandomShuffleStartIndex(playableSlots), {}, true)}
-                  disabled={playableSlots.length === 0}
-                >
-                  Shuffle
-                  <FontAwesomeIcon icon={faShuffle} className="text-[13px]" />
-                </button>
+            {playableSlots.length > 0 && (
+              <div className="relative z-[1] -mt-[1px] mb-[-16px] rounded-bl-[16px] rounded-br-[16px] border border-white/20 px-4 pb-3 pt-7 backdrop-blur-[6px]">
+                <div className="grid grid-cols-2 gap-4">
+                  <button
+                    type="button"
+                    className="flex items-center justify-center gap-1 rounded-[24px] bg-[#5a22c9] px-[14px] py-[10px] text-[14px] font-normal text-white [font-family:var(--font-roboto)]"
+                    onClick={() => playFromIndex(0)}
+                    disabled={playableSlots.length === 0}
+                  >
+                    Play
+                    <FontAwesomeIcon icon={faCirclePlay} className="text-[18px]" />
+                  </button>
+                  <button
+                    type="button"
+                    className="flex items-center justify-center gap-1 rounded-[24px] bg-linear-to-r from-[#5a22c9] to-[#c86c45] px-[14px] py-[10px] text-[14px] font-normal text-white [font-family:var(--font-roboto)]"
+                    onClick={() => playFromIndex(getRandomShuffleStartIndex(playableSlots), {}, true)}
+                    disabled={playableSlots.length === 0}
+                  >
+                    Shuffle
+                    <FontAwesomeIcon icon={faShuffle} className="text-[13px]" />
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
           </section>
 
-          <div className="mt-4 flex items-center justify-between rounded-[16px] bg-white/5 px-4 py-3.5 backdrop-blur-[6px]">
-            <span className="text-[14px] leading-none text-white/65 [font-family:var(--font-roboto-condensed)]">
-              Search this playlist
-            </span>
-            <FontAwesomeIcon icon={faMagnifyingGlass} className="text-[18px] text-white/90" />
-          </div>
+          {playableSlots.length > 0 && (
+            <div className="mt-4 flex items-center justify-between rounded-[16px] bg-white/5 px-4 py-3.5 backdrop-blur-[6px]">
+              <span className="text-[14px] leading-none text-white/65 [font-family:var(--font-roboto-condensed)]">
+                Search this playlist
+              </span>
+              <FontAwesomeIcon icon={faMagnifyingGlass} className="text-[18px] text-white/90" />
+            </div>
+          )}
+          {playableSlots.length === 0 && (
+            <div className="mt-4 rounded-xl border border-dashed border-white/15 bg-black/20 p-4 text-sm text-white/70">
+              Empty playlist. Tap "Add tracks" to search and add songs.
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="mx-auto w-full max-w-[393px] px-6 pb-8">
+      <div
+        className={`mx-auto w-full max-w-[393px] px-6 pb-8 ${
+          playableSlots.length === 0 && !chainPickerOpen ? "min-h-[calc(100vh-360px)] flex flex-col justify-center" : ""
+        }`}
+      >
+        <div className={playableSlots.length === 0 && !chainPickerOpen ? "" : "mb-3"}>
+          <button
+            type="button"
+            className="w-full rounded-[12px] border border-[#5A22C9] bg-[#5A22C9] px-4 py-3 text-[14px] text-white [font-family:var(--font-roboto-condensed)] hover:bg-[#6a33d9]"
+            onClick={() => {
+              setAddTracksOpen(true);
+              setAddTracksError(null);
+            }}
+          >
+            Add tracks
+          </button>
+        </div>
         {chainPickerOpen ? (
           <section className="mt-4 space-y-3 [font-family:var(--font-roboto-condensed)]">
             {playableSlots.map((item, idx) => {
@@ -750,7 +920,7 @@ export default function PlaylistDetailPage() {
               const title = toDisplayTrackTitle(item.slot.variants[0]?.track.title || item.track.title);
 
               return (
-                <div key={slotId} className="flex items-stretch gap-[10px]">
+                  <div key={slotId} className="flex items-stretch gap-[10px]">
                   <button
                     type="button"
                     className="flex w-[7px] shrink-0 flex-col items-center"
@@ -840,11 +1010,7 @@ export default function PlaylistDetailPage() {
               );
             })}
           </section>
-        ) : playableSlots.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-white/15 bg-black/20 p-4 text-sm text-white/70">
-            Empty playlist. Add tracks from any show.
-          </div>
-        ) : (
+        ) : playableSlots.length === 0 ? null : (
           <section className="space-y-5 [font-family:var(--font-roboto-condensed)]">
             {renderItems.map((entry, entryIdx) => {
               if (entry.type === "single") {
@@ -854,7 +1020,7 @@ export default function PlaylistDetailPage() {
                 const isSlotActive = Boolean(activeVariantId);
                 return (
                   <div key={slot.id} className="py-[1px]">
-                    <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start justify-between gap-3 rounded-[10px] px-2 py-1">
                       <button
                         type="button"
                         className="min-w-0 flex-1 text-left"
@@ -954,7 +1120,7 @@ export default function PlaylistDetailPage() {
                               )}
                             </div>
                             <div className="min-w-0 flex-1">
-                            <div className="flex items-start justify-between gap-3 py-0.5">
+                            <div className="flex items-start justify-between gap-3 rounded-[10px] px-2 py-1">
                                 <button
                                   type="button"
                                   className="min-w-0 flex-1 text-left"
@@ -1083,6 +1249,7 @@ export default function PlaylistDetailPage() {
                 autoFocus
                 value={playlistRenameValue}
                 onChange={(e) => setPlaylistRenameValue(e.target.value)}
+                placeholder="My Playlist"
                 className="mt-3 w-full rounded-[10px] border border-white/25 bg-black/25 px-3 py-2 text-[14px] text-white outline-none focus:border-white/45"
               />
               <div className="mt-4 flex items-center justify-end gap-2">
@@ -1148,6 +1315,160 @@ export default function PlaylistDetailPage() {
                 </button>
               </div>
             </div>
+          </div>
+        </>
+      )}
+
+      {addTracksOpen && (
+        <>
+          <button
+            type="button"
+            aria-label="Close add tracks modal"
+            className="fixed inset-0 z-40 bg-black/65"
+            onClick={() => setAddTracksOpen(false)}
+          />
+          <div className="fixed inset-x-0 bottom-0 z-50 mx-auto w-full max-w-[393px] rounded-t-[16px] border border-white/15 bg-[#080017] px-6 pb-8 pt-5 shadow-[0_-4px_16px_rgba(0,0,0,0.4)]">
+            <div className="mb-4 flex items-center justify-between">
+              <div className="text-[20px] leading-none [font-family:var(--font-roboto-condensed)]">
+                Add tracks
+              </div>
+              <button
+                type="button"
+                className="text-white/70 hover:text-white"
+                onClick={() => setAddTracksOpen(false)}
+                aria-label="Close"
+              >
+                <FontAwesomeIcon icon={faXmark} />
+              </button>
+            </div>
+
+            <div className="relative">
+              <FontAwesomeIcon
+                icon={faMagnifyingGlass}
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[14px] text-white/70"
+              />
+              <input
+                value={addTracksQuery}
+                onChange={(e) => setAddTracksQuery(e.target.value)}
+                placeholder="Search songs"
+                autoFocus
+                className="w-full rounded-[10px] border border-white/20 bg-white/5 py-2.5 pl-9 pr-3 text-[14px] text-white outline-none placeholder:text-white/45"
+              />
+            </div>
+
+            <div className="mt-4 max-h-[48vh] space-y-2 overflow-auto pr-1">
+              {!addTracksDebouncedQuery ? (
+                <div className="rounded-[10px] border border-white/10 bg-white/5 px-3 py-3 text-[13px] text-white/65">
+                  Start typing to search for songs.
+                </div>
+              ) : null}
+              {addTracksLoading ? (
+                <div className="rounded-[10px] border border-white/10 bg-white/5 px-3 py-3 text-[13px] text-white/65">
+                  Searching...
+                </div>
+              ) : null}
+              {addTracksError ? (
+                <div className="rounded-[10px] border border-red-400/25 bg-red-500/10 px-3 py-3 text-[13px] text-red-100">
+                  {addTracksError}
+                </div>
+              ) : null}
+              {!addTracksLoading &&
+              !addTracksError &&
+              addTracksDebouncedQuery &&
+              addTracksResults.length === 0 ? (
+                <div className="rounded-[10px] border border-white/10 bg-white/5 px-3 py-3 text-[13px] text-white/65">
+                  No song matches found.
+                </div>
+              ) : null}
+
+              {addTracksResults.map((s) => {
+                const songTitle = toDisplayTrackTitle(s.matchedSongTitle || addTracksDebouncedQuery);
+                const resultKey = `${s.showKey}|${String(s.matchedSongUrl || "")}|${songTitle.toLowerCase()}`;
+                const disabled = !s.matchedSongUrl && !s.defaultId;
+                const adding = Boolean(addingKeys[resultKey]);
+                const identifier = getArchiveIdentifier(s.matchedSongUrl || undefined);
+                const thumbSrc = s.artwork
+                  ? s.artwork
+                  : identifier
+                    ? `https://archive.org/services/img/${encodeURIComponent(identifier)}`
+                    : "";
+                return (
+                  <div
+                    key={resultKey}
+                    className="flex items-center justify-between gap-3 rounded-[12px] border border-white/15 bg-white/6 px-3 py-2.5"
+                  >
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <div className="h-10 w-10 shrink-0 overflow-hidden rounded-[8px] border border-white/15 bg-black/30">
+                        {thumbSrc ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={thumbSrc} alt="" className="h-full w-full object-cover" />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-[10px] text-white/50">
+                            ART
+                          </div>
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="truncate text-[15px] text-white [font-family:var(--font-roboto-condensed)]">
+                          {songTitle}
+                        </div>
+                        <div className="mt-0.5 truncate text-[12px] text-white/65 [font-family:var(--font-roboto-condensed)]">
+                          {toDisplayTitle(s.title)} {s.showDate}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={disabled || adding}
+                      className="shrink-0 text-[20px] text-white/90 hover:text-white disabled:opacity-35"
+                      title={
+                        disabled
+                          ? "No playable source found for this result"
+                          : adding
+                            ? "Adding..."
+                            : "Add to playlist"
+                      }
+                      onClick={async () => {
+                        setAddingKeys((prev) => ({ ...prev, [resultKey]: true }));
+                        try {
+                          const resolved =
+                            s.matchedSongUrl
+                              ? {
+                                  url: s.matchedSongUrl,
+                                  length: s.matchedSongLength || undefined,
+                                  title: s.matchedSongTitle || undefined,
+                                }
+                              : await resolvePlayableSongForResult(s.defaultId, songTitle);
+                          if (!resolved?.url) return;
+                          addTrack(playlist.id, {
+                            title: toDisplayTrackTitle(resolved.title || songTitle),
+                            url: resolved.url,
+                            length: resolved.length || s.matchedSongLength || undefined,
+                            track: "1",
+                            showKey: s.showKey,
+                            showDate: s.showDate,
+                            venueText: toDisplayTitle(s.title),
+                            artwork: s.artwork,
+                          });
+                        } finally {
+                          setAddingKeys((prev) => ({ ...prev, [resultKey]: false }));
+                        }
+                      }}
+                    >
+                      <FontAwesomeIcon icon={faCirclePlus} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            <button
+              type="button"
+              className="mt-5 w-full text-center text-[14px] text-white/90 hover:text-white"
+              onClick={() => setAddTracksOpen(false)}
+            >
+              Done
+            </button>
           </div>
         </>
       )}

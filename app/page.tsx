@@ -75,6 +75,7 @@ type SongSheetTrack = {
   showKey: string;
   showDate: string;
   venueText: string;
+  artwork?: string;
 };
 type SongSuggestion = {
   title: string;
@@ -107,6 +108,19 @@ const SORT_OPTIONS: { value: string; label: string }[] = [
   { value: "show_length_longest", label: "Longest show" },
   { value: "show_length_shortest", label: "Shortest show" },
 ];
+
+function nextDefaultPlaylistName(existingNames: string[]): string {
+  const base = "My Playlist";
+  const normalized = new Set(
+    existingNames
+      .map((name) => String(name || "").trim().toLowerCase())
+      .filter(Boolean),
+  );
+  if (!normalized.has(base.toLowerCase())) return base;
+  let n = 2;
+  while (normalized.has(`${base.toLowerCase()} ${n}`)) n += 1;
+  return `${base} ${n}`;
+}
 
 function getArchiveIdentifier(url?: string): string {
   if (!url) return "";
@@ -1218,7 +1232,15 @@ export default function HomePage() {
     localStorage.setItem(RECENT_SHOWS_KEY, JSON.stringify(next));
   }
 
-  async function fetchPlayableQueueForIdentifier(identifier: string): Promise<Track[]> {
+  async function fetchPlayableQueueForIdentifier(
+    identifier: string,
+    context?: {
+      showKey?: string;
+      showDate?: string;
+      venueText?: string;
+      artwork?: string;
+    },
+  ): Promise<Track[]> {
     try {
       const res = await fetch(`/api/ia/show-metadata?id=${encodeURIComponent(identifier)}`, {
         cache: "no-store",
@@ -1268,6 +1290,10 @@ export default function HomePage() {
           length: lenRaw || undefined,
           track: String(queue.length + 1),
           name: fileName,
+          showKey: context?.showKey,
+          showDate: context?.showDate,
+          venueText: context?.venueText,
+          artwork: context?.artwork,
         });
       }
       return queue;
@@ -1290,7 +1316,12 @@ export default function HomePage() {
 
     playPendingRef.current.add(identifier);
     try {
-      const queue = await fetchPlayableQueueForIdentifier(identifier);
+      const queue = await fetchPlayableQueueForIdentifier(identifier, {
+        showKey: show.showKey,
+        showDate: show.showDate,
+        venueText: toDisplayTitle(show.title),
+        artwork: show.artwork,
+      });
       if (queue.length === 0) return;
       queueByIdentifierRef.current[identifier] = queue;
       setQueue(queue, 0);
@@ -1325,7 +1356,12 @@ export default function HomePage() {
       if (playPendingRef.current.has(identifier)) return;
       playPendingRef.current.add(identifier);
       try {
-        queue = await fetchPlayableQueueForIdentifier(identifier);
+        queue = await fetchPlayableQueueForIdentifier(identifier, {
+          showKey: songShow.showKey,
+          showDate: songShow.showDate,
+          venueText: toDisplayTitle(songShow.title),
+          artwork: songShow.artwork,
+        });
         if (!queue || queue.length === 0) return;
         queueByIdentifierRef.current[identifier] = queue;
       } finally {
@@ -1396,14 +1432,21 @@ export default function HomePage() {
 
             <div className="space-y-2">
               {featuredPlaylists.length === 0 ? (
-                <Link
-                  href="/playlists"
-                  className="flex items-center justify-center rounded-[16px] border border-white/20 bg-white/5 p-3 backdrop-blur-[6px]"
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-center rounded-[16px] border border-white/20 bg-white/5 p-3 backdrop-blur-[6px]"
+                  onClick={() => {
+                    const suggested = nextDefaultPlaylistName(playlists.map((pl) => pl.name));
+                    const id = createPlaylist(suggested);
+                    router.push(
+                      `/playlists/${encodeURIComponent(id)}?rename=1&suggested=${encodeURIComponent(suggested)}`,
+                    );
+                  }}
                 >
                   <div className="text-[18px] font-medium text-white [font-family:var(--font-roboto-condensed)]">
                     Create a playlist
                   </div>
-                </Link>
+                </button>
               ) : (
                 featuredPlaylists.map((p) => {
                   const versions = p.slots.reduce(
@@ -1820,6 +1863,7 @@ export default function HomePage() {
                                 showKey: s.showKey,
                                 showDate: s.showDate,
                                 venueText: toDisplayTitle(s.title),
+                                artwork: s.artwork,
                               });
                               setShowSongPlaylistPicker(false);
                               setSongShareState("idle");
@@ -2190,6 +2234,10 @@ export default function HomePage() {
                         url: songSheetTrack.url,
                         length: songSheetTrack.length,
                         track: songSheetTrack.track,
+                        showKey: songSheetTrack.showKey,
+                        showDate: songSheetTrack.showDate,
+                        venueText: songSheetTrack.venueText,
+                        artwork: songSheetTrack.artwork,
                       });
                       setSongPlaylistActionState((prev) => ({ ...prev, [id]: "added" }));
                       closeSongSheet();
@@ -2243,6 +2291,10 @@ export default function HomePage() {
                                       url: songSheetTrack.url,
                                       length: songSheetTrack.length,
                                       track: songSheetTrack.track,
+                                      showKey: songSheetTrack.showKey,
+                                      showDate: songSheetTrack.showDate,
+                                      venueText: songSheetTrack.venueText,
+                                      artwork: songSheetTrack.artwork,
                                     });
                                     setSongPlaylistActionState((prev) => ({
                                       ...prev,

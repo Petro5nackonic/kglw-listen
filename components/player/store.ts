@@ -6,6 +6,10 @@ export type Track = {
   name?: string;
   length?: string;
   track?: string;
+  showKey?: string;
+  showDate?: string;
+  venueText?: string;
+  artwork?: string;
 };
 
 type PlayerState = {
