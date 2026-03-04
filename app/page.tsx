@@ -624,9 +624,6 @@ export default function HomePage() {
   const setQueue = usePlayer((s) => s.setQueue);
   const playlists = usePlaylists((s) => s.playlists);
   const syncPrebuiltPlaylistsFromServer = usePlaylists((s) => s.syncPrebuiltPlaylistsFromServer);
-  const ensureFlightB741Playlist = usePlaylists((s) => s.ensureFlightB741Playlist);
-  const ensureMindFuzzLiveCompPlaylist = usePlaylists((s) => s.ensureMindFuzzLiveCompPlaylist);
-  const ensureRequestedAlbumPlaylists = usePlaylists((s) => s.ensureRequestedAlbumPlaylists);
   const addTrackToPlaylist = usePlaylists((s) => s.addTrack);
   const createPlaylist = usePlaylists((s) => s.createPlaylist);
   const renamePlaylist = usePlaylists((s) => s.renamePlaylist);
@@ -730,14 +727,31 @@ export default function HomePage() {
     );
   }
 
+  async function fetchShowsWithRetry(url: string, baseTimeoutMs = 10000): Promise<Response | null> {
+    for (const timeoutMs of [baseTimeoutMs, baseTimeoutMs + 5000]) {
+      let timeout: ReturnType<typeof setTimeout> | null = null;
+      try {
+        const controller = new AbortController();
+        timeout = setTimeout(() => controller.abort(), timeoutMs);
+        const res = await fetch(url, { signal: controller.signal });
+        if (res.ok) return res;
+      } catch {
+        // Retry once with a longer timeout.
+      } finally {
+        if (timeout) clearTimeout(timeout);
+      }
+    }
+    return null;
+  }
+
   async function loadPage(p: number, mode: "append" | "replace") {
     if (loading) return;
     setLoading(true);
     setError(null);
 
     try {
-      const res = await fetch(buildUrl(p), { cache: "no-store" });
-      if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+      const res = await fetchShowsWithRetry(buildUrl(p));
+      if (!res) throw new Error("Request failed");
       const data = (await res.json()) as ShowsResponse;
 
       if (data.facets?.years) setYearFacet(data.facets.years);
@@ -950,11 +964,8 @@ export default function HomePage() {
       }
       setSongSearchLoading(true);
       try {
-        const res = await fetch(buildSongSearchUrl(1), {
-          cache: "no-store",
-          signal: controller.signal,
-        });
-        if (!res.ok) {
+        const res = await fetchShowsWithRetry(buildSongSearchUrl(1));
+        if (!res) {
           if (alive) setSongSearchLoading(false);
           return;
         }
@@ -1592,9 +1603,6 @@ export default function HomePage() {
     let queue = buildQueue(playlist);
     if (isPrebuilt && queue.length === 0) {
       await syncPrebuiltPlaylistsFromServer();
-      await ensureFlightB741Playlist();
-      await ensureMindFuzzLiveCompPlaylist();
-      await ensureRequestedAlbumPlaylists();
       const refreshed = usePlaylists
         .getState()
         .playlists.find((pl) => pl.id === playlistId || pl.name === playlist.name);

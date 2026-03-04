@@ -342,10 +342,7 @@ export default function ShowPage() {
       }
 
       try {
-        const res = await fetch(
-          `/api/ia/show?key=${encodeURIComponent(showKey)}`,
-          { cache: "no-store" },
-        );
+        const res = await fetch(`/api/ia/show?key=${encodeURIComponent(showKey)}`);
         if (!res.ok) throw new Error(`GET /api/ia/show failed: ${res.status}`);
         const data = (await res.json()) as ShowApiResponse;
 
@@ -382,10 +379,7 @@ export default function ShowPage() {
       setMeta(cachedMeta || null);
 
       try {
-        const res = await fetch(
-          `/api/ia/show-metadata?id=${encodeURIComponent(selectedId)}`,
-          { cache: "no-store" },
-        );
+        const res = await fetch(`/api/ia/show-metadata?id=${encodeURIComponent(selectedId)}`);
         if (!res.ok)
           throw new Error(`GET /api/ia/show-metadata failed: ${res.status}`);
         const data = (await res.json()) as IaMetadataResponse;

@@ -3,6 +3,10 @@ import { NextRequest } from "next/server";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 const SHOW_DETAIL_CACHE_TTL_MS = 1000 * 60 * 5;
+const SUCCESS_CACHE_HEADERS = {
+  "Cache-Control": "public, s-maxage=120, stale-while-revalidate=300",
+};
+const UPSTREAM_TIMEOUT_MS = 7000;
 
 type IaDoc = {
   identifier: string;
@@ -87,7 +91,7 @@ export async function GET(req: NextRequest) {
 
   const cached = showDetailCache.get(key);
   if (cached && cached.expiresAt > Date.now()) {
-    return Response.json(cached.payload);
+    return Response.json(cached.payload, { headers: SUCCESS_CACHE_HEADERS });
   }
 
   const showDate = extractShowDateFromKey(key);
@@ -109,7 +113,17 @@ export async function GET(req: NextRequest) {
     fields.map((f) => `&fl[]=${encodeURIComponent(f)}`).join("") +
     `&rows=500&page=1&output=json`;
 
-  const res = await fetch(url, { cache: "no-store" });
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  let res: Response;
+  try {
+    const controller = new AbortController();
+    timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
+    res = await fetch(url, { cache: "no-store", signal: controller.signal });
+  } catch {
+    return Response.json({ error: "Archive request timed out" }, { status: 504 });
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
   if (!res.ok) {
     return Response.json({ error: "Archive request failed" }, { status: 502 });
   }
@@ -158,5 +172,5 @@ export async function GET(req: NextRequest) {
     expiresAt: Date.now() + SHOW_DETAIL_CACHE_TTL_MS,
     payload,
   });
-  return Response.json(payload);
+  return Response.json(payload, { headers: SUCCESS_CACHE_HEADERS });
 }

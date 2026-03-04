@@ -184,6 +184,10 @@ const FLIGHT_B741_TRACK_ORDER = [
 const STATIC_PREBUILT_SEED_DEFS: Array<{ name: string; tracks: string[]; chainFirstCount?: number }> = [
   { name: FLIGHT_B741_PLAYLIST_NAME, tracks: FLIGHT_B741_TRACK_ORDER },
   { name: MIND_FUZZ_LIVE_COMP_NAME, tracks: MIND_FUZZ_LIVE_COMP_TRACK_ORDER, chainFirstCount: 4 },
+  {
+    name: "I'm in Your Mind Fuzz",
+    tracks: REQUESTED_ALBUM_TRACK_FALLBACKS["i'm in your mind fuzz"] || [],
+  },
   { name: "Infest the Rats' Nest", tracks: REQUESTED_ALBUM_TRACK_FALLBACKS["infest the rats' nest"] || [] },
   { name: "Nonagon Infinity", tracks: REQUESTED_ALBUM_TRACK_FALLBACKS["nonagon infinity"] || [] },
   {
@@ -241,6 +245,31 @@ type ApiPrebuiltPlaylist = {
 };
 
 function buildStaticPrebuiltSeedPlaylists(now = Date.now()): Playlist[] {
+  const buildFallbackPlaylist = (def: { name: string; tracks: string[]; chainFirstCount?: number }) => {
+    const linkGroupId = def.chainFirstCount ? safeUUID() : undefined;
+    const slots: PlaylistSlot[] = def.tracks.map((title, idx) => ({
+      id: safeUUID(),
+      canonicalTitle: normalizeSongToken(title) || canonicalTrackTitle({ title, url: "" }),
+      addedAt: now,
+      updatedAt: now,
+      linkGroupId: linkGroupId && idx < (def.chainFirstCount || 0) ? linkGroupId : undefined,
+      chainOrder: linkGroupId && idx < (def.chainFirstCount || 0) ? idx + 1 : undefined,
+      variants: [
+        { id: safeUUID(), addedAt: now, track: { title, url: "", artwork: "/api/default-artwork" } },
+        { id: safeUUID(), addedAt: now, track: { title, url: "", artwork: "/api/default-artwork" } },
+      ],
+    }));
+    return {
+      id: safeUUID(),
+      name: def.name,
+      createdAt: now,
+      updatedAt: now,
+      source: "prebuilt" as const,
+      prebuiltKind: "album-live-comp" as const,
+      slots,
+    };
+  };
+
   const manifest = staticPrebuiltManifest as {
     playlists?: Array<{
       name?: string;
@@ -311,30 +340,9 @@ function buildStaticPrebuiltSeedPlaylists(now = Date.now()): Playlist[] {
       .filter(Boolean) as Playlist[];
   }
 
-  return STATIC_PREBUILT_SEED_DEFS.filter((def) => def.tracks.length > 0).map((def) => {
-    const linkGroupId = def.chainFirstCount ? safeUUID() : undefined;
-    const slots: PlaylistSlot[] = def.tracks.map((title, idx) => ({
-      id: safeUUID(),
-      canonicalTitle: normalizeSongToken(title) || canonicalTrackTitle({ title, url: "" }),
-      addedAt: now,
-      updatedAt: now,
-      linkGroupId: linkGroupId && idx < (def.chainFirstCount || 0) ? linkGroupId : undefined,
-      chainOrder: linkGroupId && idx < (def.chainFirstCount || 0) ? idx + 1 : undefined,
-      variants: [
-        { id: safeUUID(), addedAt: now, track: { title, url: "", artwork: "/api/default-artwork" } },
-        { id: safeUUID(), addedAt: now, track: { title, url: "", artwork: "/api/default-artwork" } },
-      ],
-    }));
-    return {
-      id: safeUUID(),
-      name: def.name,
-      createdAt: now,
-      updatedAt: now,
-      source: "prebuilt",
-      prebuiltKind: "album-live-comp",
-      slots,
-    };
-  });
+  return STATIC_PREBUILT_SEED_DEFS.filter((def) => def.tracks.length > 0).map((def) =>
+    buildFallbackPlaylist(def),
+  );
 }
 
 function migratePlaylist(raw: LegacyPlaylist): Playlist {
@@ -530,7 +538,14 @@ export const usePlaylists = create<PlaylistsState>()(
             (get().dismissedPrebuiltNames || []).map((n) => n.trim().toLowerCase()),
           );
           const now = Date.now();
-          const current = get().playlists.slice();
+          const state = get();
+          const existingPrebuiltByName = new Map(
+            state.playlists
+              .filter((p) => isPrebuiltPlaylist(p))
+              .map((p) => [p.name.trim().toLowerCase(), p]),
+          );
+          const userPlaylists = state.playlists.filter((p) => !isPrebuiltPlaylist(p));
+          const nextPrebuilt: Playlist[] = [];
 
           for (const payload of incoming) {
             const name = String(payload?.name || "").trim();
@@ -572,33 +587,20 @@ export const usePlaylists = create<PlaylistsState>()(
               })
               .filter(Boolean) as PlaylistSlot[];
             if (slots.length === 0) continue;
-
-            const existingIdx = current.findIndex((p) => p.name.trim().toLowerCase() === name.toLowerCase());
-            if (existingIdx >= 0) {
-              const existing = current[existingIdx];
-              if (existing.source && existing.source !== "prebuilt") continue;
-              current[existingIdx] = {
-                ...existing,
-                name,
-                updatedAt: now,
-                source: "prebuilt",
-                prebuiltKind: payload.prebuiltKind || "album-live-comp",
-                slots,
-              };
-            } else {
-              current.unshift({
-                id: safeUUID(),
-                name,
-                createdAt: now,
-                updatedAt: now,
-                source: "prebuilt",
-                prebuiltKind: payload.prebuiltKind || "album-live-comp",
-                slots,
-              });
-            }
+            const existing = existingPrebuiltByName.get(name.toLowerCase());
+            nextPrebuilt.push({
+              id: existing?.id || safeUUID(),
+              name,
+              createdAt: existing?.createdAt || now,
+              updatedAt: now,
+              source: "prebuilt",
+              prebuiltKind: payload.prebuiltKind || "album-live-comp",
+              slots,
+            });
           }
 
-          set({ playlists: current });
+          if (nextPrebuilt.length === 0) return;
+          set({ playlists: [...nextPrebuilt, ...userPlaylists] });
         } catch {
           // Ignore transient network errors.
         }

@@ -3,7 +3,11 @@ import { formatDuration } from "@/utils/formatDuration";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
-const SHOWS_RESPONSE_CACHE_TTL_MS = 1000 * 90;
+const SHOWS_RESPONSE_CACHE_TTL_MS = 1000 * 60 * 10;
+const UPSTREAM_TIMEOUT_MS = 10000;
+const SUCCESS_CACHE_HEADERS = {
+  "Cache-Control": "public, s-maxage=120, stale-while-revalidate=300",
+};
 
 type IaDoc = {
   identifier: string;
@@ -82,6 +86,10 @@ type KglwShowRow = {
   location?: string;
   city?: string;
   artist_id?: number;
+};
+type KglwShowsResponse = {
+  error?: boolean;
+  data?: KglwShowRow[];
 };
 
 type KglwTagEntry = {
@@ -322,15 +330,26 @@ async function fetchKglwShowsForTitle(title: string): Promise<KglwShowRow[]> {
   const url =
     `${KGLW_API_ROOT}/shows/showtitle/${titlePath}.json` +
     "?order_by=showdate&direction=asc&limit=2000";
-  const res = await fetch(url, {
-    cache: "no-store",
-    headers: {
-      // KGLW API can return 403 for non-browser default user agents.
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-      Accept: "application/json",
-    },
-  });
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  let res: Response;
+  try {
+    const controller = new AbortController();
+    timeout = setTimeout(() => controller.abort(), 3000);
+    res = await fetch(url, {
+      cache: "no-store",
+      signal: controller.signal,
+      headers: {
+        // KGLW API can return 403 for non-browser default user agents.
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        Accept: "application/json",
+      },
+    });
+  } catch {
+    return [];
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
   if (!res.ok) return [];
   const data = (await res.json()) as { data?: KglwShowRow[] };
   return Array.isArray(data?.data) ? data.data : [];
@@ -424,6 +443,37 @@ function showTypeLabelForShow(show: ShowListItem): "Rave" | "Acoustic" | "Orches
   if (show.specialTag === "ACOUSTIC") return "Acoustic";
   if (show.specialTag === "ORCHESTRA") return "Orchestra";
   return "Standard";
+}
+
+async function fetchKglwFallbackShows(): Promise<KglwShowRow[]> {
+  try {
+    const url =
+      `${KGLW_API_ROOT}/shows.json` +
+      "?artist_id=1&order_by=showdate&direction=desc&limit=4000";
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    let res: Response;
+    try {
+      const controller = new AbortController();
+      timeout = setTimeout(() => controller.abort(), 6000);
+      res = await fetch(url, {
+        cache: "no-store",
+        signal: controller.signal,
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+          Accept: "application/json",
+        },
+      });
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
+    if (!res.ok) return [];
+    const payload = (await res.json()) as KglwShowsResponse;
+    const rows = Array.isArray(payload?.data) ? payload.data : [];
+    return rows.filter((r) => Number(r.artist_id) === 1);
+  } catch {
+    return [];
+  }
 }
 
 type Continent = "North America" | "South America" | "Europe" | "Asia" | "Africa" | "Oceania" | "Unknown";
@@ -790,6 +840,7 @@ const showsResponseCache = new Map<
   string,
   { expiresAt: number; payload: unknown }
 >();
+let lastGoodDefaultPayload: unknown | null = null;
 
 function audioExtRank(name: string): number {
   const n = name.toLowerCase();
@@ -1003,6 +1054,7 @@ export async function GET(req: NextRequest) {
     .filter(Boolean) as ShowTypeFilter[];
   const query = (sp.get("query") || sp.get("q") || "").trim();
   const sort = (sp.get("sort") || "newest").trim().toLowerCase();
+  const fastMode = sp.get("fast") === "1";
 
   const yearFilters = years.filter((y) => /^\d{4}$/.test(y));
   const continentFilters = continents.filter((c) => c && c !== "All");
@@ -1018,7 +1070,7 @@ export async function GET(req: NextRequest) {
   });
   const cached = showsResponseCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
-    return Response.json(cached.payload);
+    return Response.json(cached.payload, { headers: SUCCESS_CACHE_HEADERS });
   }
 
   const PAGE_SIZE = 25;
@@ -1069,6 +1121,7 @@ export async function GET(req: NextRequest) {
 
   let iaPage = 1;
   let docs: IaDoc[] = [];
+  const requestStartedAt = Date.now();
 
   while (iaPage <= MAX_IA_PAGES) {
     const url =
@@ -1078,7 +1131,28 @@ export async function GET(req: NextRequest) {
       `&rows=${IA_ROWS}&page=${iaPage}&output=json` +
       `&sort[]=${encodeURIComponent(SORT)}`;
 
-    const res = await fetch(url, { cache: "no-store" });
+    let res: Response | null = null;
+    const isDefaultRootQuery =
+      !query &&
+      yearFilters.length === 0 &&
+      continentFilters.length === 0 &&
+      showTypes.length === 0 &&
+      sort === "newest";
+    const attempts = isDefaultRootQuery ? [4500] : [UPSTREAM_TIMEOUT_MS, UPSTREAM_TIMEOUT_MS + 5000];
+    for (const timeoutMs of attempts) {
+      let timeout: ReturnType<typeof setTimeout> | null = null;
+      try {
+        const controller = new AbortController();
+        timeout = setTimeout(() => controller.abort(), timeoutMs);
+        res = await fetch(url, { cache: "no-store", signal: controller.signal });
+        if (res.ok) break;
+      } catch {
+        // Retry once with a longer timeout.
+      } finally {
+        if (timeout) clearTimeout(timeout);
+      }
+    }
+    if (!res) break;
     if (!res.ok) {
       return Response.json({ page, items: [], hasMore: false, error: `Archive request failed (page ${iaPage})` }, { status: 502 });
     }
@@ -1091,6 +1165,108 @@ export async function GET(req: NextRequest) {
 
     docs = docs.concat(batch);
     iaPage++;
+    if (isDefaultRootQuery && Date.now() - requestStartedAt > 7000) break;
+  }
+
+  if (docs.length === 0 && !query) {
+    const fallbackRows = await fetchKglwFallbackShows();
+    const fallbackShowsRaw: ShowListItem[] = fallbackRows
+      .map((row) => {
+        const showDate = String(row.showdate || "").trim();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(showDate)) return null;
+        const venueName = String(row.venuename || "").trim();
+        const location = String(row.location || "").trim();
+        const city = String(row.city || "").trim() || undefined;
+        const country = location.split(",").map((v) => v.trim()).filter(Boolean).slice(-1)[0] || undefined;
+        const title = venueName
+          ? `King Gizzard & The Lizard Wizard Live at ${venueName} on ${showDate}`
+          : `King Gizzard & The Lizard Wizard Live on ${showDate}`;
+        const specialTag = specialTagFromShowTitle(String(row.showtitle || "")) || undefined;
+        return {
+          showKey: `${showDate}|${slugify(venueName || city || "unknown")}`,
+          showDate,
+          title,
+          city,
+          country,
+          venueText: venueName || undefined,
+          locationText: location || undefined,
+          defaultId: "",
+          sourcesCount: 0,
+          artwork: "/api/default-artwork",
+          continent: continentFromVenueCoverageTitle(venueName, location, title),
+          plays: 0,
+          specialTag,
+        } as ShowListItem;
+      })
+      .filter(Boolean) as ShowListItem[];
+
+    let fallbackShows = fallbackShowsRaw;
+    if (yearFilters.length > 0) {
+      const yearSet = new Set(yearFilters);
+      fallbackShows = fallbackShows.filter((s) => yearSet.has(String(s.showDate).slice(0, 4)));
+    }
+    if (continentFilters.length > 0) {
+      fallbackShows = fallbackShows.filter((s) => continentFilters.includes(s.continent));
+    }
+    fallbackShows = filterByShowTypes(fallbackShows, showTypes);
+    fallbackShows = sortShows(fallbackShows, sort);
+
+    const yearCounts = new Map<string, number>();
+    const continentCounts = new Map<string, number>();
+    const showTypeCounts = new Map<string, number>([
+      ["Rave", 0],
+      ["Acoustic", 0],
+      ["Orchestra", 0],
+      ["Standard", 0],
+    ]);
+    for (const s of fallbackShows) {
+      const y = s.showDate?.slice(0, 4);
+      if (y && /^\d{4}$/.test(y)) yearCounts.set(y, (yearCounts.get(y) || 0) + 1);
+      const c = s.continent;
+      if (c && c !== "Unknown") continentCounts.set(c, (continentCounts.get(c) || 0) + 1);
+      const label = showTypeLabelForShow(s);
+      showTypeCounts.set(label, (showTypeCounts.get(label) || 0) + 1);
+    }
+
+    const start = (page - 1) * PAGE_SIZE;
+    const items = fallbackShows.slice(start, start + PAGE_SIZE);
+    const hasMore = start + PAGE_SIZE < fallbackShows.length;
+    const payload = {
+      page,
+      items,
+      hasMore,
+      venueTotal: fallbackShows.length,
+      facets: {
+        years: Array.from(yearCounts.entries())
+          .sort((a, b) => Number(b[0]) - Number(a[0]))
+          .map(([value, count]) => ({ value, count })),
+        continents: Array.from(continentCounts.entries())
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([value, count]) => ({ value, count })),
+        showTypes: Array.from(showTypeCounts.entries()).map(([value, count]) => ({ value, count })),
+      },
+      debug: {
+        years: yearFilters.length > 0 ? yearFilters : ["All"],
+        continents: continentFilters.length > 0 ? continentFilters : ["All"],
+        showTypes: showTypes.length > 0 ? showTypes : ["All"],
+        query,
+        sort,
+        fetchedDocs: 0,
+        recordings: 0,
+        uniqueShows: fallbackShows.length,
+        searchedShows: fallbackShows.length,
+        iaPagesUsed: iaPage,
+        source: "kglw-fallback",
+      },
+    };
+    showsResponseCache.set(cacheKey, {
+      expiresAt: Date.now() + SHOWS_RESPONSE_CACHE_TTL_MS,
+      payload,
+    });
+    if (page === 1 && yearFilters.length === 0 && continentFilters.length === 0 && showTypes.length === 0 && sort === "newest") {
+      lastGoodDefaultPayload = payload;
+    }
+    return Response.json(payload, { headers: SUCCESS_CACHE_HEADERS });
   }
 
   const recordings = buildRecordingsFromDocs(docs, continentFilters);
@@ -1134,7 +1310,7 @@ export async function GET(req: NextRequest) {
 
     if (songTerm && songTokenQuery) {
       const SONG_ROWS = 500;
-      const MAX_SONG_DOCS = 1500;
+      const MAX_SONG_DOCS = fastMode ? 250 : 1000;
       const MAX_SONG_PAGES = Math.ceil(MAX_SONG_DOCS / SONG_ROWS);
       let songPage = 1;
 
@@ -1147,7 +1323,21 @@ export async function GET(req: NextRequest) {
           `&rows=${SONG_ROWS}&page=${songPage}&output=json` +
           `&sort[]=${encodeURIComponent(SORT)}`;
 
-        const songRes = await fetch(songUrl, { cache: "no-store" });
+        let songRes: Response | null = null;
+        for (const timeoutMs of [UPSTREAM_TIMEOUT_MS, UPSTREAM_TIMEOUT_MS + 5000]) {
+          let songTimeout: ReturnType<typeof setTimeout> | null = null;
+          try {
+            const controller = new AbortController();
+            songTimeout = setTimeout(() => controller.abort(), timeoutMs);
+            songRes = await fetch(songUrl, { cache: "no-store", signal: controller.signal });
+            if (songRes.ok) break;
+          } catch {
+            // Retry once with a longer timeout.
+          } finally {
+            if (songTimeout) clearTimeout(songTimeout);
+          }
+        }
+        if (!songRes) break;
         if (!songRes.ok) break;
 
         const songData = (await songRes.json()) as { response?: { docs?: IaDoc[] } };
@@ -1175,23 +1365,25 @@ export async function GET(req: NextRequest) {
       );
 
       // Compute per-show longest matching track length for sort/filter UX.
-      const MAX_SONG_LENGTH_LOOKUPS = 20;
+      const MAX_SONG_LENGTH_LOOKUPS = fastMode ? 0 : 12;
       const target = songMatchedShows.slice(0, MAX_SONG_LENGTH_LOOKUPS);
-      const lengths = await withConcurrency(target, 8, async (s) => {
-        const info = await fetchSongMatchInfo(
-          s.defaultId,
-          songTerm.toLowerCase(),
-        );
-        return { showKey: s.showKey, info };
-      });
-      const lengthMap = new Map(lengths.map((x) => [x.showKey, x.info]));
-      songMatchedShows = songMatchedShows.map((s) => ({
-        ...s,
-        matchedSongSeconds: lengthMap.get(s.showKey)?.seconds ?? null,
-        matchedSongTitle: lengthMap.get(s.showKey)?.title ?? null,
-        matchedSongLength: lengthMap.get(s.showKey)?.length ?? null,
-        matchedSongUrl: lengthMap.get(s.showKey)?.url ?? null,
-      }));
+      if (target.length > 0) {
+        const lengths = await withConcurrency(target, 8, async (s) => {
+          const info = await fetchSongMatchInfo(
+            s.defaultId,
+            songTerm.toLowerCase(),
+          );
+          return { showKey: s.showKey, info };
+        });
+        const lengthMap = new Map(lengths.map((x) => [x.showKey, x.info]));
+        songMatchedShows = songMatchedShows.map((s) => ({
+          ...s,
+          matchedSongSeconds: lengthMap.get(s.showKey)?.seconds ?? null,
+          matchedSongTitle: lengthMap.get(s.showKey)?.title ?? null,
+          matchedSongLength: lengthMap.get(s.showKey)?.length ?? null,
+          matchedSongUrl: lengthMap.get(s.showKey)?.url ?? null,
+        }));
+      }
     }
   }
 
@@ -1264,9 +1456,22 @@ export async function GET(req: NextRequest) {
       iaPagesUsed: iaPage,
     },
   };
+  const isDefaultRootQuery =
+    page === 1 &&
+    !query &&
+    yearFilters.length === 0 &&
+    continentFilters.length === 0 &&
+    showTypes.length === 0 &&
+    sort === "newest";
+  if (isDefaultRootQuery && Array.isArray(payload.items) && payload.items.length > 0) {
+    lastGoodDefaultPayload = payload;
+  }
+  if (isDefaultRootQuery && payload.items.length === 0 && lastGoodDefaultPayload) {
+    return Response.json(lastGoodDefaultPayload, { headers: SUCCESS_CACHE_HEADERS });
+  }
   showsResponseCache.set(cacheKey, {
     expiresAt: Date.now() + SHOWS_RESPONSE_CACHE_TTL_MS,
     payload,
   });
-  return Response.json(payload);
+  return Response.json(payload, { headers: SUCCESS_CACHE_HEADERS });
 }

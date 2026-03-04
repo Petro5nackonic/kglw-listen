@@ -3,6 +3,9 @@ import { NextRequest } from "next/server";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 const SHOW_METADATA_CACHE_TTL_MS = 1000 * 60 * 5;
+const SUCCESS_CACHE_HEADERS = {
+  "Cache-Control": "public, s-maxage=120, stale-while-revalidate=300",
+};
 
 type IaMetadataFile = {
   name?: string;
@@ -27,6 +30,24 @@ const showMetadataCache = new Map<
   { expiresAt: number; payload: IaMetadataResponse }
 >();
 
+async function fetchArchiveMetadata(id: string, timeoutMs: number): Promise<IaMetadataResponse | null> {
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  try {
+    const controller = new AbortController();
+    timeout = setTimeout(() => controller.abort(), timeoutMs);
+    const res = await fetch(`https://archive.org/metadata/${encodeURIComponent(id)}`, {
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as IaMetadataResponse;
+  } catch {
+    return null;
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
 export async function GET(req: NextRequest) {
   const id = (req.nextUrl.searchParams.get("id") || "").trim();
   if (!id) {
@@ -35,20 +56,18 @@ export async function GET(req: NextRequest) {
 
   const cached = showMetadataCache.get(id);
   if (cached && cached.expiresAt > Date.now()) {
-    return Response.json(cached.payload);
+    return Response.json(cached.payload, { headers: SUCCESS_CACHE_HEADERS });
   }
 
-  const res = await fetch(`https://archive.org/metadata/${encodeURIComponent(id)}`, {
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    return Response.json({ error: `Archive metadata failed: ${res.status}` }, { status: 502 });
+  const payload =
+    (await fetchArchiveMetadata(id, 4500)) ||
+    (await fetchArchiveMetadata(id, 8000));
+  if (!payload) {
+    return Response.json({ error: "Archive metadata failed" }, { status: 502 });
   }
-
-  const payload = (await res.json()) as IaMetadataResponse;
   showMetadataCache.set(id, {
     expiresAt: Date.now() + SHOW_METADATA_CACHE_TTL_MS,
     payload,
   });
-  return Response.json(payload);
+  return Response.json(payload, { headers: SUCCESS_CACHE_HEADERS });
 }

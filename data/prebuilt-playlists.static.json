@@ -2,240 +2,481 @@
   "generatedAt": 1772653701870,
   "playlists": [
     {
-      "name": "I'm In Your Mind Fuzz Live Comp.",
+      "name": "Nonagon Infinity",
       "prebuiltKind": "album-live-comp",
       "slots": [
         {
-          "canonicalTitle": "i m in your mind fuzz",
+          "canonicalTitle": "robot stop",
           "variants": [
-            {
-              "title": "I'm In Your Mind Fuzz",
-              "url": "https://archive.org/download/kglw2022-10-23.vwmule/kglw2022-10-23.vwmule.t04.flac",
-              "length": "1218.3",
-              "track": "1",
-              "showKey": "2022-10-23|the-anthem",
-              "showDate": "2022-10-23",
-              "venueText": "King Gizzard & The Lizard Wizard Live at The Anthem on 2022-10-23",
-              "artwork": "https://archive.org/services/img/kglw2022-10-23.vwmule"
-            },
-            {
-              "title": "I'm In Your Mind Fuzz",
-              "url": "https://archive.org/download/kglw2022-10-23.vwmule/kglw2022-10-23.vwmule.t04.mp3",
-              "length": "1218.34",
-              "track": "1",
-              "showKey": "2022-10-23|the-anthem",
-              "showDate": "2022-10-23",
-              "venueText": "King Gizzard & The Lizard Wizard Live at The Anthem on 2022-10-23",
-              "artwork": "https://archive.org/services/img/kglw2022-10-23.vwmule"
-            }
-          ],
-          "chainGroup": "intro",
-          "chainOrder": 4
-        },
-        {
-          "canonicalTitle": "empty",
-          "variants": [
-            {
-              "title": "Empty",
-              "url": "https://archive.org/download/kglw2025-08-16.SBD.wav/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Field%20of%20Vision%20'25%20-%2005%20Empty%20(Live%20at%20Field%20of%20Vision%20'25).flac",
-              "length": "310.41",
-              "track": "1",
-              "showKey": "2025-08-16|field-of-vision-at-meadow-creek",
-              "showDate": "2025-08-16",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Field of Vision at Meadow Creek on 2025-08-16",
-              "artwork": "https://archive.org/services/img/kglw2025-08-16.SBD.wav"
-            },
-            {
-              "title": "Empty",
-              "url": "https://archive.org/download/kglw2025-08-16.SBD.wav/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Field%20of%20Vision%20'25%20-%2005%20Empty%20(Live%20at%20Field%20of%20Vision%20'25).mp3",
-              "length": "05:10",
-              "track": "1",
-              "showKey": "2025-08-16|field-of-vision-at-meadow-creek",
-              "showDate": "2025-08-16",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Field of Vision at Meadow Creek on 2025-08-16",
-              "artwork": "https://archive.org/services/img/kglw2025-08-16.SBD.wav"
-            }
+            { "title": "Robot Stop", "url": "https://archive.org/download/kglw2023-06-01.sbd-flac/02+Robot+Stop.flac", "track": "1" },
+            { "title": "Robot Stop", "url": "https://archive.org/download/kglw2023-06-07.SBD/12+Robot+Stop+(Live+at+Red+Rocks+'23).flac", "track": "1" },
+            { "title": "Robot Stop", "url": "https://archive.org/download/kglw2024-11-20.London2024/01+-+Robot+Stop.flac", "track": "1" }
           ]
         },
         {
-          "canonicalTitle": "hot water",
+          "canonicalTitle": "big fig wasp",
           "variants": [
-            {
-              "title": "Hot Water",
-              "url": "https://archive.org/download/kglw2024-05-31.Brighton24/16%20-%20Hot%20Water.flac",
-              "length": "561.17",
-              "track": "1",
-              "showKey": "2024-05-31|brighton-dome",
-              "showDate": "2024-05-31",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Brighton Dome on 2024-05-31",
-              "artwork": "https://archive.org/services/img/kglw2024-05-31.Brighton24"
-            },
-            {
-              "title": "Hot Water",
-              "url": "https://archive.org/download/kglw2024-05-31.Brighton24/16%20-%20Hot%20Water.mp3",
-              "length": "09:21",
-              "track": "1",
-              "showKey": "2024-05-31|brighton-dome",
-              "showDate": "2024-05-31",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Brighton Dome on 2024-05-31",
-              "artwork": "https://archive.org/services/img/kglw2024-05-31.Brighton24"
-            }
+            { "title": "Big Fig Wasp", "url": "https://archive.org/download/kglw2023-06-01.sbd-flac/03+Big+Fig+Wasp.flac", "track": "1" },
+            { "title": "Big Fig Wasp", "url": "https://archive.org/download/kglw2025-05-23.Spain2025N1/03+-+Big+Fig+Wasp.flac", "track": "1" },
+            { "title": "Big Fig Wasp", "url": "https://archive.org/download/kglw2024-08-15.vwmule/kglw2024-08-15t07.flac", "track": "1" }
           ]
         },
         {
-          "canonicalTitle": "am i in heaven",
+          "canonicalTitle": "gamma knife",
           "variants": [
-            {
-              "title": "Am I In Heaven ?",
-              "url": "https://archive.org/download/kglw2023-06-12.leary/kglw2023-06-12.vwmule.t15.flac",
-              "length": "476.97",
-              "track": "1",
-              "showKey": "2023-06-12|the-salt-shed",
-              "showDate": "2023-06-12",
-              "venueText": "King Gizzard & The Lizard Wizard Live at The Salt Shed on 2023-06-12",
-              "artwork": "https://archive.org/services/img/kglw2023-06-12.leary"
-            },
-            {
-              "title": "Am I In Heaven ?",
-              "url": "https://archive.org/download/kglw2023-06-12.leary/kglw2023-06-12.vwmule.t15.mp3",
-              "length": "07:57",
-              "track": "1",
-              "showKey": "2023-06-12|the-salt-shed",
-              "showDate": "2023-06-12",
-              "venueText": "King Gizzard & The Lizard Wizard Live at The Salt Shed on 2023-06-12",
-              "artwork": "https://archive.org/services/img/kglw2023-06-12.leary"
-            }
+            { "title": "Gamma Knife", "url": "https://archive.org/download/kglw2024-08-15.vwmule/kglw2024-08-15t06.flac", "track": "1" },
+            { "title": "Gamma Knife", "url": "https://archive.org/download/kglw2023-06-08.SBD/01+Gamma+Knife+(Live+at+Red+Rocks+'23).flac", "track": "1" },
+            { "title": "Gamma Knife", "url": "https://archive.org/download/kglw2025-08-15/kglw2025-08-15_03.flac", "track": "1" }
           ]
         },
         {
-          "canonicalTitle": "slow jam 1",
+          "canonicalTitle": "people vultures",
           "variants": [
-            {
-              "title": "Slow Jam 1",
-              "url": "https://archive.org/download/kglw2025-06-08.night.SBD.flac/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Red%20Rocks%20'23%20-%2036%20Slow%20Jam%201%20(Live%20at%20Red%20Rocks%20'23).flac",
-              "length": "740.11",
-              "track": "1",
-              "showKey": "2023-06-08|red-rocks",
-              "showDate": "2023-06-08",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Red Rocks Amphitheatre on 2023-06-08",
-              "artwork": "https://archive.org/services/img/kglw2025-06-08.night.SBD.flac"
-            },
-            {
-              "title": "Slow Jam 1",
-              "url": "https://archive.org/download/kglw2025-06-08.night.SBD.flac/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Red%20Rocks%20'23%20-%2036%20Slow%20Jam%201%20(Live%20at%20Red%20Rocks%20'23).mp3",
-              "length": "12:20",
-              "track": "1",
-              "showKey": "2023-06-08|red-rocks",
-              "showDate": "2023-06-08",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Red Rocks Amphitheatre on 2023-06-08",
-              "artwork": "https://archive.org/services/img/kglw2025-06-08.night.SBD.flac"
-            }
+            { "title": "People-Vultures", "url": "https://archive.org/download/kglw2023-06-01.sbd-flac/05+People-Vultures.flac", "track": "1" },
+            { "title": "People-Vultures", "url": "https://archive.org/download/kglw2024-09-01/01+-+People-Vultures.flac", "track": "1" },
+            { "title": "People-Vultures", "url": "https://archive.org/download/kglw2025-06-10/01+-+People-Vultures.flac", "track": "1" }
           ]
         },
         {
-          "canonicalTitle": "satan speeds up",
+          "canonicalTitle": "mr beat",
           "variants": [
-            {
-              "title": "Satan Speeds Up",
-              "url": "https://archive.org/download/kglw2025-06-08.day.SBD.flac/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Red%20Rocks%20'23%20-%2022%20Satan%20Speeds%20Up%20(Live%20at%20Red%20Rocks%20'23).flac",
-              "length": "305.38",
-              "track": "1",
-              "showKey": "2023-06-08|red-rocks",
-              "showDate": "2023-06-08",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Red Rocks Amphitheatre on 2023-06-08",
-              "artwork": "https://archive.org/services/img/kglw2025-06-08.day.SBD.flac"
-            },
-            {
-              "title": "Satan Speeds Up",
-              "url": "https://archive.org/download/kglw2025-06-08.day.SBD.flac/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Red%20Rocks%20'23%20-%2022%20Satan%20Speeds%20Up%20(Live%20at%20Red%20Rocks%20'23).mp3",
-              "length": "05:05",
-              "track": "1",
-              "showKey": "2023-06-08|red-rocks",
-              "showDate": "2023-06-08",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Red Rocks Amphitheatre on 2023-06-08",
-              "artwork": "https://archive.org/services/img/kglw2025-06-08.day.SBD.flac"
-            }
+            { "title": "Mr. Beat", "url": "https://archive.org/download/kglw2024-08-24.daank/kglw2024-08-24_06.flac", "track": "1" },
+            { "title": "Mr. Beat", "url": "https://archive.org/download/kglw2019-08-14.sbd/11+Mr.+Beat.flac", "track": "1" },
+            { "title": "Mr. Beat", "url": "https://archive.org/download/kglw2025-08-15/kglw2025-08-15_05.flac", "track": "1" }
           ]
         },
         {
-          "canonicalTitle": "her and i slow jam 2",
+          "canonicalTitle": "evil death roll",
           "variants": [
-            {
-              "title": "Her And I (Slow Jam 2)",
-              "url": "https://archive.org/download/kglw2023-06-04/kglw2023-06-04t15.flac",
-              "length": "517.65",
-              "track": "1",
-              "showKey": "2023-06-04|the-caverns-ampitheater-outdoor-stage",
-              "showDate": "2023-06-04",
-              "venueText": "King Gizzard & The Lizard Wizard Live at The Caverns Ampitheater Outdoor Stage on 2023-06-04",
-              "artwork": "https://archive.org/services/img/kglw2023-06-04"
-            },
-            {
-              "title": "Her And I (Slow Jam 2)",
-              "url": "https://archive.org/download/kglw2023-06-04/kglw2023-06-04t15.mp3",
-              "length": "08:38",
-              "track": "1",
-              "showKey": "2023-06-04|the-caverns-ampitheater-outdoor-stage",
-              "showDate": "2023-06-04",
-              "venueText": "King Gizzard & The Lizard Wizard Live at The Caverns Ampitheater Outdoor Stage on 2023-06-04",
-              "artwork": "https://archive.org/services/img/kglw2023-06-04"
-            }
+            { "title": "Evil Death Roll", "url": "https://archive.org/download/kglw2024-09-01/02+-+Evil+Death+Roll.flac", "track": "1" },
+            { "title": "Evil Death Roll", "url": "https://archive.org/download/kglw2023-06-11.SBD/10+Evil+Death+Roll+(Live+at+The+Salt+Shed+'23).flac", "track": "1" },
+            { "title": "Evil Death Roll", "url": "https://archive.org/download/kglw2022-10-11.matrix/07+Evil+Death+Roll.flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "invisible face",
+          "variants": [
+            { "title": "Invisible Face", "url": "https://archive.org/download/kglw2024-09-01/03+-+Invisible+Face.flac", "track": "1" },
+            { "title": "Invisible Face", "url": "https://archive.org/download/kglw2016-05-23.ccm4.flac16/kinggizzard2016-05-23t07.flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "wah wah",
+          "variants": [
+            { "title": "Wah Wah", "url": "https://archive.org/download/kglw2024-09-01/04+-+Wah+Wah.flac", "track": "1" },
+            { "title": "Wah Wah", "url": "https://archive.org/download/kglw2019-08-14.sbd/17+Wah+Wah.flac", "track": "1" },
+            { "title": "Wah Wah", "url": "https://archive.org/download/kglw2023-06-07.SBD/15+Wah+Wah+(Live+at+Red+Rocks+'23).flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "road train",
+          "variants": [
+            { "title": "Road Train", "url": "https://archive.org/download/kglw2023-06-08.SBD/04+Road+Train+(Live+at+Red+Rocks+'23).flac", "track": "1" },
+            { "title": "Road Train", "url": "https://archive.org/download/kglw2016-05-23.ccm4.flac16/kinggizzard2016-05-23t09.flac", "track": "1" }
           ]
         }
       ]
     },
     {
-      "name": "Petrodragonic Apocalypse",
+      "name": "I'm In Your Mind Fuzz",
       "prebuiltKind": "album-live-comp",
       "slots": [
         {
+          "canonicalTitle": "i m in your mind",
+          "chainGroup": "intro",
+          "chainOrder": 1,
+          "variants": [
+            { "title": "I'm In Your Mind", "url": "https://archive.org/download/kglw2024-09-06.bandcampbootlegger/01+I'm+In+Your+Mind+(Live).flac", "track": "1" },
+            { "title": "I'm In Your Mind", "url": "https://archive.org/download/kglw2023-06-08.SBD/12+I'm+In+Your+Mind+(Live+at+Red+Rocks+'23).flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "i m not in your mind",
+          "chainGroup": "intro",
+          "chainOrder": 2,
+          "variants": [
+            { "title": "I'm Not In Your Mind", "url": "https://archive.org/download/kglw2024-09-06.bandcampbootlegger/02+I'm+Not+In+Your+Mind+(Live).flac", "track": "1" },
+            { "title": "I'm Not In Your Mind", "url": "https://archive.org/download/kglw2024-08-20.thor/kglw2024-08-20.thor.d1t07.flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "cellophane",
+          "chainGroup": "intro",
+          "chainOrder": 3,
+          "variants": [
+            { "title": "Cellophane", "url": "https://archive.org/download/kglw2024-09-06.bandcampbootlegger/03+Cellophane+(Live).flac", "track": "1" },
+            { "title": "Cellophane", "url": "https://archive.org/download/kglw2023-06-11.SBD/24+Cellophane+(Live+at+The+Salt+Shed+'23).flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "i m in your mind fuzz",
+          "chainGroup": "intro",
+          "chainOrder": 4,
+          "variants": [
+            { "title": "I'm In Your Mind Fuzz", "url": "https://archive.org/download/kglw2024-09-06.bandcampbootlegger/04+I'm+In+Your+Mind+Fuzz+(Live).flac", "track": "1" },
+            { "title": "I'm In Your Mind Fuzz", "url": "https://archive.org/download/kglw2024-11-20.London2024/09+-+Mind+Fuzz.flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "empty",
+          "variants": [
+            { "title": "Empty", "url": "https://archive.org/download/kglw2014-10-18.flac16/kinggizzard2014-10-18t05.flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "hot water",
+          "variants": [
+            { "title": "Hot Water", "url": "https://archive.org/download/kglw2024-08-20.thor/kglw2024-08-20.thor.d2t04.flac", "track": "1" },
+            { "title": "Hot Water", "url": "https://archive.org/download/kglw2023-06-16.SBD/23+Hot+Water+(Live+at+Remlinger+Farms+'23).flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "am i in heaven",
+          "variants": [
+            { "title": "Am I In Heaven?", "url": "https://archive.org/download/kglw2024-09-01/18+-+Am+I+In+Heaven.flac", "track": "1" },
+            { "title": "Am I In Heaven?", "url": "https://archive.org/download/kglw2025-05-23.Spain2025N1/18+-+Am+I+In+Heaven.flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "slow jam 1",
+          "variants": [
+            { "title": "Slow Jam 1", "url": "https://archive.org/download/kglw2023-06-11.SBD/18+Slow+Jam+1+(Live+at+The+Salt+Shed+'23).flac", "track": "1" },
+            { "title": "Slow Jam 1", "url": "https://archive.org/download/kglw2022-04-26.ccm4/kinggizzard2022-04-26t10.flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "satan speeds up",
+          "variants": [
+            { "title": "Satan Speeds Up", "url": "https://archive.org/download/kglw2023-06-03.SBD/07+Satan+Speeds+Up+(Live+at+The+Salt+Shed+'23).flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "her and i slow jam 2",
+          "variants": [
+            { "title": "Her and I (Slow Jam 2)", "url": "https://archive.org/download/kglw2023-06-08.SBD/08+Her+and+I+(Slow+Jam+2)+(Live+at+Red+Rocks+'23).flac", "track": "1" },
+            { "title": "Her and I (Slow Jam 2)", "url": "https://archive.org/download/kglw2024-08-24.daank/kglw2024-08-24_11.flac", "track": "1" }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "PetroDragonic Apocalypse",
+      "prebuiltKind": "album-live-comp",
+      "slots": [
+        {
+          "canonicalTitle": "motor spirit",
+          "variants": [
+            { "title": "Motor Spirit", "url": "https://archive.org/download/kglw2024-09-06.bandcampbootlegger/06+Motor+Spirit+(Live).flac", "track": "1" },
+            { "title": "Motor Spirit", "url": "https://archive.org/download/kglw2025-05-23.Spain2025N1/17+-+Motor+Spirit.flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "supercell",
+          "variants": [
+            { "title": "Supercell", "url": "https://archive.org/download/kglw2024-08-15.vwmule/kglw2024-08-15t14.flac", "track": "1" },
+            { "title": "Supercell", "url": "https://archive.org/download/kglw2023-06-16.SBD/10+Supercell+(Live+at+Remlinger+Farms+'23).flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "converge",
+          "variants": [
+            { "title": "Converge", "url": "https://archive.org/download/kglw2024-08-15.vwmule/kglw2024-08-15t15.flac", "track": "1" },
+            { "title": "Converge", "url": "https://archive.org/download/kglw2025-05-18.Lisbon/Converge+(Live+in+Lisbon+'25).flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "witchcraft",
+          "variants": [
+            { "title": "Witchcraft", "url": "https://archive.org/download/kglw2024-11-08.Vegas/Witchcraft+(Live+in+Vegas+'24).flac", "track": "1" },
+            { "title": "Witchcraft", "url": "https://archive.org/download/kglw2023-06-16.SBD/12+Witchcraft+(Live+at+Remlinger+Farms+'23).flac", "track": "1" }
+          ]
+        },
+        {
           "canonicalTitle": "gila monster",
           "variants": [
-            {
-              "title": "Gila Monster",
-              "url": "https://archive.org/download/kglw2023-06-21.MC59W/08-Gila%20Monster.flac",
-              "length": "281.41",
-              "track": "1",
-              "showKey": "2023-06-21|hollywood-bowl",
-              "showDate": "2023-06-21",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Hollywood Bowl on 2023-06-21",
-              "artwork": "https://archive.org/services/img/kglw2023-06-21.MC59W"
-            },
-            {
-              "title": "Gila Monster",
-              "url": "https://archive.org/download/kglw2023-06-21.MC59W/08-Gila%20Monster.mp3",
-              "length": "04:41",
-              "track": "1",
-              "showKey": "2023-06-21|hollywood-bowl",
-              "showDate": "2023-06-21",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Hollywood Bowl on 2023-06-21",
-              "artwork": "https://archive.org/services/img/kglw2023-06-21.MC59W"
-            }
+            { "title": "Gila Monster", "url": "https://archive.org/download/kglw2024-08-24.daank/kglw2024-08-24_18.flac", "track": "1" },
+            { "title": "Gila Monster", "url": "https://archive.org/download/kglw2023-06-16.SBD/11+Gila+Monster+(Live+at+Remlinger+Farms+'23).flac", "track": "1" }
           ]
         },
         {
           "canonicalTitle": "dragon",
           "variants": [
-            {
-              "title": "Dragon",
-              "url": "https://archive.org/download/kglw2025-07-28.SchoepsMK41.Burns.Flac24/KingGizzard2025-07-28-t-17.flac",
-              "length": "671.96",
-              "track": "1",
-              "showKey": "2025-07-28|the-mann-music-center",
-              "showDate": "2025-07-28",
-              "venueText": "King Gizzard & The Lizard Wizard Live at The Mann Music Center on 2025-07-28",
-              "artwork": "https://archive.org/services/img/kglw2025-07-28.SchoepsMK41.Burns.Flac24"
-            },
-            {
-              "title": "Dragon",
-              "url": "https://archive.org/download/kglw2025-07-28.SchoepsMK41.Burns.Flac24/KingGizzard2025-07-28-t-17.mp3",
-              "length": "11:12",
-              "track": "1",
-              "showKey": "2025-07-28|the-mann-music-center",
-              "showDate": "2025-07-28",
-              "venueText": "King Gizzard & The Lizard Wizard Live at The Mann Music Center on 2025-07-28",
-              "artwork": "https://archive.org/services/img/kglw2025-07-28.SchoepsMK41.Burns.Flac24"
-            }
+            { "title": "Dragon", "url": "https://archive.org/download/kglw2024-08-24.daank/kglw2024-08-24_17.flac", "track": "1" },
+            { "title": "Dragon", "url": "https://archive.org/download/kglw2025-08-01/kglw2025-08-01t16.flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "flamethrower",
+          "variants": [
+            { "title": "Flamethrower", "url": "https://archive.org/download/kglw2025-05-23.Spain2025N1/16+-+Flamethrower.flac", "track": "1" }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "The Silver Cord",
+      "prebuiltKind": "album-live-comp",
+      "slots": [
+        {
+          "canonicalTitle": "theia",
+          "variants": [
+            { "title": "Theia", "url": "https://archive.org/download/kglw2025-10-31.SBD/Theia+(Live+in+Manchester+'25).flac", "track": "1" },
+            { "title": "Theia", "url": "https://archive.org/download/kglw2024-08-20.thor/kglw2024-08-20.thor.d1t01.flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "the silver cord",
+          "variants": [
+            { "title": "The Silver Cord", "url": "https://archive.org/download/kglw2025-10-24.SBD/The+Silver+Cord+(Ravin'+in+Melbourne+'25).flac", "track": "1" },
+            { "title": "The Silver Cord", "url": "https://archive.org/download/kglw2024-08-20.thor/kglw2024-08-20.thor.d1t02.flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "set",
+          "variants": [
+            { "title": "Set", "url": "https://archive.org/download/kglw2025-05-18.Lisbon/Set+(Live+in+Lisbon+'25).flac", "track": "1" },
+            { "title": "Set", "url": "https://archive.org/download/kglw2024-09-06.bandcampbootlegger/09+Set+(Live).flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "chang e",
+          "variants": [
+            { "title": "Chang'e", "url": "https://archive.org/download/kglw2024-09-01/08+-+Chang'e.flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "gilgamesh",
+          "variants": [
+            { "title": "Gilgamesh", "url": "https://archive.org/download/kglw2024-09-01/09+-+Gilgamesh.flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "swan song",
+          "variants": [
+            { "title": "Swan Song", "url": "https://archive.org/download/kglw2024-09-01/10+-+Swan+Song.flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "extinction",
+          "variants": [
+            { "title": "Extinction", "url": "https://archive.org/download/kglw2025-06-10/Extinction+(Live+in+Bulgaria+'25).flac", "track": "1" },
+            { "title": "Extinction", "url": "https://archive.org/download/kglw2024-08-20.thor/kglw2024-08-20.thor.d1t05.flac", "track": "1" }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Flight b741",
+      "prebuiltKind": "album-live-comp",
+      "slots": [
+        {
+          "canonicalTitle": "mirage city",
+          "variants": [
+            { "title": "Mirage City", "url": "https://archive.org/download/kglw2025-06-08.tora.m5/kglw2025-06-08.tora.m5d1t10.flac", "track": "1" },
+            { "title": "Mirage City", "url": "https://archive.org/download/kglw2024-09-01/05+-+Mirage+City.flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "antarctica",
+          "variants": [
+            { "title": "Antarctica", "url": "https://archive.org/download/kglw2024-08-15.vwmule/kglw2024-08-15t03.flac", "track": "1" },
+            { "title": "Antarctica", "url": "https://archive.org/download/kglw2024-08-24.daank/kglw2024-08-24_03.flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "raw feel",
+          "variants": [
+            { "title": "Raw Feel", "url": "https://archive.org/download/kglw2024-11-15.Austin/Raw+Feel+(Live+in+Austin+'24).flac", "track": "1" },
+            { "title": "Raw Feel", "url": "https://archive.org/download/kglw2024-08-24.daank/kglw2024-08-24_04.flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "field of vision",
+          "variants": [
+            { "title": "Field of Vision", "url": "https://archive.org/download/kglw2024-11-21.Miami/Field+of+Vision+(Live+in+Miami+'24).flac", "track": "1" },
+            { "title": "Field of Vision", "url": "https://archive.org/download/kglw2024-08-15.vwmule/kglw2024-08-15t04.flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "hog calling contest",
+          "variants": [
+            { "title": "Hog Calling Contest", "url": "https://archive.org/download/kglw2024-11-20.London2024/02+-+Hog+Calling+Contest.flac", "track": "1" },
+            { "title": "Hog Calling Contest", "url": "https://archive.org/download/kglw2024-09-01/06+-+Hog+Calling+Contest.flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "le risque",
+          "variants": [
+            { "title": "Le Risque", "url": "https://archive.org/download/kglw2024-11-21.Miami/Le+Risque+(Live+in+Miami+'24).flac", "track": "1" },
+            { "title": "Le Risque", "url": "https://archive.org/download/kglw2024-08-15.vwmule/kglw2024-08-15t05.flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "flight b741",
+          "variants": [
+            { "title": "Flight b741", "url": "https://archive.org/download/kglw2024-11-08.Vegas/Flight+b741+(Live+in+Vegas+'24).flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "sad pilot",
+          "variants": [
+            { "title": "Sad Pilot", "url": "https://archive.org/download/kglw2024-11-08.Vegas/Sad+Pilot+(Live+in+Vegas+'24).flac", "track": "1" },
+            { "title": "Sad Pilot", "url": "https://archive.org/download/kglw2024-08-24.daank/kglw2024-08-24_05.flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "rats in the sky",
+          "variants": [
+            { "title": "Rats in the Sky", "url": "https://archive.org/download/kglw2024-11-08.Vegas/Rats+in+the+Sky+(Live+in+Vegas+'24).flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "daily blues",
+          "variants": [
+            { "title": "Daily Blues", "url": "https://archive.org/download/kglw2024-11-08.Vegas/Daily+Blues+(Live+in+Vegas+'24).flac", "track": "1" },
+            { "title": "Daily Blues", "url": "https://archive.org/download/kglw2024-11-20.London2024/03+-+Daily+Blues.flac", "track": "1" }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Infest the Rats' Nest",
+      "prebuiltKind": "album-live-comp",
+      "slots": [
+        {
+          "canonicalTitle": "planet b",
+          "variants": [
+            { "title": "Planet B", "url": "https://archive.org/download/kglw2025-08-16/kglw2025-08-16_03.flac", "track": "1" },
+            { "title": "Planet B", "url": "https://archive.org/download/kglw2023-06-16.SBD/08+Planet+B+(Live+at+Remlinger+Farms+'23).flac", "track": "1" },
+            { "title": "Planet B", "url": "https://archive.org/download/kglw2019-08-14.sbd/01+Planet+B.flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "mars for the rich",
+          "variants": [
+            { "title": "Mars For The Rich", "url": "https://archive.org/download/kglw2025-11-04/kglw2025-11-04_15.flac", "track": "1" },
+            { "title": "Mars For The Rich", "url": "https://archive.org/download/kglw2023-06-08.SBD/09+Mars+For+The+Rich+(Live+at+Red+Rocks+'23).flac", "track": "1" },
+            { "title": "Mars For The Rich", "url": "https://archive.org/download/kglw2019-08-14.sbd/02+Mars+For+The+Rich.flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "organ farmer",
+          "variants": [
+            { "title": "Organ Farmer", "url": "https://archive.org/download/kglw2025-05-23.Spain2025N1/Organ+Farmer+(Live+in+Barcelona+'25).flac", "track": "1" },
+            { "title": "Organ Farmer", "url": "https://archive.org/download/kglw2019-08-14.sbd/04+Organ+Farmer.flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "superbug",
+          "variants": [
+            { "title": "Superbug", "url": "https://archive.org/download/kglw2023-06-03.SBD/04+Superbug+(Live+at+The+Salt+Shed+'23).flac", "track": "1" },
+            { "title": "Superbug", "url": "https://archive.org/download/kglw2019-08-14.sbd/10+Superbug.flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "venusian 1",
+          "variants": [
+            { "title": "Venusian 1", "url": "https://archive.org/download/kglw2022-10-10.matrix/04+Venusian+1.flac", "track": "1" },
+            { "title": "Venusian 1", "url": "https://archive.org/download/kglw2019-08-14.sbd/05+Venusian+1.flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "perihelion",
+          "variants": [
+            { "title": "Perihelion", "url": "https://archive.org/download/kglw2023-06-08.SBD/10+Perihelion+(Live+at+Red+Rocks+'23).flac", "track": "1" },
+            { "title": "Perihelion", "url": "https://archive.org/download/kglw2019-08-14.sbd/06+Perihelion.flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "venusian 2",
+          "variants": [
+            { "title": "Venusian 2", "url": "https://archive.org/download/kglw2022-10-10.matrix/05+Venusian+2.flac", "track": "1" },
+            { "title": "Venusian 2", "url": "https://archive.org/download/kglw2019-08-14.sbd/07+Venusian+2.flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "self immolate",
+          "variants": [
+            { "title": "Self-Immolate", "url": "https://archive.org/download/kglw2025-08-08.dpa4027/kglw2025-08-08_12.flac", "track": "1" },
+            { "title": "Self-Immolate", "url": "https://archive.org/download/kglw2023-06-16.SBD/09+Self-Immolate+(Live+at+Remlinger+Farms+'23).flac", "track": "1" },
+            { "title": "Self-Immolate", "url": "https://archive.org/download/kglw2019-08-14.sbd/08+Self-Immolate.flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "hell",
+          "variants": [
+            { "title": "Hell", "url": "https://archive.org/download/kglw2024-09-01/15+-+Hell.flac", "track": "1" },
+            { "title": "Hell", "url": "https://archive.org/download/kglw2023-06-08.SBD/11+Hell+(Live+at+Red+Rocks+'23).flac", "track": "1" }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Phantom Island",
+      "prebuiltKind": "album-live-comp",
+      "slots": [
+        {
+          "canonicalTitle": "phantom island",
+          "variants": [
+            { "title": "Phantom Island", "url": "https://archive.org/download/kglw2025-11-04/kglw2025-11-04_01.flac", "track": "1" },
+            { "title": "Phantom Island", "url": "https://archive.org/download/kglw2025-08-01/kglw2025-08-01t01.flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "deadstick",
+          "variants": [
+            { "title": "Deadstick", "url": "https://archive.org/download/kglw2025-11-04/kglw2025-11-04_02.flac", "track": "1" },
+            { "title": "Deadstick", "url": "https://archive.org/download/kglw2025-08-08.dpa4027/kglw2025-08-08_03.flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "lonely cosmos",
+          "variants": [
+            { "title": "Lonely Cosmos", "url": "https://archive.org/download/kglw2025-11-04/kglw2025-11-04_03.flac", "track": "1" },
+            { "title": "Lonely Cosmos", "url": "https://archive.org/download/kglw2025-08-01/kglw2025-08-01t03.flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "eternal return",
+          "variants": [
+            { "title": "Eternal Return", "url": "https://archive.org/download/kglw2025-11-04/kglw2025-11-04_04.flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "panpsyche",
+          "variants": [
+            { "title": "Panpsyche", "url": "https://archive.org/download/kglw2025-11-04/kglw2025-11-04_05.flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "spacesick",
+          "variants": [
+            { "title": "Spacesick", "url": "https://archive.org/download/kglw2025-11-04/kglw2025-11-04_06.flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "aerodynamic",
+          "variants": [
+            { "title": "Aerodynamic", "url": "https://archive.org/download/kglw2025-11-04/kglw2025-11-04_07.flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "sea of doubt",
+          "variants": [
+            { "title": "Sea of Doubt", "url": "https://archive.org/download/kglw2025-11-04/kglw2025-11-04_08.flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "silent spirit",
+          "variants": [
+            { "title": "Silent Spirit", "url": "https://archive.org/download/kglw2025-11-04/kglw2025-11-04_09.flac", "track": "1" }
+          ]
+        },
+        {
+          "canonicalTitle": "grow wings and fly",
+          "variants": [
+            { "title": "Grow Wings and Fly", "url": "https://archive.org/download/kglw2025-11-04/kglw2025-11-04_10.flac", "track": "1" },
+            { "title": "Grow Wings and Fly", "url": "https://archive.org/download/kglw2025-08-01/kglw2025-08-01t10.flac", "track": "1" }
           ]
         }
       ]

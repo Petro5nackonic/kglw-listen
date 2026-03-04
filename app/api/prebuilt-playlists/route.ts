@@ -23,6 +23,9 @@ type CachedPayload = {
 };
 
 const CACHE_TTL_MS = 1000 * 60 * 60 * 6;
+const SUCCESS_CACHE_HEADERS = {
+  "Cache-Control": "public, s-maxage=600, stale-while-revalidate=3600",
+};
 
 const PREBUILT_DEFS: Array<{ name: string; tracks: string[]; chainFirstCount?: number }> = [
   {
@@ -55,6 +58,21 @@ const PREBUILT_DEFS: Array<{ name: string; tracks: string[]; chainFirstCount?: n
       "Her And I (Slow Jam 2)",
     ],
     chainFirstCount: 4,
+  },
+  {
+    name: "I'm in Your Mind Fuzz",
+    tracks: [
+      "I'm In Your Mind",
+      "I'm Not In Your Mind",
+      "Cellophane",
+      "I'm In Your Mind Fuzz",
+      "Empty",
+      "Hot Water",
+      "Am I In Heaven ?",
+      "Slow Jam 1",
+      "Satan Speeds Up",
+      "Her And I (Slow Jam 2)",
+    ],
   },
   {
     name: "Infest the Rats' Nest",
@@ -102,10 +120,41 @@ const PREBUILT_DEFS: Array<{ name: string; tracks: string[]; chainFirstCount?: n
   },
 ];
 
+const PREBUILT_DEFS_BY_NAME = new Map(
+  PREBUILT_DEFS.map((d) => [String(d.name || "").trim().toLowerCase(), d]),
+);
+
 let cached: CachedPayload | null = null;
 let buildInFlight: Promise<CachedPayload> | null = null;
 let staticManifestCache: CachedPayload | null = null;
 let staticManifestLoadAttempted = false;
+let lastBuildAttemptAt = 0;
+const BUILD_RETRY_COOLDOWN_MS = 1000 * 60 * 10;
+
+function mergePayloads(primary: CachedPayload, secondary?: CachedPayload | null): CachedPayload {
+  const byName = new Map<string, ApiPrebuiltPlaylist>();
+  for (const p of primary.playlists || []) {
+    const key = String(p?.name || "").trim().toLowerCase();
+    if (!key) continue;
+    byName.set(key, sanitizePrebuiltPlaylist(p));
+  }
+  for (const p of secondary?.playlists || []) {
+    const key = String(p?.name || "").trim().toLowerCase();
+    if (!key || byName.has(key)) continue;
+    byName.set(key, sanitizePrebuiltPlaylist(p));
+  }
+  return {
+    generatedAt: Math.max(primary.generatedAt || 0, secondary?.generatedAt || 0, Date.now()),
+    playlists: Array.from(byName.values()),
+  };
+}
+
+function hasAllDefaultDefs(payload: CachedPayload): boolean {
+  const names = new Set(
+    (payload.playlists || []).map((p) => String(p.name || "").trim().toLowerCase()),
+  );
+  return PREBUILT_DEFS.every((d) => names.has(String(d.name || "").trim().toLowerCase()));
+}
 
 async function loadStaticManifest(): Promise<CachedPayload | null> {
   if (staticManifestLoadAttempted) return staticManifestCache;
@@ -118,7 +167,10 @@ async function loadStaticManifest(): Promise<CachedPayload | null> {
       staticManifestCache = null;
       return null;
     }
-    staticManifestCache = parsed;
+    staticManifestCache = {
+      generatedAt: Number(parsed.generatedAt || Date.now()),
+      playlists: parsed.playlists.map((p) => sanitizePrebuiltPlaylist(p)),
+    };
     return staticManifestCache;
   } catch {
     staticManifestCache = null;
@@ -132,6 +184,86 @@ function normalizeSongToken(input: string): string {
     .replace(/[^a-z0-9\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function audioExtRankFromUrl(url?: string): number {
+  const u = String(url || "").toLowerCase();
+  if (u.endsWith(".flac")) return 1;
+  if (u.endsWith(".mp3")) return 2;
+  if (u.endsWith(".m4a")) return 3;
+  if (u.endsWith(".ogg")) return 4;
+  if (u.endsWith(".wav")) return 5;
+  return 999;
+}
+
+function archiveIdentifierFromUrl(url?: string): string {
+  const m = String(url || "").match(/\/download\/([^/]+)\//i);
+  return m?.[1] ? decodeURIComponent(m[1]) : "";
+}
+
+function dedupeAndRankVariants(variants: Track[]): Track[] {
+  const bySourceKey = new Map<string, Track>();
+  for (const v of variants) {
+    const url = String(v?.url || "").trim();
+    if (!url) continue;
+    const sourceId = archiveIdentifierFromUrl(url);
+    const sourceKey = sourceId || url;
+    const prev = bySourceKey.get(sourceKey);
+    if (!prev) {
+      bySourceKey.set(sourceKey, v);
+      continue;
+    }
+    if (audioExtRankFromUrl(v.url) < audioExtRankFromUrl(prev.url)) {
+      bySourceKey.set(sourceKey, v);
+    }
+  }
+  return Array.from(bySourceKey.values()).slice(0, 5);
+}
+
+function sanitizePrebuiltPlaylist(input: ApiPrebuiltPlaylist): ApiPrebuiltPlaylist {
+  const name = String(input?.name || "").trim();
+  const def = PREBUILT_DEFS_BY_NAME.get(name.toLowerCase());
+  const incoming = Array.isArray(input?.slots) ? input.slots : [];
+  const byCanonical = new Map<string, ApiPrebuiltSlot>();
+  for (const slot of incoming) {
+    const canonical = normalizeSongToken(slot?.canonicalTitle || "");
+    if (!canonical) continue;
+    const variants = dedupeAndRankVariants(Array.isArray(slot?.variants) ? slot.variants : []);
+    if (variants.length === 0) continue;
+    byCanonical.set(canonical, {
+      canonicalTitle: canonical,
+      variants,
+      chainGroup: slot?.chainGroup,
+      chainOrder: slot?.chainOrder,
+    });
+  }
+
+  if (!def) {
+    return {
+      name,
+      prebuiltKind: "album-live-comp",
+      slots: Array.from(byCanonical.values()),
+    };
+  }
+
+  const ordered: ApiPrebuiltSlot[] = [];
+  for (let i = 0; i < def.tracks.length; i += 1) {
+    const canonical = normalizeSongToken(def.tracks[i]);
+    const slot = byCanonical.get(canonical);
+    if (!slot) continue;
+    ordered.push({
+      canonicalTitle: canonical,
+      variants: slot.variants,
+      chainGroup: def.chainFirstCount && i < def.chainFirstCount ? "intro" : undefined,
+      chainOrder: def.chainFirstCount && i < def.chainFirstCount ? i + 1 : undefined,
+    });
+  }
+
+  return {
+    name: def.name,
+    prebuiltKind: "album-live-comp",
+    slots: ordered,
+  };
 }
 
 function trackTitleMatchScore(songName: string, trackTitle: string): number {
@@ -228,7 +360,7 @@ async function resolvePlayableUrl(
 
 async function fetchLiveVariants(origin: string, songName: string): Promise<Track[]> {
   try {
-    const url = `${origin}/api/ia/shows?page=1&sort=most_played&query=${encodeURIComponent(songName)}`;
+    const url = `${origin}/api/ia/shows?page=1&sort=most_played&fast=1&query=${encodeURIComponent(songName)}`;
     const res = await fetch(url, { cache: "no-store" });
     if (!res.ok) return [];
     const data = (await res.json()) as {
@@ -355,7 +487,8 @@ async function buildPayload(origin: string): Promise<CachedPayload> {
       def.tracks.map(async (trackTitle, i) => {
         const variants = await fetchLiveVariants(origin, trackTitle);
         if (variants.length < 1) return null;
-        const fused = variants.length >= 2 ? variants : [variants[0], variants[0]];
+        const fused = dedupeAndRankVariants(variants);
+        if (fused.length < 1) return null;
         return {
           canonicalTitle: normalizeSongToken(trackTitle),
           variants: fused.slice(0, 5),
@@ -369,24 +502,25 @@ async function buildPayload(origin: string): Promise<CachedPayload> {
       .filter(Boolean) as ApiPrebuiltSlot[];
     // Allow very partial albums so users always get some playable content.
     if (slots.length < 1) continue;
-    playlists.push({
+    playlists.push(sanitizePrebuiltPlaylist({
       name: def.name,
       prebuiltKind: "album-live-comp",
       slots,
-    });
+    }));
   }
   return { generatedAt: Date.now(), playlists };
 }
 
 export async function GET(request: Request) {
+  const now = Date.now();
   const staticManifest = await loadStaticManifest();
   if (staticManifest && staticManifest.playlists.length > 0) {
-    return NextResponse.json(staticManifest);
+    cached = staticManifest;
+    return NextResponse.json(staticManifest, { headers: SUCCESS_CACHE_HEADERS });
   }
 
-  const now = Date.now();
   if (cached && now - cached.generatedAt <= CACHE_TTL_MS) {
-    return NextResponse.json(cached);
+    return NextResponse.json(cached, { headers: SUCCESS_CACHE_HEADERS });
   }
   if (!buildInFlight) {
     const origin = new URL(request.url).origin;
@@ -404,5 +538,5 @@ export async function GET(request: Request) {
       });
   }
   const result = await buildInFlight;
-  return NextResponse.json(result);
+  return NextResponse.json(result, { headers: SUCCESS_CACHE_HEADERS });
 }

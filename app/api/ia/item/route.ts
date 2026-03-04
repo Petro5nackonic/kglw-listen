@@ -28,11 +28,32 @@ type MetaResponse = {
   files?: MetaFile[];
 };
 
+const ITEM_CACHE_TTL_MS = 1000 * 60 * 10;
+const itemCache = new Map<string, { expiresAt: number; payload: unknown }>();
+
 export async function GET(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id");
   if (!id) return Response.json({ error: "Missing id" }, { status: 400 });
 
-  const metaRes = await fetch(`https://archive.org/metadata/${encodeURIComponent(id)}`, { cache: "no-store" });
+  const cached = itemCache.get(id);
+  if (cached && cached.expiresAt > Date.now()) {
+    return Response.json(cached.payload);
+  }
+
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  let metaRes: Response;
+  try {
+    const controller = new AbortController();
+    timeout = setTimeout(() => controller.abort(), 8000);
+    metaRes = await fetch(`https://archive.org/metadata/${encodeURIComponent(id)}`, {
+      cache: "no-store",
+      signal: controller.signal,
+    });
+  } catch {
+    return Response.json({ error: "Metadata fetch timed out" }, { status: 504 });
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
   if (!metaRes.ok) return Response.json({ error: "Metadata fetch failed" }, { status: 502 });
 
   const meta = (await metaRes.json()) as MetaResponse;
@@ -68,12 +89,14 @@ export async function GET(req: NextRequest) {
     return String(a.name).localeCompare(String(b.name));
   });
 
-  return Response.json({
+  const payload = {
     identifier: id,
     title: md.title,
     creator: md.creator,
     date: md.date,
     venue: md.venue,
     tracks,
-  });
+  };
+  itemCache.set(id, { expiresAt: Date.now() + ITEM_CACHE_TTL_MS, payload });
+  return Response.json(payload);
 }
