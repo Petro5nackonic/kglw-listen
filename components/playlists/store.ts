@@ -529,9 +529,9 @@ export const usePlaylists = create<PlaylistsState>()(
       ensureFlightB741Playlist: async () => {
         if (typeof window === "undefined") return;
         if (flightB741SeedInFlight) return flightB741SeedInFlight;
-        if (window.localStorage.getItem(FLIGHT_B741_SEEDED_KEY) === "1") return;
 
         flightB741SeedInFlight = (async () => {
+          const hasSeedMarker = window.localStorage.getItem(FLIGHT_B741_SEEDED_KEY) === "1";
           const existingReady = get().playlists.find(
             (p) =>
               p.name.trim().toLowerCase() === FLIGHT_B741_PLAYLIST_NAME.toLowerCase() &&
@@ -541,6 +541,10 @@ export const usePlaylists = create<PlaylistsState>()(
           if (existingReady) {
             window.localStorage.setItem(FLIGHT_B741_SEEDED_KEY, "1");
             return;
+          }
+          if (hasSeedMarker) {
+            // Stale seed marker: playlist exists but is still placeholder/incomplete.
+            window.localStorage.removeItem(FLIGHT_B741_SEEDED_KEY);
           }
 
           async function fetchMostPlayedVariants(songName: string): Promise<Track[]> {
