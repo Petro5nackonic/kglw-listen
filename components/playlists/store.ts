@@ -1666,10 +1666,20 @@ export const usePlaylists = create<PlaylistsState>()(
           playlists?: LegacyPlaylist[];
           dismissedPrebuiltNames?: string[];
         };
+        const hasPersistedPlaylistsField =
+          data &&
+          typeof data === "object" &&
+          Object.prototype.hasOwnProperty.call(data, "playlists");
         const playlists = Array.isArray(data.playlists) ? data.playlists : [];
         const dismissedPrebuiltNames = Array.isArray(data.dismissedPrebuiltNames)
           ? data.dismissedPrebuiltNames.map((v) => String(v || "").trim().toLowerCase()).filter(Boolean)
           : [];
+        if (!hasPersistedPlaylistsField) {
+          return {
+            playlists: buildStaticPrebuiltSeedPlaylists(),
+            dismissedPrebuiltNames: [],
+          };
+        }
         return {
           playlists: playlists.map(migratePlaylist),
           dismissedPrebuiltNames: Array.from(new Set(dismissedPrebuiltNames)),
