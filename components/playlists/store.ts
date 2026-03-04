@@ -1449,16 +1449,11 @@ export const usePlaylists = create<PlaylistsState>()(
 
       deletePlaylist: (playlistId) => {
         const target = get().playlists.find((p) => p.id === playlistId) || null;
-        const nextDismissed =
-          target?.source === "prebuilt"
-            ? Array.from(
-                new Set(
-                  (get().dismissedPrebuiltNames || []).concat(
-                    String(target.name || "").trim().toLowerCase(),
-                  ),
-                ),
-              )
-            : get().dismissedPrebuiltNames;
+        const nextDismissed = target?.source === "prebuilt"
+          ? (get().dismissedPrebuiltNames || []).filter(
+              (n) => n !== String(target.name || "").trim().toLowerCase(),
+            )
+          : get().dismissedPrebuiltNames;
         set({
           playlists: get().playlists.filter((p) => p.id !== playlistId),
           dismissedPrebuiltNames: nextDismissed,
@@ -1744,7 +1739,7 @@ export const usePlaylists = create<PlaylistsState>()(
     }),
     {
       name: "kglw.playlists.v1",
-      version: 3,
+      version: 4,
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         // Persist user playlists only. Prebuilt entries are reconstructed/synced.
@@ -1786,9 +1781,6 @@ export const usePlaylists = create<PlaylistsState>()(
           typeof data === "object" &&
           Object.prototype.hasOwnProperty.call(data, "playlists");
         const playlists = Array.isArray(data.playlists) ? data.playlists : [];
-        const dismissedPrebuiltNames = Array.isArray(data.dismissedPrebuiltNames)
-          ? data.dismissedPrebuiltNames.map((v) => String(v || "").trim().toLowerCase()).filter(Boolean)
-          : [];
         if (!hasPersistedPlaylistsField) {
           return {
             playlists: buildStaticPrebuiltSeedPlaylists(),
@@ -1797,7 +1789,9 @@ export const usePlaylists = create<PlaylistsState>()(
         }
         return {
           playlists: playlists.map(migratePlaylist).filter((p) => !isPrebuiltPlaylist(p)),
-          dismissedPrebuiltNames: Array.from(new Set(dismissedPrebuiltNames)),
+          // Reset stale prebuilt dismissals from earlier behavior to avoid
+          // hydration flashes where canonical prebuilt playlists disappear.
+          dismissedPrebuiltNames: [],
         };
       },
     },
