@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 
 import type { Track } from "@/components/player/store";
 
@@ -102,6 +104,27 @@ const PREBUILT_DEFS: Array<{ name: string; tracks: string[]; chainFirstCount?: n
 
 let cached: CachedPayload | null = null;
 let buildInFlight: Promise<CachedPayload> | null = null;
+let staticManifestCache: CachedPayload | null = null;
+let staticManifestLoadAttempted = false;
+
+async function loadStaticManifest(): Promise<CachedPayload | null> {
+  if (staticManifestLoadAttempted) return staticManifestCache;
+  staticManifestLoadAttempted = true;
+  try {
+    const target = join(process.cwd(), "data", "prebuilt-playlists.static.json");
+    const raw = await readFile(target, "utf8");
+    const parsed = JSON.parse(raw) as CachedPayload;
+    if (!parsed || !Array.isArray(parsed.playlists) || parsed.playlists.length === 0) {
+      staticManifestCache = null;
+      return null;
+    }
+    staticManifestCache = parsed;
+    return staticManifestCache;
+  } catch {
+    staticManifestCache = null;
+    return null;
+  }
+}
 
 function normalizeSongToken(input: string): string {
   return String(input || "")
@@ -356,6 +379,11 @@ async function buildPayload(origin: string): Promise<CachedPayload> {
 }
 
 export async function GET(request: Request) {
+  const staticManifest = await loadStaticManifest();
+  if (staticManifest && staticManifest.playlists.length > 0) {
+    return NextResponse.json(staticManifest);
+  }
+
   const now = Date.now();
   if (cached && now - cached.generatedAt <= CACHE_TTL_MS) {
     return NextResponse.json(cached);
