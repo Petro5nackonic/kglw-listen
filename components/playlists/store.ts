@@ -185,13 +185,13 @@ const STATIC_PREBUILT_SEED_DEFS: Array<{ name: string; tracks: string[]; chainFi
   { name: FLIGHT_B741_PLAYLIST_NAME, tracks: FLIGHT_B741_TRACK_ORDER },
   { name: MIND_FUZZ_LIVE_COMP_NAME, tracks: MIND_FUZZ_LIVE_COMP_TRACK_ORDER, chainFirstCount: 4 },
   {
-    name: "I'm in Your Mind Fuzz",
+    name: "I'm In Your Mind Fuzz",
     tracks: REQUESTED_ALBUM_TRACK_FALLBACKS["i'm in your mind fuzz"] || [],
   },
   { name: "Infest the Rats' Nest", tracks: REQUESTED_ALBUM_TRACK_FALLBACKS["infest the rats' nest"] || [] },
   { name: "Nonagon Infinity", tracks: REQUESTED_ALBUM_TRACK_FALLBACKS["nonagon infinity"] || [] },
   {
-    name: "Petrodragonic Apocalypse",
+    name: "PetroDragonic Apocalypse",
     tracks: REQUESTED_ALBUM_TRACK_FALLBACKS["petrodragonic apocalypse"] || [],
   },
   { name: "The Silver Chord", tracks: REQUESTED_ALBUM_TRACK_FALLBACKS["the silver chord"] || [] },
@@ -250,8 +250,8 @@ function buildStaticPrebuiltSeedPlaylists(now = Date.now()): Playlist[] {
     const slots: PlaylistSlot[] = def.tracks.map((title, idx) => ({
       id: safeUUID(),
       canonicalTitle: normalizeSongToken(title) || canonicalTrackTitle({ title, url: "" }),
-      addedAt: now,
-      updatedAt: now,
+      addedAt: now + idx,
+      updatedAt: now + idx,
       linkGroupId: linkGroupId && idx < (def.chainFirstCount || 0) ? linkGroupId : undefined,
       chainOrder: linkGroupId && idx < (def.chainFirstCount || 0) ? idx + 1 : undefined,
       variants: [
@@ -290,7 +290,7 @@ function buildStaticPrebuiltSeedPlaylists(now = Date.now()): Playlist[] {
         if (!name) return null;
         const chainGroups = new Map<string, string>();
         const slots = (Array.isArray(pl?.slots) ? pl.slots : [])
-          .map((slot) => {
+          .map((slot, idx) => {
             const variantsRaw = Array.isArray(slot?.variants) ? slot.variants : [];
             const variants = variantsRaw
               .filter((v) => Boolean(String(v?.url || "").trim()))
@@ -315,8 +315,8 @@ function buildStaticPrebuiltSeedPlaylists(now = Date.now()): Playlist[] {
             return {
               id: safeUUID(),
               canonicalTitle,
-              addedAt: now,
-              updatedAt: now,
+              addedAt: now + idx,
+              updatedAt: now + idx,
               linkGroupId,
               chainOrder:
                 typeof slot?.chainOrder === "number" && Number.isFinite(slot.chainOrder)
@@ -556,7 +556,7 @@ export const usePlaylists = create<PlaylistsState>()(
 
             const chainGroupIds = new Map<string, string>();
             const slots: PlaylistSlot[] = rawSlots
-              .map((slot) => {
+              .map((slot, slotIdx) => {
                 const variants = Array.isArray(slot?.variants) ? slot.variants : [];
                 if (variants.length === 0) return null;
                 const chainKey = String(slot?.chainGroup || "").trim();
@@ -571,8 +571,8 @@ export const usePlaylists = create<PlaylistsState>()(
                 return {
                   id: safeUUID(),
                   canonicalTitle: String(slot?.canonicalTitle || "").trim() || canonicalTrackTitle(variants[0]),
-                  addedAt: now,
-                  updatedAt: now,
+                  addedAt: now + slotIdx,
+                  updatedAt: now + slotIdx,
                   linkGroupId,
                   chainOrder:
                     typeof slot?.chainOrder === "number" && Number.isFinite(slot.chainOrder)

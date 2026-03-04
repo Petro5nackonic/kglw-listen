@@ -7,6 +7,8 @@
       "slots": [
         {
           "canonicalTitle": "robot stop",
+          "chainGroup": "intro",
+          "chainOrder": 1,
           "variants": [
             { "title": "Robot Stop", "url": "https://archive.org/download/kglw2023-06-01.sbd-flac/02+Robot+Stop.flac", "track": "1" },
             { "title": "Robot Stop", "url": "https://archive.org/download/kglw2023-06-07.SBD/12+Robot+Stop+(Live+at+Red+Rocks+'23).flac", "track": "1" },
@@ -15,6 +17,8 @@
         },
         {
           "canonicalTitle": "big fig wasp",
+          "chainGroup": "intro",
+          "chainOrder": 2,
           "variants": [
             { "title": "Big Fig Wasp", "url": "https://archive.org/download/kglw2023-06-01.sbd-flac/03+Big+Fig+Wasp.flac", "track": "1" },
             { "title": "Big Fig Wasp", "url": "https://archive.org/download/kglw2025-05-23.Spain2025N1/03+-+Big+Fig+Wasp.flac", "track": "1" },
@@ -23,6 +27,8 @@
         },
         {
           "canonicalTitle": "gamma knife",
+          "chainGroup": "intro",
+          "chainOrder": 3,
           "variants": [
             { "title": "Gamma Knife", "url": "https://archive.org/download/kglw2024-08-15.vwmule/kglw2024-08-15t06.flac", "track": "1" },
             { "title": "Gamma Knife", "url": "https://archive.org/download/kglw2023-06-08.SBD/01+Gamma+Knife+(Live+at+Red+Rocks+'23).flac", "track": "1" },
@@ -31,6 +37,8 @@
         },
         {
           "canonicalTitle": "people vultures",
+          "chainGroup": "intro",
+          "chainOrder": 4,
           "variants": [
             { "title": "People-Vultures", "url": "https://archive.org/download/kglw2023-06-01.sbd-flac/05+People-Vultures.flac", "track": "1" },
             { "title": "People-Vultures", "url": "https://archive.org/download/kglw2024-09-01/01+-+People-Vultures.flac", "track": "1" },

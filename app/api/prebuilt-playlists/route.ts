@@ -60,7 +60,7 @@ const PREBUILT_DEFS: Array<{ name: string; tracks: string[]; chainFirstCount?: n
     chainFirstCount: 4,
   },
   {
-    name: "I'm in Your Mind Fuzz",
+    name: "I'm In Your Mind Fuzz",
     tracks: [
       "I'm In Your Mind",
       "I'm Not In Your Mind",
@@ -73,6 +73,7 @@ const PREBUILT_DEFS: Array<{ name: string; tracks: string[]; chainFirstCount?: n
       "Satan Speeds Up",
       "Her And I (Slow Jam 2)",
     ],
+    chainFirstCount: 4,
   },
   {
     name: "Infest the Rats' Nest",
@@ -101,9 +102,10 @@ const PREBUILT_DEFS: Array<{ name: string; tracks: string[]; chainFirstCount?: n
       "Wah Wah",
       "Road Train",
     ],
+    chainFirstCount: 4,
   },
   {
-    name: "Petrodragonic Apocalypse",
+    name: "PetroDragonic Apocalypse",
     tracks: [
       "Motor Spirit",
       "Supercell",
