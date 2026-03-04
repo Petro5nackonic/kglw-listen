@@ -49,10 +49,7 @@ export function PrebuiltPlaylistsSync() {
 
   useEffect(() => {
     if (!hydrated) return;
-    const timeout = window.setTimeout(() => {
-      void syncPrebuiltPlaylistsFromServer();
-    }, 400);
-    return () => window.clearTimeout(timeout);
+    void syncPrebuiltPlaylistsFromServer();
   }, [hydrated, syncPrebuiltPlaylistsFromServer]);
 
   useEffect(() => {
@@ -75,7 +72,7 @@ export function PrebuiltPlaylistsSync() {
       void ensureFlightB741Playlist();
       void ensureMindFuzzLiveCompPlaylist();
       void ensureRequestedAlbumPlaylists();
-    }, 300);
+    }, 2500);
     return () => window.clearTimeout(timeout);
   }, [
     hydrated,

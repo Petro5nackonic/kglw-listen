@@ -5,6 +5,7 @@ import type { Track } from "@/components/player/store";
 import type { Playlist, PlaylistSlot } from "@/components/playlists/types";
 import { moveItem, safeUUID } from "@/components/playlists/utils";
 import { toDisplayTrackTitle } from "@/utils/displayTitle";
+import staticPrebuiltManifest from "@/data/prebuilt-playlists.static.json";
 
 type PlaylistsState = {
   playlists: Playlist[];
@@ -240,6 +241,76 @@ type ApiPrebuiltPlaylist = {
 };
 
 function buildStaticPrebuiltSeedPlaylists(now = Date.now()): Playlist[] {
+  const manifest = staticPrebuiltManifest as {
+    playlists?: Array<{
+      name?: string;
+      prebuiltKind?: "album-live-comp";
+      slots?: Array<{
+        canonicalTitle?: string;
+        variants?: Track[];
+        chainGroup?: string;
+        chainOrder?: number;
+      }>;
+    }>;
+  };
+  const fromManifest = Array.isArray(manifest?.playlists) ? manifest.playlists : [];
+  if (fromManifest.length > 0) {
+    return fromManifest
+      .map((pl) => {
+        const name = String(pl?.name || "").trim();
+        if (!name) return null;
+        const chainGroups = new Map<string, string>();
+        const slots = (Array.isArray(pl?.slots) ? pl.slots : [])
+          .map((slot) => {
+            const variantsRaw = Array.isArray(slot?.variants) ? slot.variants : [];
+            const variants = variantsRaw
+              .filter((v) => Boolean(String(v?.url || "").trim()))
+              .slice(0, 5)
+              .map((v) => ({
+                id: safeUUID(),
+                addedAt: now,
+                track: v,
+              }));
+            if (variants.length === 0) return null;
+            const chainKey = String(slot?.chainGroup || "").trim();
+            const linkGroupId = chainKey
+              ? (chainGroups.get(chainKey) ||
+                (() => {
+                  const id = safeUUID();
+                  chainGroups.set(chainKey, id);
+                  return id;
+                })())
+              : undefined;
+            const canonicalTitle =
+              String(slot?.canonicalTitle || "").trim() || canonicalTrackTitle(variants[0].track);
+            return {
+              id: safeUUID(),
+              canonicalTitle,
+              addedAt: now,
+              updatedAt: now,
+              linkGroupId,
+              chainOrder:
+                typeof slot?.chainOrder === "number" && Number.isFinite(slot.chainOrder)
+                  ? slot.chainOrder
+                  : undefined,
+              variants,
+            } as PlaylistSlot;
+          })
+          .filter(Boolean) as PlaylistSlot[];
+        if (slots.length === 0) return null;
+        return {
+          id: safeUUID(),
+          name,
+          createdAt: now,
+          updatedAt: now,
+          source: "prebuilt" as const,
+          prebuiltKind: "album-live-comp" as const,
+          slots,
+        } as Playlist;
+      })
+      .filter(Boolean) as Playlist[];
+  }
+
   return STATIC_PREBUILT_SEED_DEFS.filter((def) => def.tracks.length > 0).map((def) => {
     const linkGroupId = def.chainFirstCount ? safeUUID() : undefined;
     const slots: PlaylistSlot[] = def.tracks.map((title, idx) => ({
