@@ -4,20 +4,42 @@ import { useEffect, useState } from "react";
 
 import { usePlaylists } from "@/components/playlists/store";
 
+function getPersistApi() {
+  const maybe = (usePlaylists as unknown as { persist?: unknown }).persist as
+    | {
+        hasHydrated?: () => boolean;
+        onFinishHydration?: (cb: () => void) => () => void;
+      }
+    | undefined;
+  return maybe;
+}
+
 export function PrebuiltPlaylistsSync() {
   const playlists = usePlaylists((s) => s.playlists);
   const syncPrebuiltPlaylistsFromServer = usePlaylists((s) => s.syncPrebuiltPlaylistsFromServer);
   const ensureFlightB741Playlist = usePlaylists((s) => s.ensureFlightB741Playlist);
   const ensureMindFuzzLiveCompPlaylist = usePlaylists((s) => s.ensureMindFuzzLiveCompPlaylist);
   const ensureRequestedAlbumPlaylists = usePlaylists((s) => s.ensureRequestedAlbumPlaylists);
-  const [hydrated, setHydrated] = useState(() => usePlaylists.persist.hasHydrated());
+  const [hydrated, setHydrated] = useState(() => {
+    const persist = getPersistApi();
+    return typeof persist?.hasHydrated === "function" ? persist.hasHydrated() : true;
+  });
 
   useEffect(() => {
-    if (usePlaylists.persist.hasHydrated()) {
+    const persist = getPersistApi();
+    if (!persist) {
       setHydrated(true);
       return;
     }
-    const unsub = usePlaylists.persist.onFinishHydration(() => {
+    if (typeof persist.hasHydrated === "function" && persist.hasHydrated()) {
+      setHydrated(true);
+      return;
+    }
+    if (typeof persist.onFinishHydration !== "function") {
+      setHydrated(true);
+      return;
+    }
+    const unsub = persist.onFinishHydration(() => {
       setHydrated(true);
     });
     return () => {
