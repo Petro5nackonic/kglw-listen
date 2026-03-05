@@ -8,11 +8,26 @@ import {
   faClockRotateLeft,
   faHouse,
 } from "@fortawesome/pro-solid-svg-icons";
+import { usePlaylists } from "@/components/playlists/store";
 
 export function BottomNav() {
   const pathname = usePathname();
-  const isHome = pathname === "/";
-  const isPlaylists = pathname === "/playlists" || pathname.startsWith("/playlists/");
+  const playlists = usePlaylists((s) => s.playlists);
+  const playlistDetailId = pathname.startsWith("/playlists/")
+    ? decodeURIComponent(pathname.split("/")[2] || "")
+    : "";
+  const activePlaylist = playlistDetailId
+    ? playlists.find((p) => p.id === playlistDetailId)
+    : undefined;
+  const isPrebuiltPlaylistDetail = Boolean(
+    activePlaylist &&
+      (activePlaylist.source === "prebuilt" ||
+        activePlaylist.prebuiltKind === "album-live-comp"),
+  );
+  const isHome = pathname === "/" || isPrebuiltPlaylistDetail;
+  const isPlaylists =
+    (pathname === "/playlists" || pathname.startsWith("/playlists/")) &&
+    !isPrebuiltPlaylistDetail;
   const isYou = pathname === "/you";
   const items = [
     { href: "/", active: isHome, icon: faHouse, label: "Home" },

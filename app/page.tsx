@@ -2768,7 +2768,7 @@ export default function HomePage() {
                           (sum, s) => sum + s.variants.length,
                           0,
                         );
-                        const linksCount = p.slots.filter((s) => s.variants.length > 1).length;
+                        const chainsCount = p.slots.filter((s) => s.variants.length > 1).length;
                         return (
                           <div
                             key={p.id}
@@ -2778,7 +2778,7 @@ export default function HomePage() {
                               <div className="min-w-0">
                                 <div className="truncate text-sm">{p.name}</div>
                                 <div className="mt-0.5 text-[11px] text-white/50">
-                                  {tracksCount} Tracks • {versionsCount} Versions • {linksCount} Links
+                                  {tracksCount} Tracks • {versionsCount} Versions • {chainsCount} Chains
                                 </div>
                               </div>
 

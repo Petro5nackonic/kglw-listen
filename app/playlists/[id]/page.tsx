@@ -467,12 +467,15 @@ export default function PlaylistDetailPage() {
   const isPrebuiltPlaylist = playlist?.source === "prebuilt";
   const showAddTracksCta = !isPrebuiltPlaylist && playableSlots.length === 0;
   const totalDurationLabel = useMemo(() => {
-    const totalSeconds = playableSlots.reduce(
-      (sum, item) => sum + parseTrackSeconds(item.track.length),
-      0,
-    );
+    const totalSeconds = orderedSlots.reduce((sum, slot) => {
+      const variants = Array.isArray(slot.variants) ? slot.variants : [];
+      if (variants.length === 0) return sum;
+      const preferredVariant =
+        variants.find((v) => parseTrackSeconds(v.track?.length) > 0) || variants[0];
+      return sum + parseTrackSeconds(preferredVariant.track?.length);
+    }, 0);
     return formatDuration(totalSeconds) || "0:00";
-  }, [playableSlots]);
+  }, [orderedSlots]);
   const heroImage = useMemo(() => {
     const firstTrackUrl = playableSlots[0]?.track.url;
     const identifier = getArchiveIdentifier(firstTrackUrl);
@@ -820,16 +823,24 @@ export default function PlaylistDetailPage() {
 
           <section className="mt-9 isolate pb-4">
             <div className="relative z-[2] mb-[-16px] rounded-[16px] border border-white/20 bg-white/5 p-4 backdrop-blur-[6px]">
+              {isPrebuiltPlaylist ? (
+                <div className="mb-4 grid w-full grid-cols-2 gap-1.5">
+                  {prebuiltPreviewThumbs.map((src, idx) => (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      key={`${playlist.id}-preview-${idx}`}
+                      src={src}
+                      alt=""
+                      className="aspect-square w-full rounded-[8px] border border-white/15 object-cover"
+                    />
+                  ))}
+                </div>
+              ) : null}
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <h1 className="truncate text-[20px] leading-[1.05] font-medium [font-family:var(--font-roboto)]">
                     {playlist.name}
                   </h1>
-                  {isPrebuiltPlaylist ? (
-                    <div className="mt-2 inline-flex rounded-full border border-[#8f68dd]/60 bg-[#5A22C9]/20 px-2 py-1 text-[10px] tracking-[0.16em] text-[#d8c3ff] uppercase">
-                      Pre-built live comp
-                    </div>
-                  ) : null}
                 </div>
                 <div className="relative flex items-center gap-2">
                   <FontAwesomeIcon icon={faBookmark} className="mt-1 text-[20px] text-white/90" />
@@ -906,22 +917,14 @@ export default function PlaylistDetailPage() {
                 </span>
                 <span className="size-[4px] shrink-0 rounded-full bg-white/55" />
                 <span>
-                  {chainGroups} Link{chainGroups === 1 ? "" : "s"}
+                  {chainGroups} Chain{chainGroups === 1 ? "" : "s"}
                 </span>
                 <span className="size-[4px] shrink-0 rounded-full bg-white/55" />
                 <span>{totalDurationLabel}</span>
               </div>
               {isPrebuiltPlaylist ? (
-                <div className="mt-4 grid w-24 grid-cols-2 gap-1.5">
-                  {prebuiltPreviewThumbs.map((src, idx) => (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      key={`${playlist.id}-preview-${idx}`}
-                      src={src}
-                      alt=""
-                      className="aspect-square w-full rounded-[8px] border border-white/15 object-cover"
-                    />
-                  ))}
+                <div className="mt-2 inline-flex rounded-full border border-[#8f68dd]/60 bg-[#5A22C9]/20 px-2 py-1 text-[10px] tracking-[0.16em] text-[#d8c3ff] uppercase">
+                  Pre-built live comp
                 </div>
               ) : null}
             </div>
@@ -954,7 +957,7 @@ export default function PlaylistDetailPage() {
             )}
           </section>
 
-          {playableSlots.length > 0 && (
+          {!isPrebuiltPlaylist && playableSlots.length > 0 && (
             <div className="mt-4 flex items-center justify-between rounded-[16px] bg-white/5 px-4 py-3.5 backdrop-blur-[6px]">
               <span className="text-[14px] leading-none text-white/65 [font-family:var(--font-roboto-condensed)]">
                 Search this playlist
