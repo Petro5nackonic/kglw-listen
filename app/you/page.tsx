@@ -11,6 +11,22 @@ import {
 } from "@fortawesome/pro-solid-svg-icons";
 import { clearActivityFeed, readActivityFeed, type ActivityItem } from "@/utils/activityFeed";
 
+function chartColorAt(index: number): string {
+  const palette = [
+    "#7F58F4",
+    "#6332E4",
+    "#9D7BFF",
+    "#4E24C7",
+    "#B79FFF",
+    "#5A22C9",
+    "#8A6BFF",
+    "#3B179A",
+    "#A88EF9",
+    "#6A47E8",
+  ];
+  return palette[index % palette.length];
+}
+
 function dayLabel(ts: number): string {
   const date = new Date(ts);
   const today = new Date();
@@ -78,6 +94,51 @@ export default function YouPage() {
     }
     return Array.from(map.entries());
   }, [items]);
+  const showChart = useMemo(() => {
+    const showEvents = items.filter((item) => item.type === "played_show" || item.type === "played_song");
+    const counts = new Map<string, { label: string; count: number }>();
+    let unknown = 0;
+    for (const item of showEvents) {
+      const key = String(item.showKey || "").trim();
+      const label = String(item.showTitle || "").trim();
+      if (!key && !label) {
+        unknown += 1;
+        continue;
+      }
+      const mapKey = key || label;
+      const current = counts.get(mapKey);
+      if (current) {
+        current.count += 1;
+        if (!current.label && label) current.label = label;
+        continue;
+      }
+      counts.set(mapKey, { label: label || "Unknown show", count: 1 });
+    }
+    const entries = Array.from(counts.values())
+      .map((entry) => ({ show: entry.label, count: entry.count }))
+      .sort((a, b) => b.count - a.count);
+    if (unknown > 0) entries.push({ show: "Unknown show", count: unknown });
+    const total = entries.reduce((sum, row) => sum + row.count, 0);
+    return {
+      total,
+      entries: entries.map((row, index) => ({
+        ...row,
+        percent: total > 0 ? (row.count / total) * 100 : 0,
+        color: row.show === "Unknown show" ? "#534B65" : chartColorAt(index),
+      })),
+    };
+  }, [items]);
+  const donutBackground = useMemo(() => {
+    if (showChart.total <= 0) return "conic-gradient(#2B2341 0deg 360deg)";
+    let acc = 0;
+    const slices = showChart.entries.map((entry) => {
+      const start = acc;
+      const end = acc + (entry.count / showChart.total) * 360;
+      acc = end;
+      return `${entry.color} ${start}deg ${end}deg`;
+    });
+    return `conic-gradient(${slices.join(", ")})`;
+  }, [showChart]);
 
   return (
     <main className="min-h-screen bg-[#080017] text-white">
@@ -113,6 +174,50 @@ export default function YouPage() {
             ) : null}
           </div>
         </div>
+        <section className="mb-7 rounded-[16px] border border-white/10 bg-[rgba(21,9,49,0.72)] p-4">
+          <div className="mb-3 text-[15px] font-medium text-white [font-family:var(--font-roboto-condensed)]">
+            Show Listening Mix
+          </div>
+          <div className="flex items-center gap-4">
+            <div
+              className="relative h-[148px] w-[148px] shrink-0 rounded-full"
+              style={{ background: donutBackground }}
+              aria-label="Studio album listening donut chart"
+            >
+              <div className="absolute inset-[24px] flex flex-col items-center justify-center rounded-full bg-[#12052B] text-center">
+                <div className="text-[28px] font-semibold leading-none">
+                  {showChart.total}
+                </div>
+                <div className="mt-1 text-[11px] text-white/65">Show Plays</div>
+              </div>
+            </div>
+            <div className="min-w-0 flex-1 space-y-1.5">
+              {showChart.entries.length === 0 ? (
+                <div className="text-[12px] text-white/65">
+                  Start playing shows to populate this chart.
+                </div>
+              ) : (
+                showChart.entries.slice(0, 6).map((entry) => (
+                  <div key={entry.show} className="flex items-center justify-between gap-2 text-[12px]">
+                    <div className="flex min-w-0 items-center gap-2 text-white/80">
+                      <span
+                        className="h-2.5 w-2.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: entry.color }}
+                      />
+                      <span className="truncate">{entry.show}</span>
+                    </div>
+                    <span className="shrink-0 text-white/70">{entry.percent.toFixed(0)}%</span>
+                  </div>
+                ))
+              )}
+              {showChart.entries.length > 6 ? (
+                <div className="pt-1 text-[11px] text-white/55">
+                  +{showChart.entries.length - 6} more shows
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </section>
 
         {items.length === 0 ? (
           <div className="rounded-[16px] border border-white/20 bg-white/5 p-4 text-sm text-white/70">
