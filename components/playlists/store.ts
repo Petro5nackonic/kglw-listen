@@ -220,6 +220,22 @@ type LegacyPlaylistTrack = {
   track: Track;
 };
 
+type LegacySlotVariant = {
+  id?: string;
+  addedAt?: number;
+  track?: Track;
+} & Partial<Track>;
+
+type LegacyPlaylistSlot = {
+  id?: string;
+  canonicalTitle?: string;
+  addedAt?: number;
+  updatedAt?: number;
+  linkGroupId?: string;
+  chainOrder?: number;
+  variants?: LegacySlotVariant[];
+};
+
 type LegacyPlaylist = {
   id: string;
   name: string;
@@ -228,7 +244,7 @@ type LegacyPlaylist = {
   source?: "user" | "prebuilt";
   prebuiltKind?: "album-live-comp";
   tracks?: LegacyPlaylistTrack[];
-  slots?: Playlist["slots"];
+  slots?: LegacyPlaylistSlot[];
 };
 
 type ApiPrebuiltSlot = {
@@ -346,13 +362,63 @@ function buildStaticPrebuiltSeedPlaylists(now = Date.now()): Playlist[] {
 }
 
 function migratePlaylist(raw: LegacyPlaylist): Playlist {
+  const knownPrebuiltNames = new Set(
+    STATIC_PREBUILT_SEED_DEFS.map((def) => def.name.trim().toLowerCase()),
+  );
   const inferredPrebuilt =
-    !raw.source &&
-    String(raw.name || "").trim().toLowerCase() === FLIGHT_B741_PLAYLIST_NAME.toLowerCase();
+    !raw.source && knownPrebuiltNames.has(String(raw.name || "").trim().toLowerCase());
   const source = raw.source || (inferredPrebuilt ? "prebuilt" : "user");
   const prebuiltKind = raw.prebuiltKind || (inferredPrebuilt ? "album-live-comp" : undefined);
 
   if (Array.isArray(raw.slots)) {
+    const now = Date.now();
+    const slots: PlaylistSlot[] = raw.slots.map((slot, slotIdx) => {
+      const variantsRaw = Array.isArray(slot?.variants) ? slot.variants : [];
+      const variants = variantsRaw
+        .map((variant, variantIdx) => {
+          const track =
+            variant &&
+            typeof variant === "object" &&
+            "track" in variant &&
+            variant.track &&
+            typeof variant.track === "object"
+              ? variant.track
+              : (variant as unknown as Track);
+          if (!track || typeof track !== "object") return null;
+          const title = String(track.title || "").trim();
+          const url = String(track.url || "").trim();
+          if (!title && !url) return null;
+          return {
+            id: String(variant?.id || "").trim() || safeUUID(),
+            addedAt:
+              Number.isFinite(Number(variant?.addedAt)) && Number(variant?.addedAt) > 0
+                ? Number(variant?.addedAt)
+                : now + slotIdx + variantIdx,
+            track,
+          };
+        })
+        .filter(Boolean) as PlaylistSlot["variants"];
+      return {
+        id: String(slot?.id || "").trim() || safeUUID(),
+        canonicalTitle:
+          String(slot?.canonicalTitle || "").trim() ||
+          canonicalTrackTitle(variants[0]?.track || { title: "", url: "" }),
+        addedAt:
+          Number.isFinite(Number(slot?.addedAt)) && Number(slot?.addedAt) > 0
+            ? Number(slot?.addedAt)
+            : now + slotIdx,
+        updatedAt:
+          Number.isFinite(Number(slot?.updatedAt)) && Number(slot?.updatedAt) > 0
+            ? Number(slot?.updatedAt)
+            : now + slotIdx,
+        linkGroupId: String(slot?.linkGroupId || "").trim() || undefined,
+        chainOrder:
+          typeof slot?.chainOrder === "number" && Number.isFinite(slot.chainOrder)
+            ? slot.chainOrder
+            : undefined,
+        variants,
+      } as PlaylistSlot;
+    });
     return {
       id: raw.id,
       name: raw.name,
@@ -360,7 +426,7 @@ function migratePlaylist(raw: LegacyPlaylist): Playlist {
       updatedAt: raw.updatedAt,
       source,
       prebuiltKind,
-      slots: raw.slots,
+      slots,
     };
   }
 

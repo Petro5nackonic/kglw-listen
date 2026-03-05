@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "build:prebuilts": "node scripts/build-static-prebuilts-from-local.mjs",
+    "test:archive": "node --experimental-strip-types --test src/archive/*.test.ts src/validate/*.test.ts"
   },
   "dependencies": {
     "@fortawesome/fontawesome-svg-core": "^7.2.0",

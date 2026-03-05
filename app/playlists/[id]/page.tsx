@@ -17,6 +17,7 @@ import {
   faMagnifyingGlass,
   faCirclePlay,
   faPlay,
+  faSpinner,
   faShuffle,
   faTrash,
   faXmark,
@@ -63,8 +64,19 @@ function normalizeLooseText(input: string): string {
 }
 
 function getArchiveIdentifier(url?: string): string {
-  if (!url) return "";
-  const match = String(url).match(/\/download\/([^/]+)\//i);
+  const raw = String(url || "").trim();
+  if (!raw) return "";
+  try {
+    const parsed = new URL(raw);
+    const parts = parsed.pathname.split("/").filter(Boolean);
+    const markerIdx = parts.findIndex((p) => /^(download|details|metadata)$/i.test(p));
+    if (markerIdx >= 0 && parts[markerIdx + 1]) {
+      return decodeURIComponent(parts[markerIdx + 1]);
+    }
+  } catch {
+    // fall back to regex parsing below
+  }
+  const match = raw.match(/\/(?:download|details|metadata)\/([^/?#]+)/i);
   return match?.[1] ? decodeURIComponent(match[1]) : "";
 }
 
@@ -139,15 +151,19 @@ function getTrackShowLabel(
   showTitleByIdentifier: Record<string, string>,
 ): string {
   const id = getArchiveIdentifier(url);
-  if (!id) return "Unknown show";
+  if (!id) {
+    const isoFromUrl = tryNormalizeShowDate(String(url || ""));
+    const dateLabel = toUsDateLabel(isoFromUrl);
+    return dateLabel ? `Live show ${dateLabel}` : "Live recording";
+  }
   const candidate = showTitleByIdentifier[id] || buildShowLabel("", id);
   const looksLikeFileName = /\.(?:wav|flac|mp3|m4a|ogg)(?:\?.*)?$/i.test(candidate);
   if (!looksLikeFileName && !looksLikeArchiveIdentifier(candidate, id)) return candidate;
 
-  const isoDate = tryNormalizeShowDate(id);
+  const isoDate = tryNormalizeShowDate(id) || tryNormalizeShowDate(String(url || ""));
   const dateLabel = toUsDateLabel(isoDate);
   if (dateLabel) return `Live show ${dateLabel}`;
-  return "Unknown show";
+  return "Live recording";
 }
 
 function splitShowLabelAndIsoDate(showLabel: string): { venueLabel: string; isoDate: string } {
@@ -322,7 +338,11 @@ function orderSlotsForDisplay(slots: PlaylistSlot[]): PlaylistSlot[] {
   return working;
 }
 
-function resolveSlotTrack(slot: PlaylistSlot, forcedVariantId?: string): Track | null {
+function resolveSlotTrack(
+  slot: PlaylistSlot,
+  forcedVariantId?: string,
+  randomizeVariant = false,
+): Track | null {
   const variants = Array.isArray(slot.variants)
     ? slot.variants.filter((v) => Boolean(v?.track?.url))
     : [];
@@ -330,11 +350,30 @@ function resolveSlotTrack(slot: PlaylistSlot, forcedVariantId?: string): Track |
 
   if (forcedVariantId) {
     const forced = variants.find((v) => v.id === forcedVariantId);
-    if (forced?.track?.url) return forced.track;
+    if (forced?.track?.url) {
+      const backupUrls = variants
+        .filter((v) => v.id !== forced.id)
+        .map((v) => String(v.track.url || "").trim())
+        .filter(Boolean);
+      return backupUrls.length > 0
+        ? { ...forced.track, backupUrls: Array.from(new Set(backupUrls)) }
+        : forced.track;
+    }
   }
 
-  const randomIndex = Math.floor(Math.random() * variants.length);
-  return variants[randomIndex]?.track || null;
+  const primaryVariant =
+    randomizeVariant && variants.length > 1
+      ? variants[Math.floor(Math.random() * variants.length)]
+      : variants[0];
+  const primary = primaryVariant?.track || null;
+  if (!primary) return null;
+  const backupUrls = variants
+    .filter((v) => v.id !== primaryVariant?.id)
+    .map((v) => String(v.track.url || "").trim())
+    .filter(Boolean);
+  return backupUrls.length > 0
+    ? { ...primary, backupUrls: Array.from(new Set(backupUrls)) }
+    : primary;
 }
 
 export default function PlaylistDetailPage() {
@@ -353,6 +392,7 @@ export default function PlaylistDetailPage() {
   const playerQueue = usePlayer((s) => s.queue);
   const playerIndex = usePlayer((s) => s.index);
   const playerPlaying = usePlayer((s) => s.playing);
+  const playerLoading = usePlayer((s) => s.loading);
 
   const playlist = usePlaylists((s) =>
     s.playlists.find((p) => p.id === playlistId),
@@ -510,7 +550,7 @@ export default function PlaylistDetailPage() {
     const playbackOrder = buildPlaybackIndexOrder(playableSlots, useShuffle);
     if (playbackOrder.length === 0) return;
     const resolvedByIdx = playableSlots.map((item) =>
-      resolveSlotTrack(item.slot, forcedBySlotId[item.slot.id]),
+      resolveSlotTrack(item.slot, forcedBySlotId[item.slot.id], isPrebuiltPlaylist),
     );
     const playbackQueue = playbackOrder
       .map((idx) => resolvedByIdx[idx])
@@ -895,7 +935,10 @@ export default function PlaylistDetailPage() {
                     disabled={playableSlots.length === 0}
                   >
                     Play
-                    <FontAwesomeIcon icon={faCirclePlay} className="text-[18px]" />
+                    <FontAwesomeIcon
+                      icon={playerLoading ? faSpinner : faCirclePlay}
+                      className={`text-[18px] ${playerLoading ? "animate-spin" : ""}`}
+                    />
                   </button>
                   <button
                     type="button"

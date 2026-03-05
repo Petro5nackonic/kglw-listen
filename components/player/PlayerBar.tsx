@@ -32,10 +32,82 @@ function formatCardDate(input?: string): string {
 }
 
 function getArchiveIdentifier(url?: string): string {
+  const raw = String(url || "").trim();
+  if (!raw) return "";
+  try {
+    const parsed = new URL(raw);
+    const parts = parsed.pathname.split("/").filter(Boolean);
+    const markerIdx = parts.findIndex((p) => /^(download|details|metadata)$/i.test(p));
+    if (markerIdx >= 0 && parts[markerIdx + 1]) {
+      return decodeURIComponent(parts[markerIdx + 1]);
+    }
+  } catch {
+    // fall back to regex parsing below
+  }
+  const match = raw.match(/\/(?:download|details|metadata)\/([^/?#]+)/i);
+  return match?.[1] ? decodeURIComponent(match[1]) : "";
+}
+
+function normalizeSearchText(input?: string): string {
+  return String(input || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isLikelyBrowserPlayableUrl(url?: string): boolean {
+  const clean = String(url || "").toLowerCase();
+  return (
+    clean.endsWith(".mp3") ||
+    clean.endsWith(".m4a") ||
+    clean.endsWith(".ogg") ||
+    clean.endsWith(".wav")
+  );
+}
+
+function getFileNameFromUrl(url?: string): string {
   const clean = String(url || "");
   if (!clean) return "";
-  const match = clean.match(/\/download\/([^/]+)\//i);
-  return match?.[1] ? decodeURIComponent(match[1]) : "";
+  try {
+    const parsed = new URL(clean);
+    const parts = parsed.pathname.split("/");
+    return decodeURIComponent(parts[parts.length - 1] || "").toLowerCase();
+  } catch {
+    const parts = clean.split("/");
+    return decodeURIComponent(parts[parts.length - 1] || "").toLowerCase();
+  }
+}
+
+function pickBestArchiveTrackUrl(
+  candidates: Array<{ title?: string; name?: string; url?: string }>,
+  preferredTitle: string,
+  failingUrl: string,
+): string {
+  const titleToken = normalizeSearchText(preferredTitle);
+  const failingName = getFileNameFromUrl(failingUrl).replace(/\.[a-z0-9]+$/i, "");
+  let bestUrl = "";
+  let bestScore = Number.NEGATIVE_INFINITY;
+  for (const c of candidates) {
+    const url = String(c?.url || "").trim();
+    if (!url || !isLikelyBrowserPlayableUrl(url)) continue;
+    const hay = normalizeSearchText(`${c?.title || ""} ${c?.name || ""}`);
+    let score = 0;
+    if (titleToken && hay.includes(titleToken)) score += 10;
+    if (titleToken) {
+      const parts = titleToken.split(" ").filter((p) => p.length >= 3);
+      score += parts.reduce((sum, part) => (hay.includes(part) ? sum + 1 : sum), 0);
+    }
+    if (failingName && normalizeSearchText(c?.name || "").includes(normalizeSearchText(failingName))) {
+      score += 4;
+    }
+    if (url.toLowerCase().endsWith(".mp3")) score += 2;
+    if (score > bestScore) {
+      bestScore = score;
+      bestUrl = url;
+    }
+  }
+  return bestUrl;
 }
 
 export function PlayerBar() {
@@ -43,11 +115,28 @@ export function PlayerBar() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const preloadAudioRef = useRef<HTMLAudioElement | null>(null);
   const fallbackTriedRef = useRef<Set<string>>(new Set());
+  const failedSourceRef = useRef<Set<string>>(new Set());
+  const archiveResolvedRef = useRef<Map<string, string>>(new Map());
+  const archiveLookupInFlightRef = useRef<Set<string>>(new Set());
+  const loadedSrcRef = useRef("");
+  const srcRef = useRef("");
+  const playingRef = useRef(false);
+  const currentTrackRef = useRef<{
+    title: string;
+    url: string;
+    backupUrls?: string[];
+    track?: string;
+    showKey?: string;
+    showDate?: string;
+    venueText?: string;
+    artwork?: string;
+  } | null>(null);
 
   const playerState = usePlayer() as unknown as {
     queue: Array<{
       title: string;
       url: string;
+      backupUrls?: string[];
       track?: string;
       showKey?: string;
       showDate?: string;
@@ -56,10 +145,12 @@ export function PlayerBar() {
     }>;
     index: number;
     playing: boolean;
+    loading: boolean;
     setQueue: (
       queue: Array<{
         title: string;
         url: string;
+        backupUrls?: string[];
         track?: string;
         showKey?: string;
         showDate?: string;
@@ -70,6 +161,7 @@ export function PlayerBar() {
     ) => void;
     play?: () => void;
     pause?: () => void;
+    setLoading?: (v: boolean) => void;
     next?: () => void;
     prev?: () => void;
   };
@@ -77,9 +169,11 @@ export function PlayerBar() {
     queue,
     index,
     playing,
+    loading,
     setQueue,
     play,
     pause,
+    setLoading,
     next,
     prev,
   } = playerState;
@@ -115,22 +209,158 @@ export function PlayerBar() {
     setMinimized(false);
   }
 
-  function toMp3FallbackUrl(url: string): string {
+  function toAlternateArchiveAudioUrl(url: string): string {
     const clean = String(url || "");
     if (!clean) return "";
-    // Common demo/source URLs are FLAC; try same path with MP3 as a pragmatic fallback.
-    return clean.replace(/\.flac(\?.*)?$/i, ".mp3$1");
+    if (/\.flac(\?.*)?$/i.test(clean)) {
+      return clean.replace(/\.flac(\?.*)?$/i, ".mp3$1");
+    }
+    if (/\.mp3(\?.*)?$/i.test(clean)) {
+      return clean.replace(/\.mp3(\?.*)?$/i, ".flac$1");
+    }
+    return "";
+  }
+
+  function tryFormatFallback(audio: HTMLAudioElement | null, currentSrc: string): boolean {
+    if (!audio || !currentSrc) return false;
+    const alternate = toAlternateArchiveAudioUrl(currentSrc);
+    const canFallback =
+      alternate &&
+      alternate !== currentSrc &&
+      !fallbackTriedRef.current.has(currentSrc);
+    if (!canFallback) return false;
+    fallbackTriedRef.current.add(currentSrc);
+    audio.src = alternate;
+    audio.load();
+    if (playing) {
+      audio.play().catch((err) => console.error("Format fallback play() failed:", err));
+    }
+    return true;
+  }
+
+  function tryBackupTrackSource(audio: HTMLAudioElement | null, currentSrc: string): boolean {
+    if (!audio) return false;
+    const backups = Array.isArray(currentTrack?.backupUrls) ? currentTrack.backupUrls : [];
+    if (backups.length === 0) return false;
+    failedSourceRef.current.add(currentSrc);
+    const nextUrl = backups.find((u) => {
+      const clean = String(u || "").trim();
+      return Boolean(clean) && clean !== currentSrc && !failedSourceRef.current.has(clean);
+    });
+    if (!nextUrl) return false;
+    audio.src = nextUrl;
+    audio.load();
+    if (playing) {
+      audio.play().catch((err) => console.error("Backup source play() failed:", err));
+    }
+    return true;
+  }
+
+  function getFailingSrc(audio: HTMLAudioElement | null, fallback: string): string {
+    const current = String(audio?.currentSrc || audio?.src || "").trim();
+    return current || fallback;
+  }
+
+  function tryArchiveItemFallback(audio: HTMLAudioElement | null, failingSrc: string): boolean {
+    const activeTrack = currentTrackRef.current;
+    const identifier = getArchiveIdentifier(failingSrc || activeTrack?.url);
+    if (!audio || !identifier || !activeTrack) return false;
+    const cacheKey = `${identifier}|${normalizeSearchText(activeTrack.title)}`;
+    const cached = archiveResolvedRef.current.get(cacheKey);
+    if (cached && cached !== failingSrc && !failedSourceRef.current.has(cached)) {
+      audio.src = cached;
+      audio.load();
+      if (playingRef.current) {
+        audio.play().catch((err) => console.error("Cached archive fallback play() failed:", err));
+      }
+      return true;
+    }
+    if (archiveLookupInFlightRef.current.has(cacheKey)) return false;
+    archiveLookupInFlightRef.current.add(cacheKey);
+    void (async () => {
+      let resolved = false;
+      try {
+        const res = await fetch(`/api/ia/item?id=${encodeURIComponent(identifier)}`, {
+          cache: "no-store",
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          tracks?: Array<{ title?: string; name?: string; url?: string }>;
+        };
+        const tracks = Array.isArray(data?.tracks) ? data.tracks : [];
+        const bestUrl = pickBestArchiveTrackUrl(tracks, activeTrack.title, failingSrc);
+        if (!bestUrl || bestUrl === failingSrc || failedSourceRef.current.has(bestUrl)) return;
+        archiveResolvedRef.current.set(cacheKey, bestUrl);
+        const liveAudio = audioRef.current;
+        if (!liveAudio) return;
+        if (getArchiveIdentifier(srcRef.current) !== identifier) return;
+        liveAudio.src = bestUrl;
+        liveAudio.load();
+        resolved = true;
+        if (playingRef.current) {
+          liveAudio.play().catch((err) => console.error("Archive fallback play() failed:", err));
+        }
+      } catch {
+        // Ignore metadata lookup failures.
+      } finally {
+        archiveLookupInFlightRef.current.delete(cacheKey);
+        if (!resolved && getArchiveIdentifier(srcRef.current) === identifier && playingRef.current) {
+          // Keep playback moving if this source cannot be recovered.
+          next?.();
+        }
+      }
+    })();
+    return true;
   }
 
   const [current, setCurrent] = useState(0);
   const [duration, setDuration] = useState(0);
   const [minimized, setMinimized] = useState(false);
+  const [isBuffering, setIsBuffering] = useState(false);
+  const [bufferProgress, setBufferProgress] = useState(0);
   const progress = useMemo(() => {
     if (!Number.isFinite(duration) || duration <= 0) return 0;
     const ratio = current / duration;
     if (!Number.isFinite(ratio)) return 0;
     return Math.max(0, Math.min(1, ratio));
   }, [current, duration]);
+  useEffect(() => {
+    srcRef.current = src;
+  }, [src]);
+  useEffect(() => {
+    playingRef.current = playing;
+  }, [playing]);
+  useEffect(() => {
+    currentTrackRef.current = currentTrack;
+  }, [currentTrack]);
+  useEffect(() => {
+    setLoading?.(Boolean(playing && src && isBuffering));
+  }, [isBuffering, playing, setLoading, src]);
+  useEffect(() => {
+    if (!isBuffering) {
+      setBufferProgress(0);
+      return;
+    }
+    setBufferProgress((prev) => (prev > 6 ? prev : 6));
+    const timer = setInterval(() => {
+      setBufferProgress((prev) => {
+        if (prev >= 92) return 92;
+        return Math.min(92, prev + 4);
+      });
+    }, 220);
+    return () => clearInterval(timer);
+  }, [isBuffering]);
+  useEffect(() => {
+    if (!isBuffering || !playing || !src) return;
+    // Guardrail: if buffering never resolves, move on instead of freezing UI/audio.
+    const timeout = setTimeout(() => {
+      if (!playingRef.current) return;
+      if (srcRef.current !== src) return;
+      setIsBuffering(false);
+      next?.();
+    }, 12000);
+    return () => clearTimeout(timeout);
+  }, [isBuffering, playing, src, next]);
 
   // Keep audio element in sync when source changes.
   // Important: do not depend on `playing` here, or pause/play toggles
@@ -140,24 +370,36 @@ export function PlayerBar() {
     if (!audio) return;
 
     if (!src) {
+      loadedSrcRef.current = "";
       audio.removeAttribute("src");
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setCurrent(0);
       setDuration(0);
+      setIsBuffering(false);
       return;
     }
+    if (loadedSrcRef.current === src) return;
+    loadedSrcRef.current = src;
 
     audio.src = src;
     audio.load();
     setCurrent(0);
     fallbackTriedRef.current.delete(src);
+    failedSourceRef.current.clear();
 
     if (playing) {
+      setIsBuffering(true);
       audio.play().catch((err) => {
+        const failingSrc = getFailingSrc(audio, src);
+        if (tryFormatFallback(audio, failingSrc)) return;
+        if (tryBackupTrackSource(audio, failingSrc)) return;
+        if (tryArchiveItemFallback(audio, failingSrc)) return;
+        setIsBuffering(false);
         console.error("play() blocked/failed:", err);
+        next?.();
       });
     }
-  }, [src]);
+  }, [src, currentTrack, playing, next]);
 
   // Warm the next track in a hidden audio element to reduce gap between songs.
   useEffect(() => {
@@ -181,11 +423,21 @@ export function PlayerBar() {
     if (!src) return;
 
     if (playing) {
-      audio.play().catch((err) => console.error("play() blocked/failed:", err));
+      setIsBuffering(true);
+      audio.play().catch((err) => {
+        const failingSrc = getFailingSrc(audio, src);
+        if (tryFormatFallback(audio, failingSrc)) return;
+        if (tryBackupTrackSource(audio, failingSrc)) return;
+        if (tryArchiveItemFallback(audio, failingSrc)) return;
+        setIsBuffering(false);
+        console.error("play() blocked/failed:", err);
+        next?.();
+      });
     } else {
+      setIsBuffering(false);
       audio.pause();
     }
-  }, [playing, src]);
+  }, [playing, src, next, currentTrack]);
 
   function onScrub(e: React.ChangeEvent<HTMLInputElement>) {
     const audio = audioRef.current;
@@ -222,30 +474,39 @@ export function PlayerBar() {
       <audio
         ref={audioRef}
         preload="auto"
-        onTimeUpdate={(e) => setCurrent((e.target as HTMLAudioElement).currentTime)}
+        onTimeUpdate={(e) => {
+          const t = (e.target as HTMLAudioElement).currentTime;
+          setCurrent(t);
+          if (t > 0) setIsBuffering(false);
+        }}
         onLoadedMetadata={(e) => setDuration((e.target as HTMLAudioElement).duration || 0)}
         onEnded={() => next?.()}
+        onLoadStart={() => {
+          if (playingRef.current) setIsBuffering(true);
+        }}
+        onWaiting={() => {
+          if (playingRef.current) setIsBuffering(true);
+        }}
+        onStalled={() => {
+          if (playingRef.current) setIsBuffering(true);
+        }}
+        onCanPlay={() => {
+          if (!playingRef.current) return;
+          setIsBuffering(false);
+        }}
+        onPlaying={() => {
+          setIsBuffering(false);
+        }}
         onError={() => {
           const a = audioRef.current;
           if (!a || !src) return;
-
-          const maybeMp3 = toMp3FallbackUrl(src);
-          const canFallback =
-            maybeMp3 &&
-            maybeMp3 !== src &&
-            /\.flac(\?.*)?$/i.test(src) &&
-            !fallbackTriedRef.current.has(src);
-
-          if (canFallback) {
-            fallbackTriedRef.current.add(src);
-            a.src = maybeMp3;
-            a.load();
-            if (playing) {
-              a.play().catch((err) => console.error("MP3 fallback play() failed:", err));
-            }
-            return;
-          }
+          const failingSrc = getFailingSrc(a, src);
+          if (tryFormatFallback(a, failingSrc)) return;
+          if (tryBackupTrackSource(a, failingSrc)) return;
+          if (tryArchiveItemFallback(a, failingSrc)) return;
+          setIsBuffering(false);
           console.error("AUDIO ERROR", a?.error, a?.src);
+          next?.();
         }}
       />
       <audio ref={preloadAudioRef} preload="auto" className="hidden" />
@@ -292,6 +553,20 @@ export function PlayerBar() {
       {audioElements}
       <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-white/10 bg-black/80 backdrop-blur">
         <div className="mx-auto max-w-3xl p-3">
+        {isBuffering && playing && src ? (
+          <div className="mb-2">
+            <div className="mb-1 flex items-center justify-between px-1 text-[11px] text-white/70">
+              <span>Loading audio...</span>
+              <span>{Math.max(5, Math.floor(bufferProgress))}%</span>
+            </div>
+            <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+              <div
+                className="h-full rounded-full bg-linear-to-r from-fuchsia-400 to-orange-400 transition-[width] duration-200"
+                style={{ width: `${Math.max(6, bufferProgress)}%` }}
+              />
+            </div>
+          </div>
+        ) : null}
 
         {/* Full-width scrubber row (mobile friendly) */}
         <div className="mb-2 flex items-center gap-3 px-1">
@@ -371,7 +646,7 @@ export function PlayerBar() {
                 disabled={!hasQueue}
                 title="Play"
               >
-                <FontAwesomeIcon icon={faPlay} />
+                <FontAwesomeIcon icon={faPlay} className={loading ? "animate-pulse" : ""} />
               </button>
             )}
 

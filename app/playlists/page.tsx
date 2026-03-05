@@ -10,8 +10,19 @@ import { usePlaylists } from "@/components/playlists/store";
 const DEFAULT_ARTWORK_SRC = "/api/default-artwork";
 
 function getArchiveIdentifier(url?: string): string {
-  if (!url) return "";
-  const match = String(url).match(/\/download\/([^/]+)\//i);
+  const raw = String(url || "").trim();
+  if (!raw) return "";
+  try {
+    const parsed = new URL(raw);
+    const parts = parsed.pathname.split("/").filter(Boolean);
+    const markerIdx = parts.findIndex((p) => /^(download|details|metadata)$/i.test(p));
+    if (markerIdx >= 0 && parts[markerIdx + 1]) {
+      return decodeURIComponent(parts[markerIdx + 1]);
+    }
+  } catch {
+    // fall back to regex parsing below
+  }
+  const match = raw.match(/\/(?:download|details|metadata)\/([^/?#]+)/i);
   return match?.[1] ? decodeURIComponent(match[1]) : "";
 }
 

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 
 import type { Track } from "@/components/player/store";
@@ -130,8 +130,10 @@ let cached: CachedPayload | null = null;
 let buildInFlight: Promise<CachedPayload> | null = null;
 let staticManifestCache: CachedPayload | null = null;
 let staticManifestLoadAttempted = false;
+let staticManifestMtimeMs = 0;
 let lastBuildAttemptAt = 0;
 const BUILD_RETRY_COOLDOWN_MS = 1000 * 60 * 10;
+const STATIC_MANIFEST_PATH = ["data", "prebuilt-playlists.static.json"] as const;
 
 function mergePayloads(primary: CachedPayload, secondary?: CachedPayload | null): CachedPayload {
   const byName = new Map<string, ApiPrebuiltPlaylist>();
@@ -159,10 +161,16 @@ function hasAllDefaultDefs(payload: CachedPayload): boolean {
 }
 
 async function loadStaticManifest(): Promise<CachedPayload | null> {
-  if (staticManifestLoadAttempted) return staticManifestCache;
-  staticManifestLoadAttempted = true;
   try {
-    const target = join(process.cwd(), "data", "prebuilt-playlists.static.json");
+    const target = join(process.cwd(), ...STATIC_MANIFEST_PATH);
+    const fileStat = await stat(target);
+    const hasFreshCache =
+      staticManifestLoadAttempted &&
+      staticManifestCache &&
+      Number(fileStat.mtimeMs || 0) === staticManifestMtimeMs;
+    if (hasFreshCache) return staticManifestCache;
+    staticManifestLoadAttempted = true;
+    staticManifestMtimeMs = Number(fileStat.mtimeMs || 0);
     const raw = await readFile(target, "utf8");
     const parsed = JSON.parse(raw) as CachedPayload;
     if (!parsed || !Array.isArray(parsed.playlists) || parsed.playlists.length === 0) {
@@ -176,6 +184,7 @@ async function loadStaticManifest(): Promise<CachedPayload | null> {
     return staticManifestCache;
   } catch {
     staticManifestCache = null;
+    staticManifestMtimeMs = 0;
     return null;
   }
 }

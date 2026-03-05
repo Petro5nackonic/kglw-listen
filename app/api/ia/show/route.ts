@@ -6,7 +6,10 @@ const SHOW_DETAIL_CACHE_TTL_MS = 1000 * 60 * 5;
 const SUCCESS_CACHE_HEADERS = {
   "Cache-Control": "public, s-maxage=120, stale-while-revalidate=300",
 };
-const UPSTREAM_TIMEOUT_MS = 7000;
+const UPSTREAM_TIMEOUTS_MS = [7000, 10000, 14000];
+const DEGRADED_CACHE_HEADERS = {
+  "Cache-Control": "public, s-maxage=20, stale-while-revalidate=40",
+};
 
 type IaDoc = {
   identifier: string;
@@ -113,19 +116,31 @@ export async function GET(req: NextRequest) {
     fields.map((f) => `&fl[]=${encodeURIComponent(f)}`).join("") +
     `&rows=500&page=1&output=json`;
 
-  let timeout: ReturnType<typeof setTimeout> | null = null;
-  let res: Response;
-  try {
-    const controller = new AbortController();
-    timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
-    res = await fetch(url, { cache: "no-store", signal: controller.signal });
-  } catch {
-    return Response.json({ error: "Archive request timed out" }, { status: 504 });
-  } finally {
-    if (timeout) clearTimeout(timeout);
+  let res: Response | null = null;
+  for (const timeoutMs of UPSTREAM_TIMEOUTS_MS) {
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    try {
+      const controller = new AbortController();
+      timeout = setTimeout(() => controller.abort(), timeoutMs);
+      const candidate = await fetch(url, { cache: "no-store", signal: controller.signal });
+      if (!candidate.ok) continue;
+      res = candidate;
+      break;
+    } catch {
+      // Retry with a longer timeout.
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
   }
-  if (!res.ok) {
-    return Response.json({ error: "Archive request failed" }, { status: 502 });
+
+  if (!res) {
+    const degradedPayload = {
+      key,
+      showDate,
+      defaultId: null,
+      sources: [],
+    };
+    return Response.json(degradedPayload, { headers: DEGRADED_CACHE_HEADERS });
   }
 
   const data = (await res.json()) as { response?: { docs?: IaDoc[] } };

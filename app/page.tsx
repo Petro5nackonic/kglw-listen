@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faCirclePlay,
+  faSpinner,
   faBookmark,
   faChevronLeft,
   faChevronRight,
@@ -148,8 +149,19 @@ function nextDefaultPlaylistName(existingNames: string[]): string {
 }
 
 function getArchiveIdentifier(url?: string): string {
-  if (!url) return "";
-  const match = String(url).match(/\/download\/([^/]+)\//i);
+  const raw = String(url || "").trim();
+  if (!raw) return "";
+  try {
+    const parsed = new URL(raw);
+    const parts = parsed.pathname.split("/").filter(Boolean);
+    const markerIdx = parts.findIndex((p) => /^(download|details|metadata)$/i.test(p));
+    if (markerIdx >= 0 && parts[markerIdx + 1]) {
+      return decodeURIComponent(parts[markerIdx + 1]);
+    }
+  } catch {
+    // fall back to regex parsing below
+  }
+  const match = raw.match(/\/(?:download|details|metadata)\/([^/?#]+)/i);
   return match?.[1] ? decodeURIComponent(match[1]) : "";
 }
 
@@ -622,6 +634,7 @@ function MultiSelectDropdown(props: {
 export default function HomePage() {
   const router = useRouter();
   const setQueue = usePlayer((s) => s.setQueue);
+  const playerLoading = usePlayer((s) => s.loading);
   const playlists = usePlaylists((s) => s.playlists);
   const syncPrebuiltPlaylistsFromServer = usePlaylists((s) => s.syncPrebuiltPlaylistsFromServer);
   const addTrackToPlaylist = usePlaylists((s) => s.addTrack);
@@ -676,6 +689,8 @@ export default function HomePage() {
   >({});
   const [songNewPlaylistName, setSongNewPlaylistName] = useState("");
   const [homePlaylistMenuId, setHomePlaylistMenuId] = useState<string | null>(null);
+  const [requestedPlaylistId, setRequestedPlaylistId] = useState<string | null>(null);
+  const [clientHydrated, setClientHydrated] = useState(false);
   const [playlistRenameTarget, setPlaylistRenameTarget] = useState<{
     id: string;
     name: string;
@@ -803,6 +818,13 @@ export default function HomePage() {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    setClientHydrated(true);
+  }, []);
+  useEffect(() => {
+    if (!playerLoading) setRequestedPlaylistId(null);
+  }, [playerLoading]);
 
   useEffect(() => {
     if (didHydrateInitialShowsRef.current) {
@@ -1594,9 +1616,18 @@ export default function HomePage() {
             .map((v) => v.track)
             .filter((t): t is Track => Boolean(String(t?.url || "").trim()));
           if (playable.length === 0) return null;
-          if (!isPrebuilt) return playable[0];
-          const randomIndex = Math.floor(Math.random() * playable.length);
-          return playable[randomIndex] || playable[0];
+          const primaryIndex =
+            isPrebuilt && playable.length > 1
+              ? Math.floor(Math.random() * playable.length)
+              : 0;
+          const primary = playable[primaryIndex];
+          const backupUrls = playable
+            .filter((_, idx) => idx !== primaryIndex)
+            .map((t) => String(t.url || "").trim())
+            .filter(Boolean);
+          return backupUrls.length > 0
+            ? { ...primary, backupUrls: Array.from(new Set(backupUrls)) }
+            : primary;
         })
         .filter((track): track is Track => Boolean(track?.url));
 
@@ -1682,9 +1713,6 @@ export default function HomePage() {
                           homePlaylistMenuId === p.id ? "z-[90]" : "z-0"
                         }`}
                       >
-                        <div className="mb-2 inline-flex rounded-full border border-[#8f68dd]/60 bg-[#5A22C9]/20 px-2 py-1 text-[10px] tracking-[0.16em] text-[#d8c3ff] uppercase">
-                          Pre-built live comp
-                        </div>
                         <div className="flex items-center justify-between">
                           <div className="flex min-w-0 flex-1 items-center gap-3">
                             <div className="grid w-20 shrink-0 grid-cols-2 gap-1.5">
@@ -1703,7 +1731,10 @@ export default function HomePage() {
                                 />
                               ))}
                             </div>
-                            <Link href={`/playlists/${p.id}`} className="min-w-0 flex-1">
+                            <Link
+                              href={clientHydrated ? `/playlists/${p.id}` : "/playlists"}
+                              className="min-w-0 flex-1"
+                            >
                               <div className="truncate text-[18px] font-medium text-white [font-family:var(--font-roboto-condensed)]">
                                 {p.name}
                               </div>
@@ -1733,9 +1764,21 @@ export default function HomePage() {
                               type="button"
                               aria-label={`Play playlist ${p.name}`}
                               className="text-[26px] text-white"
-                              onClick={() => playPlaylistFromHome(p.id)}
+                              onClick={async () => {
+                                setRequestedPlaylistId(p.id);
+                                try {
+                                  await playPlaylistFromHome(p.id);
+                                } finally {
+                                  if (!usePlayer.getState().loading) {
+                                    setRequestedPlaylistId((prev) => (prev === p.id ? null : prev));
+                                  }
+                                }
+                              }}
                             >
-                              <FontAwesomeIcon icon={faCirclePlay} />
+                              <FontAwesomeIcon
+                                icon={requestedPlaylistId === p.id ? faSpinner : faCirclePlay}
+                                className={requestedPlaylistId === p.id ? "animate-spin" : ""}
+                              />
                             </button>
                           </div>
                         </div>
@@ -1832,11 +1875,6 @@ export default function HomePage() {
                         homePlaylistMenuId === p.id ? "z-[90]" : "z-0"
                       }`}
                     >
-                      {isPrebuilt ? (
-                        <div className="mb-2 inline-flex rounded-full border border-[#8f68dd]/60 bg-[#5A22C9]/20 px-2 py-1 text-[10px] tracking-[0.16em] text-[#d8c3ff] uppercase">
-                          Pre-built live comp
-                        </div>
-                      ) : null}
                       <div className="flex items-center justify-between">
                         <div className="flex min-w-0 flex-1 items-center gap-3">
                           {isPrebuilt ? (
@@ -1857,7 +1895,10 @@ export default function HomePage() {
                               ))}
                             </div>
                           ) : null}
-                          <Link href={`/playlists/${p.id}`} className="min-w-0 flex-1">
+                          <Link
+                            href={clientHydrated ? `/playlists/${p.id}` : "/playlists"}
+                            className="min-w-0 flex-1"
+                          >
                             <div className="truncate text-[18px] font-medium text-white [font-family:var(--font-roboto-condensed)]">
                               {p.name}
                             </div>
@@ -1887,9 +1928,21 @@ export default function HomePage() {
                             type="button"
                             aria-label={`Play playlist ${p.name}`}
                             className="text-[26px] text-white"
-                            onClick={() => playPlaylistFromHome(p.id)}
+                            onClick={async () => {
+                              setRequestedPlaylistId(p.id);
+                              try {
+                                await playPlaylistFromHome(p.id);
+                              } finally {
+                                if (!usePlayer.getState().loading) {
+                                  setRequestedPlaylistId((prev) => (prev === p.id ? null : prev));
+                                }
+                              }
+                            }}
                           >
-                            <FontAwesomeIcon icon={faCirclePlay} />
+                            <FontAwesomeIcon
+                              icon={requestedPlaylistId === p.id ? faSpinner : faCirclePlay}
+                              className={requestedPlaylistId === p.id ? "animate-spin" : ""}
+                            />
                           </button>
                           <button
                             type="button"
