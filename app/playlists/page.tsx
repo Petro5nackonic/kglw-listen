@@ -11,6 +11,7 @@ import {
   faEllipsisVertical,
   faPaperPlane,
   faPen,
+  faPlus,
   faSpinner,
   faTrash,
 } from "@fortawesome/pro-solid-svg-icons";
@@ -204,6 +205,14 @@ export default function PlaylistsPage() {
     );
   }
 
+  function createAndOpenPlaylist() {
+    const suggested = nextDefaultPlaylistName(playlists.map((pl) => pl.name));
+    const id = createPlaylist(suggested);
+    router.push(
+      `/playlists/${encodeURIComponent(id)}?rename=1&suggested=${encodeURIComponent(suggested)}`,
+    );
+  }
+
   return (
     <main className="min-h-screen bg-[#080017] text-white">
       <div className="mx-auto w-full max-w-md px-6 pb-8 pt-6">
@@ -251,6 +260,14 @@ export default function PlaylistsPage() {
                 </div>
               )}
             </div>
+            <button
+              type="button"
+              aria-label="Create playlist"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white text-[14px] text-white"
+              onClick={createAndOpenPlaylist}
+            >
+              <FontAwesomeIcon icon={faPlus} />
+            </button>
             <div className="relative z-20">
               <button
                 type="button"
@@ -292,13 +309,7 @@ export default function PlaylistsPage() {
             <button
               type="button"
               className="mx-auto inline-flex w-fit items-center justify-center rounded-[16px] border-2 border-[#5a22c9] bg-[#5a22c9] px-6 py-3 text-white transition hover:bg-[#6a33d9]"
-              onClick={() => {
-                const suggested = nextDefaultPlaylistName(playlists.map((pl) => pl.name));
-                const id = createPlaylist(suggested);
-                router.push(
-                  `/playlists/${encodeURIComponent(id)}?rename=1&suggested=${encodeURIComponent(suggested)}`,
-                );
-              }}
+              onClick={createAndOpenPlaylist}
             >
               <div className="text-[18px] font-medium text-white [font-family:var(--font-roboto-condensed)]">
                 Create a playlist

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useParams, usePathname, useSearchParams } from "next/navigation";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faMapPin } from "@fortawesome/pro-solid-svg-icons";
 import { usePlayer } from "@/components/player/store";
@@ -253,7 +253,7 @@ function cleanTrackTitleForShowContext(
 
 function SetlistLoadingPlaceholder() {
   return (
-    <div className="mx-auto -mt-[112px] w-full max-w-[393px] px-6 pb-8">
+    <div className="mx-auto -mt-[220px] w-full max-w-[393px] px-6 pb-8">
       <section className="mb-5">
         <div className="relative z-[2] rounded-2xl border border-white/20 bg-white/5 p-4 backdrop-blur-[6px]">
           <div className="flex items-start justify-between gap-3">
@@ -284,7 +284,6 @@ function SetlistLoadingPlaceholder() {
 }
 
 export default function ShowPage() {
-  const router = useRouter();
   const params = useParams<{ key?: string | string[] }>();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -299,6 +298,13 @@ export default function ShowPage() {
   const playlists = usePlaylists((s) => s.playlists);
   const addTrackToPlaylist = usePlaylists((s) => s.addTrack);
   const createPlaylist = usePlaylists((s) => s.createPlaylist);
+  const userPlaylists = useMemo(
+    () =>
+      playlists.filter(
+        (p) => p.source !== "prebuilt" && p.prebuiltKind !== "album-live-comp",
+      ),
+    [playlists],
+  );
 
   // Primary: params.key (ideal)
   // Fallback: last segment of the URL (/show/<segment>)
@@ -333,14 +339,17 @@ export default function ShowPage() {
     artwork?: string;
   } | null>(null);
   const [showPlaylistPicker, setShowPlaylistPicker] = useState(false);
+  const [showCreatePlaylistDialog, setShowCreatePlaylistDialog] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState("");
   const [favoriteShows, setFavoriteShows] = useState<string[]>([]);
+  const [showAddToast, setShowAddToast] = useState(false);
   const [shareState, setShareState] = useState<"idle" | "copied" | "error">(
     "idle",
   );
   const [playlistActionState, setPlaylistActionState] = useState<
     Record<string, "added" | "exists" | undefined>
   >({});
+  const addToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     try {
@@ -350,6 +359,12 @@ export default function ShowPage() {
     } catch {
       setFavoriteShows([]);
     }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (addToastTimerRef.current) clearTimeout(addToastTimerRef.current);
+    };
   }, []);
 
   useEffect(() => {
@@ -539,9 +554,19 @@ export default function ShowPage() {
   function closeSheet() {
     setSheetTrack(null);
     setShowPlaylistPicker(false);
+    setShowCreatePlaylistDialog(false);
     setNewPlaylistName("");
     setShareState("idle");
     setPlaylistActionState({});
+  }
+
+  function showSongAddedToast() {
+    if (addToastTimerRef.current) clearTimeout(addToastTimerRef.current);
+    setShowAddToast(true);
+    addToastTimerRef.current = setTimeout(() => {
+      setShowAddToast(false);
+      addToastTimerRef.current = null;
+    }, 2000);
   }
 
   function persistFavoriteShows(next: string[]) {
@@ -555,13 +580,13 @@ export default function ShowPage() {
 
   return (
     <main className="min-h-screen bg-[#080017] text-white [font-family:var(--font-roboto)]">
-      <div className="relative h-[250px] w-full overflow-hidden">
+      <div className="relative h-[330px] w-full overflow-hidden">
         {heroImage ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={heroImageSrc}
             alt=""
-            className="h-full w-full object-cover opacity-12"
+            className="h-full w-full object-cover opacity-[0.22] blur-[10px]"
             onError={(e) => {
               const img = e.currentTarget;
               if (img.src.endsWith(DEFAULT_ARTWORK_SRC)) return;
@@ -600,9 +625,22 @@ export default function ShowPage() {
           No sources found for this show.
         </div>
       ) : (
-        <div className="mx-auto -mt-[112px] w-full max-w-[393px] px-6 pb-8">
+        <div className="mx-auto -mt-[220px] w-full max-w-[393px] px-6 pb-8">
           <section className="mb-5">
             <div className="relative z-[2] rounded-2xl border border-white/20 bg-white/5 p-4 backdrop-blur-[6px]">
+              <div className="mb-4 overflow-hidden rounded-xl border border-white/15 bg-black/20">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={selectedId ? heroImageSrc : DEFAULT_ARTWORK_SRC}
+                  alt={`${toDisplayTitle(rawShowTitle)} artwork`}
+                  className="aspect-square w-full object-cover"
+                  onError={(e) => {
+                    const img = e.currentTarget;
+                    if (img.src.endsWith(DEFAULT_ARTWORK_SRC)) return;
+                    img.src = DEFAULT_ARTWORK_SRC;
+                  }}
+                />
+              </div>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="text-[13px] text-white/90">{showDate}</div>
@@ -834,7 +872,7 @@ export default function ShowPage() {
                     className="w-full rounded-xl bg-[rgba(48,26,89,0.25)] px-4 py-4 text-base hover:bg-[rgba(72,36,124,0.35)] transition"
                     onClick={() => setShowPlaylistPicker(true)}
                   >
-                    + Add to playlist(s)
+                    + Add to a playlist
                   </button>
                 </div>
 
@@ -876,22 +914,16 @@ export default function ShowPage() {
                   <button
                     type="button"
                     className="rounded-lg border border-white/15 bg-white/10 px-2.5 py-1 text-xs hover:bg-white/15 transition"
-                    onClick={() => {
-                      const id = createPlaylist(newPlaylistName || "New playlist");
-                      addTrackToPlaylist(id, sheetTrack);
-                      setPlaylistActionState((prev) => ({ ...prev, [id]: "added" }));
-                      closeSheet();
-                      router.push(`/playlists/${id}`);
-                    }}
+                    onClick={() => setShowCreatePlaylistDialog(true)}
                   >
                     New +
                   </button>
                 </div>
 
                 <div className="rounded-xl border border-white/10 bg-black/20 p-2">
-                  {playlists.length > 0 ? (
+                  {userPlaylists.length > 0 ? (
                     <div className="mb-2 max-h-56 space-y-2 overflow-auto">
-                      {playlists.map((p) => {
+                      {userPlaylists.map((p) => {
                         const canonical = toDisplayTrackTitle(
                           sheetTrack.title,
                         ).toLowerCase();
@@ -943,6 +975,8 @@ export default function ShowPage() {
                                       ...prev,
                                       [p.id]: out === "exists" ? "exists" : "added",
                                     }));
+                                    closeSheet();
+                                    showSongAddedToast();
                                   }}
                                 >
                                   {actionState === "added" ? "Added!" : "Add"}
@@ -953,7 +987,7 @@ export default function ShowPage() {
                             {slot && !alreadyExact && (
                               <div className="mt-1 text-[11px] text-white/50">
                                 {toDisplayTrackTitle(sheetTrack.title)} is already on
-                                this playlist. Add will merge versions.
+                                this playlist. Add will fuse versions.
                               </div>
                             )}
                           </div>
@@ -962,7 +996,7 @@ export default function ShowPage() {
                     </div>
                   ) : (
                     <div className="px-2 py-1 text-xs text-white/60">
-                      No playlists yet. Create one:
+                      No user playlists yet. Create one:
                     </div>
                   )}
                 </div>
@@ -976,6 +1010,65 @@ export default function ShowPage() {
                 </button>
               </>
             )}
+
+            {showCreatePlaylistDialog && (
+              <div
+                className="fixed inset-0 z-[60] flex items-center justify-center bg-black/55 px-6"
+                onClick={() => setShowCreatePlaylistDialog(false)}
+              >
+                <div
+                  className="w-full max-w-[361px] rounded-xl border border-white/15 bg-[#120326] p-4"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="text-base font-medium">Create new playlist</div>
+                  <div className="mt-1 text-xs text-white/65">
+                    Name your playlist and add this song.
+                  </div>
+
+                  <input
+                    type="text"
+                    value={newPlaylistName}
+                    onChange={(e) => setNewPlaylistName(e.target.value)}
+                    placeholder="New playlist"
+                    maxLength={60}
+                    autoFocus
+                    className="mt-3 w-full rounded-lg border border-white/20 bg-black/25 px-3 py-2 text-sm text-white placeholder:text-white/40 outline-none focus:border-white/45"
+                  />
+
+                  <div className="mt-4 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      className="rounded-lg border border-white/15 bg-white/8 px-3 py-2 text-sm hover:bg-white/12 transition"
+                      onClick={() => setShowCreatePlaylistDialog(false)}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-lg border border-fuchsia-300/45 bg-fuchsia-500/20 px-3 py-2 text-sm hover:bg-fuchsia-500/30 transition"
+                      onClick={() => {
+                        if (!sheetTrack) return;
+                        const id = createPlaylist(newPlaylistName.trim() || "New playlist");
+                        addTrackToPlaylist(id, sheetTrack);
+                        closeSheet();
+                        showSongAddedToast();
+                      }}
+                    >
+                      Create
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {showAddToast && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-12 z-[70] flex justify-center px-6">
+          <div className="inline-flex max-w-full items-center gap-2 rounded-full border border-emerald-300/35 bg-black/45 px-4 py-2 text-sm text-emerald-100 shadow-[0_6px_20px_rgba(0,0,0,0.35)] backdrop-blur-md">
+            <span aria-hidden="true">✓</span>
+            <span className="truncate">song added to playlist</span>
           </div>
         </div>
       )}
