@@ -221,45 +221,47 @@ export default function PlaylistsPage() {
             Playlists
           </h1>
           <div className="flex items-center gap-2">
-            <div className="relative z-20">
-              <button
-                id="playlist-sort"
-                type="button"
-                aria-label="Sort playlists"
-                aria-haspopup="menu"
-                aria-expanded={sortMenuOpen}
-                className="inline-flex items-center gap-2 rounded-full border border-white px-3 py-2 text-[12px] text-white"
-                onClick={() => {
-                  setSortMenuOpen((v) => !v);
-                  setPageMenuOpen(false);
-                }}
-              >
-                <span>{sortLabel}</span>
-                <FontAwesomeIcon icon={faChevronDown} />
-              </button>
-              {sortMenuOpen && (
-                <div className="absolute right-0 top-9 z-30 w-44 rounded-[12px] border border-white/15 bg-[#16052c] p-1.5 shadow-[0_8px_18px_rgba(0,0,0,0.45)]">
-                  {PLAYLIST_SORT_OPTIONS.map((opt) => {
-                    const active = sortBy === opt.value;
-                    return (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        className={`flex w-full items-center rounded-[10px] px-2.5 py-2 text-left text-[14px] [font-family:var(--font-roboto-condensed)] ${
-                          active ? "bg-white/15 text-white" : "text-white/90 hover:bg-white/10"
-                        }`}
-                        onClick={() => {
-                          setSortBy(opt.value);
-                          setSortMenuOpen(false);
-                        }}
-                      >
-                        {opt.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+            {userPlaylists.length > 0 ? (
+              <div className="relative z-20">
+                <button
+                  id="playlist-sort"
+                  type="button"
+                  aria-label="Sort playlists"
+                  aria-haspopup="menu"
+                  aria-expanded={sortMenuOpen}
+                  className="inline-flex items-center gap-2 rounded-full border border-white px-3 py-2 text-[12px] text-white"
+                  onClick={() => {
+                    setSortMenuOpen((v) => !v);
+                    setPageMenuOpen(false);
+                  }}
+                >
+                  <span>{sortLabel}</span>
+                  <FontAwesomeIcon icon={faChevronDown} />
+                </button>
+                {sortMenuOpen && (
+                  <div className="absolute right-0 top-9 z-30 w-44 rounded-[12px] border border-white/15 bg-[#16052c] p-1.5 shadow-[0_8px_18px_rgba(0,0,0,0.45)]">
+                    {PLAYLIST_SORT_OPTIONS.map((opt) => {
+                      const active = sortBy === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          className={`flex w-full items-center rounded-[10px] px-2.5 py-2 text-left text-[14px] [font-family:var(--font-roboto-condensed)] ${
+                            active ? "bg-white/15 text-white" : "text-white/90 hover:bg-white/10"
+                          }`}
+                          onClick={() => {
+                            setSortBy(opt.value);
+                            setSortMenuOpen(false);
+                          }}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            ) : null}
             <button
               type="button"
               aria-label="Create playlist"

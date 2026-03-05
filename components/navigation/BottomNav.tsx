@@ -40,7 +40,7 @@ export function BottomNav() {
                   : "hover:bg-white/10"
               }`}
             >
-              <FontAwesomeIcon icon={item.icon} className="text-[12px]" />
+              <FontAwesomeIcon icon={item.icon} className="text-[16px]" />
             </Link>
           ))}
         </div>
