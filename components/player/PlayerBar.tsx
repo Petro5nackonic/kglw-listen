@@ -551,78 +551,89 @@ export function PlayerBar() {
   return (
     <>
       {audioElements}
-      <div className="fixed right-0 bottom-[52px] left-0 z-30 border-t border-white/10 bg-black/80 backdrop-blur">
-        <div className="mx-auto max-w-3xl p-3">
-        {isBuffering && playing && src ? (
-          <div className="mb-2">
-            <div className="mb-1 flex items-center justify-between px-1 text-[11px] text-white/70">
-              <span>Loading audio...</span>
-              <span>{Math.max(5, Math.floor(bufferProgress))}%</span>
+      <div className="fixed right-0 bottom-[52px] left-0 z-30 bg-black/65 backdrop-blur">
+        <div className="mx-auto w-full max-w-[1140px] px-4 pb-4 pt-3 [font-family:var(--font-roboto-condensed)] md:px-6">
+          {isBuffering && playing && src ? (
+            <div className="mb-2">
+              <div className="mb-1 flex items-center justify-between px-1 text-[11px] text-white/70">
+                <span>Loading audio...</span>
+                <span>{Math.max(5, Math.floor(bufferProgress))}%</span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+                <div
+                  className="h-full rounded-full bg-linear-to-r from-fuchsia-400 to-orange-400 transition-[width] duration-200"
+                  style={{ width: `${Math.max(6, bufferProgress)}%` }}
+                />
+              </div>
             </div>
-            <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
-              <div
-                className="h-full rounded-full bg-linear-to-r from-fuchsia-400 to-orange-400 transition-[width] duration-200"
-                style={{ width: `${Math.max(6, bufferProgress)}%` }}
-              />
-            </div>
-          </div>
-        ) : null}
-
-        {/* Full-width scrubber row (mobile friendly) */}
-        <div className="mb-2 flex items-center gap-3 px-1">
-          <div className="w-12 text-xs text-white/60 tabular-nums">{fmt(current)}</div>
-
-          <input
-            type="range"
-            min={0}
-            max={duration || 0}
-            step={0.1}
-            value={Math.min(current, duration || 0)}
-            onChange={onScrub}
-            disabled={!hasQueue || !duration}
-            className="w-full accent-fuchsia-400 disabled:opacity-40"
-          />
-
-          <div className="w-12 text-right text-xs text-white/60 tabular-nums">
-            {fmt(duration)}
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex min-w-0 flex-1 items-center gap-3">
-          {artworkSrc ? (
-            <button
-              type="button"
-              onClick={openCurrentShow}
-              className="h-12 w-12 shrink-0 overflow-hidden rounded-md border border-white/15 disabled:cursor-default"
-              disabled={!currentTrack?.showKey}
-              title={currentTrack?.showKey ? "Open current show" : "Show unavailable"}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={artworkSrc} alt="" className="h-full w-full object-cover" />
-            </button>
           ) : null}
 
-          {/* Track title + show line */}
-          <div className="min-w-0 flex-1">
+          <div className="mb-3 flex items-center justify-between">
+            <div className="flex min-w-0 items-center gap-2">
+              <button
+                type="button"
+                onClick={openCurrentShow}
+                className="h-[42px] w-[42px] shrink-0 overflow-hidden rounded-[8px] bg-[#d9d9d9] disabled:cursor-default"
+                disabled={!currentTrack?.showKey}
+                title={currentTrack?.showKey ? "Open current show" : "Show unavailable"}
+              >
+                {artworkSrc ? (
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={artworkSrc} alt="" className="h-full w-full object-cover" />
+                  </>
+                ) : null}
+              </button>
+              <button
+                type="button"
+                onClick={openCurrentShow}
+                disabled={!currentTrack?.showKey}
+                className="min-w-0 text-left disabled:cursor-default"
+                title={currentTrack?.showKey ? "Open current show" : "Show unavailable"}
+              >
+                <div className="truncate text-[14px] text-white">{title}</div>
+              </button>
+            </div>
             <button
               type="button"
-              onClick={openCurrentShow}
-              disabled={!currentTrack?.showKey}
-              className="block w-full min-w-0 text-left disabled:cursor-default"
-              title={currentTrack?.showKey ? "Open current show" : "Show unavailable"}
+              className="text-[22px] text-white/95 hover:text-white disabled:opacity-40"
+              onClick={() => setMinimized(true)}
+              disabled={!hasQueue}
+              title="Hide player"
             >
-              <div className="truncate text-sm font-medium">{title}</div>
-              {subtitle ? (
-                <div className="mt-0.5 truncate text-xs text-white/60">{subtitle}</div>
-              ) : null}
+              <FontAwesomeIcon icon={faEyeSlash} />
             </button>
           </div>
+
+          <div className="mb-3 flex items-center gap-3">
+            <div className="w-9 text-[12px] text-white tabular-nums">{fmt(current)}</div>
+            <div className="relative h-4 flex-1">
+              <div className="absolute top-1/2 left-0 h-[4px] w-full -translate-y-1/2 rounded-[8px] bg-white/15" />
+              <div
+                className="absolute top-1/2 left-0 h-[4px] -translate-y-1/2 rounded-[8px] bg-fuchsia-400"
+                style={{ width: `${progress * 100}%` }}
+              />
+              <div
+                className="pointer-events-none absolute top-1/2 z-10 h-[8px] w-[8px] -translate-y-1/2 rounded-full border border-fuchsia-300 bg-fuchsia-200 shadow-[0_0_0_1px_rgba(0,0,0,0.2)]"
+                style={{ left: `calc(${progress * 100}% - 4px)` }}
+              />
+              <input
+                type="range"
+                min={0}
+                max={duration || 0}
+                step={0.1}
+                value={Math.min(current, duration || 0)}
+                onChange={onScrub}
+                disabled={!hasQueue || !duration}
+                className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
+              />
+            </div>
+            <div className="w-9 text-right text-[12px] text-white tabular-nums">{fmt(duration)}</div>
           </div>
 
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex items-center justify-center gap-12 text-[25px] text-white">
             <button
-              className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm hover:bg-white/10 disabled:opacity-40"
+              className="leading-none disabled:opacity-40"
               onClick={onPrevPress}
               disabled={!hasQueue}
               title="Previous"
@@ -632,7 +643,7 @@ export function PlayerBar() {
 
             {playing ? (
               <button
-                className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm hover:bg-white/10 disabled:opacity-40"
+                className="leading-none disabled:opacity-40"
                 onClick={() => pause?.()}
                 disabled={!hasQueue}
                 title="Pause"
@@ -641,7 +652,7 @@ export function PlayerBar() {
               </button>
             ) : (
               <button
-                className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm hover:bg-white/10 disabled:opacity-40"
+                className="leading-none disabled:opacity-40"
                 onClick={() => play?.()}
                 disabled={!hasQueue}
                 title="Play"
@@ -651,24 +662,14 @@ export function PlayerBar() {
             )}
 
             <button
-              className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm hover:bg-white/10 disabled:opacity-40"
+              className="leading-none disabled:opacity-40"
               onClick={() => next?.()}
               disabled={!hasQueue}
               title="Next"
             >
               <FontAwesomeIcon icon={faForwardStep} />
             </button>
-
-            <button
-              className="rounded-lg border border-white/10 px-3 py-2 text-sm text-white/80 hover:bg-white/10 hover:text-white disabled:opacity-40"
-              onClick={() => setMinimized(true)}
-              disabled={!hasQueue}
-              title="Hide player"
-            >
-              <FontAwesomeIcon icon={faEyeSlash} />
-            </button>
           </div>
-        </div>
         </div>
       </div>
     </>
