@@ -1894,8 +1894,8 @@ export default function HomePage() {
           {prebuiltPlaylists.length > 0 ? (
             <section>
               <div className="mb-4">
-                <h2 className="text-[24px] leading-none font-semibold [font-family:var(--font-roboto-condensed)]">
-                  KGLW Live Comps.
+                <h2 className="text-[24px] font-semibold [font-family:var(--font-roboto-condensed)]">
+                  KGLW Live Compilations
                 </h2>
               </div>
 
@@ -2194,7 +2194,7 @@ export default function HomePage() {
 
             {advancedFiltersOpen && (
               <div className="mb-4">
-                <div className="flex gap-2">
+                <div className="flex flex-nowrap gap-2 overflow-x-auto pb-1 md:overflow-visible">
                   <MultiSelectDropdown
                     id="years"
                     label=""
@@ -2237,8 +2237,8 @@ export default function HomePage() {
               </div>
             )}
 
-            <div className="mb-3 text-[12px] font-medium text-white">{venueTotal} Shows</div>
-            <div className="mb-3">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="text-[12px] font-medium text-white">{venueTotal} shows</div>
               <button
                 type="button"
                 className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-[12px] transition ${
