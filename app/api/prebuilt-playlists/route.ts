@@ -131,8 +131,6 @@ let buildInFlight: Promise<CachedPayload> | null = null;
 let staticManifestCache: CachedPayload | null = null;
 let staticManifestLoadAttempted = false;
 let staticManifestMtimeMs = 0;
-let lastBuildAttemptAt = 0;
-const BUILD_RETRY_COOLDOWN_MS = 1000 * 60 * 10;
 const STATIC_MANIFEST_PATH = ["data", "prebuilt-playlists.static.json"] as const;
 
 function mergePayloads(primary: CachedPayload, secondary?: CachedPayload | null): CachedPayload {

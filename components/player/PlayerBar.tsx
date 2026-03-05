@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faBackwardStep,
-  faEye,
+  faEyeSlash,
   faForwardStep,
   faPause,
   faPlay,
@@ -520,7 +520,7 @@ export function PlayerBar() {
         <button
           type="button"
           onClick={restorePlayer}
-          className="fixed bottom-4 right-4 z-30 h-14 w-14 overflow-hidden rounded-xl border border-white/20 bg-black/80 shadow-[0_8px_24px_rgba(0,0,0,0.45)] backdrop-blur"
+          className="fixed right-4 bottom-[68px] z-30 h-14 w-14 overflow-hidden rounded-xl border border-white/20 bg-black/80 shadow-[0_8px_24px_rgba(0,0,0,0.45)] backdrop-blur"
           title="Restore player"
         >
           {artworkSrc ? (
@@ -551,7 +551,7 @@ export function PlayerBar() {
   return (
     <>
       {audioElements}
-      <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-white/10 bg-black/80 backdrop-blur">
+      <div className="fixed right-0 bottom-[52px] left-0 z-30 border-t border-white/10 bg-black/80 backdrop-blur">
         <div className="mx-auto max-w-3xl p-3">
         {isBuffering && playing && src ? (
           <div className="mb-2">
@@ -665,7 +665,7 @@ export function PlayerBar() {
               disabled={!hasQueue}
               title="Hide player"
             >
-              <FontAwesomeIcon icon={faEye} />
+              <FontAwesomeIcon icon={faEyeSlash} />
             </button>
           </div>
         </div>

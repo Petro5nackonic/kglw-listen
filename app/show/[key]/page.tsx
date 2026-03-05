@@ -10,6 +10,7 @@ import { usePlaylists } from "@/components/playlists/store";
 import { toDisplayTitle, toDisplayTrackTitle } from "@/utils/displayTitle";
 import { formatDuration } from "@/utils/formatDuration";
 import { shouldUseDefaultArtwork } from "@/utils/archiveArtwork";
+import { logPlayedSong } from "@/utils/activityFeed";
 
 type Source = {
   identifier: string;
@@ -248,6 +249,38 @@ function cleanTrackTitleForShowContext(
   next = next.replace(/\s{2,}/g, " ").trim();
 
   return next || fallback;
+}
+
+function SetlistLoadingPlaceholder() {
+  return (
+    <div className="mx-auto -mt-[112px] w-full max-w-[393px] px-6 pb-8">
+      <section className="mb-5">
+        <div className="relative z-[2] rounded-2xl border border-white/20 bg-white/5 p-4 backdrop-blur-[6px]">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1 space-y-3">
+              <div className="shimmer-animate shimmer-surface h-[21px] w-[72%] rounded-[6px]" />
+              <div className="shimmer-animate shimmer-surface h-[17px] w-[86%] rounded-[6px]" />
+              <div className="shimmer-animate shimmer-surface h-[17px] w-[32%] rounded-[6px]" />
+            </div>
+            <div className="shimmer-animate shimmer-surface mt-0.5 h-4 w-[18px] rounded-[6px]" />
+          </div>
+        </div>
+
+        <div className="-mt-4 rounded-b-2xl border border-white/20 border-t-0 px-4 pb-3 pt-7">
+          <div className="shimmer-animate shimmer-surface h-[17px] w-full rounded-[6px]" />
+        </div>
+      </section>
+
+      <section className="space-y-7">
+        {Array.from({ length: 10 }).map((_, idx) => (
+          <div
+            key={`setlist-loading-row-${idx}`}
+            className="shimmer-animate shimmer-surface h-[25px] w-full rounded-[6px]"
+          />
+        ))}
+      </section>
+    </div>
+  );
 }
 
 export default function ShowPage() {
@@ -553,9 +586,7 @@ export default function ShowPage() {
       </div>
 
       {loading ? (
-        <div className="mx-auto max-w-md px-6 py-8 text-sm text-white/60">
-          Loading show…
-        </div>
+        <SetlistLoadingPlaceholder />
       ) : error ? (
         <div className="mx-auto mt-6 max-w-md rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200 whitespace-pre-wrap">
           {error}
@@ -678,6 +709,11 @@ export default function ShowPage() {
                         })),
                         idx,
                       );
+                      logPlayedSong({
+                        showKey,
+                        showTitle: toDisplayTitle(rawShowTitle),
+                        songTitle: displayTrackTitle(t.title),
+                      });
                       if (isCurrent) setPlaying(!playing);
                     }}
                     className="flex min-w-0 flex-1 items-center justify-between gap-3 px-1 py-1 text-left"
@@ -765,7 +801,7 @@ export default function ShowPage() {
                       }}
                     >
                       <span>{isFavoriteShow ? "★" : "♡"}</span>
-                      <span>{isFavoriteShow ? "Favorited show" : "Favorite show"}</span>
+                      <span>{isFavoriteShow ? "Loved" : "Love"}</span>
                     </button>
 
                     <button

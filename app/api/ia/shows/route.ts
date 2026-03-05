@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 const SHOWS_RESPONSE_CACHE_TTL_MS = 1000 * 60 * 10;
 const UPSTREAM_TIMEOUT_MS = 10000;
+const ALBUM_MATCH_CACHE_TTL_MS = 1000 * 60 * 60 * 12;
 const SUCCESS_CACHE_HEADERS = {
   "Cache-Control": "public, s-maxage=120, stale-while-revalidate=300",
 };
@@ -107,6 +108,105 @@ const KGLW_TAG_CACHE_TTL_MS = 1000 * 60 * 60 * 12;
 let kglwTagCache:
   | { expiresAt: number; byDate: Map<string, KglwTagEntry[]> }
   | null = null;
+const DISCOGRAPHY_ALBUM_TITLES = [
+  "12 Bar Bruise",
+  "Eyes Like The Sky",
+  "Float Along - Fill Your Lungs",
+  "Oddments",
+  "I'm In Your Mind Fuzz",
+  "Quarters!",
+  "Paper Mache Dream Balloon",
+  "Nonagon Infinity",
+  "Flying Microtonal Banana",
+  "Murder of the Universe",
+  "Sketches of Brunswick East",
+  "Polygondwanaland",
+  "Gumboot Soup",
+  "Fishing For Fishies",
+  "Infest the Rats' Nest",
+  "K.G.",
+  "L.W.",
+  "Butterfly 3000",
+  "Made In Timeland",
+  "Omnium Gatherum",
+  "Ice, Death, Planets, Lungs, Mushrooms and Lava",
+  "Laminated Denim",
+  "Changes",
+  "PetroDragonic Apocalypse",
+  "The Silver Chord",
+  "The Silver Chord (Extended Mix)",
+  "Flight B741",
+  "Phantom Island",
+];
+const DISCOGRAPHY_ALBUMS_BY_KEY = new Set(
+  DISCOGRAPHY_ALBUM_TITLES.map((a) => a.trim().toLowerCase()),
+);
+const DISCOGRAPHY_ALBUM_TRACK_FALLBACKS: Record<string, string[]> = {
+  "flight b741": [
+    "Mirage City",
+    "Antarctica",
+    "Raw Feel",
+    "Field of Vision",
+    "Hog Calling Contest",
+    "Le Risque",
+    "Flight b741",
+    "Sad Pilot",
+    "Rats in the Sky",
+    "Daily Blues",
+  ],
+  "i'm in your mind fuzz": [
+    "I'm In Your Mind",
+    "I'm Not In Your Mind",
+    "Cellophane",
+    "I'm In Your Mind Fuzz",
+    "Empty",
+    "Hot Water",
+    "Am I In Heaven ?",
+    "Slow Jam 1",
+    "Satan Speeds Up",
+    "Her And I (Slow Jam 2)",
+  ],
+  "infest the rats' nest": [
+    "Planet B",
+    "Mars for the Rich",
+    "Organ Farmer",
+    "Superbug",
+    "Venusian 1",
+    "Perihelion",
+    "Venusian 2",
+    "Self-Immolate",
+    "Hell",
+  ],
+  "nonagon infinity": [
+    "Robot Stop",
+    "Big Fig Wasp",
+    "Gamma Knife",
+    "People-Vultures",
+    "Mr. Beat",
+    "Evil Death Roll",
+    "Invisible Face",
+    "Wah Wah",
+    "Road Train",
+  ],
+  "petrodragonic apocalypse": [
+    "Motor Spirit",
+    "Supercell",
+    "Converge",
+    "Witchcraft",
+    "Gila Monster",
+    "Dragon",
+    "Flamethrower",
+  ],
+  "the silver chord": [
+    "Theia",
+    "The Silver Cord",
+    "Set",
+    "Chang'e",
+    "Gilgamesh",
+    "Swan Song",
+    "Extinction",
+  ],
+};
 
 const VENUE_STOP_WORDS = new Set([
   "live",
@@ -836,6 +936,11 @@ const showPlaybackStatsCache = new Map<
   string,
   { showLengthSeconds: number | null; showTrackCount: number | null }
 >();
+const albumMatchShowKeysCache = new Map<string, { expiresAt: number; showKeys: Set<string> }>();
+const albumTracksCache = new Map<string, { expiresAt: number; tracks: string[] }>();
+let kglwAlbumTrackMapCache:
+  | { expiresAt: number; tracksByAlbumKey: Map<string, string[]> }
+  | null = null;
 const showsResponseCache = new Map<
   string,
   { expiresAt: number; payload: unknown }
@@ -1036,6 +1141,242 @@ async function withConcurrency<T, R>(
   return out;
 }
 
+function toApiSlug(input: string): string {
+  return String(input || "")
+    .trim()
+    .toLowerCase()
+    .replace(/['’]/g, "")
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function normalizeAlbumKey(input: string): string {
+  return String(input || "")
+    .trim()
+    .toLowerCase()
+    .replace(/['’]/g, "")
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function fetchKglwAlbumTrackMap(): Promise<Map<string, string[]>> {
+  const now = Date.now();
+  if (kglwAlbumTrackMapCache && kglwAlbumTrackMapCache.expiresAt > now) {
+    return kglwAlbumTrackMapCache.tracksByAlbumKey;
+  }
+  try {
+    const url =
+      `${KGLW_API_ROOT}/albums.json` +
+      "?artist_id=1&order_by=releasedate&direction=asc&limit=3000";
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) return new Map<string, string[]>();
+    const payload = (await res.json()) as {
+      error?: boolean;
+      data?: Array<{
+        album_title?: string;
+        song_name?: string;
+        islive?: number | string;
+        artist_id?: number | string;
+      }>;
+    };
+    if (payload?.error) return new Map<string, string[]>();
+    const rows = Array.isArray(payload?.data) ? payload.data : [];
+    const map = new Map<string, string[]>();
+    const seenByAlbum = new Map<string, Set<string>>();
+    for (const row of rows) {
+      if (Number(row?.artist_id ?? 0) !== 1) continue;
+      if (Number(row?.islive ?? 0) !== 0) continue;
+      const albumKey = normalizeAlbumKey(String(row?.album_title || ""));
+      const song = String(row?.song_name || "").trim();
+      if (!albumKey || !song) continue;
+      const seen = seenByAlbum.get(albumKey) || new Set<string>();
+      const songKey = song.toLowerCase();
+      if (seen.has(songKey)) continue;
+      seen.add(songKey);
+      seenByAlbum.set(albumKey, seen);
+      const list = map.get(albumKey) || [];
+      list.push(song);
+      map.set(albumKey, list);
+    }
+    kglwAlbumTrackMapCache = {
+      expiresAt: now + ALBUM_MATCH_CACHE_TTL_MS,
+      tracksByAlbumKey: map,
+    };
+    return map;
+  } catch {
+    return new Map<string, string[]>();
+  }
+}
+
+async function fetchDiscographyAlbumTracks(albumTitle: string): Promise<string[]> {
+  const key = String(albumTitle || "").trim().toLowerCase();
+  if (!key) return [];
+  const fallback = DISCOGRAPHY_ALBUM_TRACK_FALLBACKS[key];
+  const cached = albumTracksCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.tracks;
+  const normalized = normalizeAlbumKey(albumTitle);
+  const tracksByAlbumKey = await fetchKglwAlbumTrackMap();
+  const direct = tracksByAlbumKey.get(normalized);
+  if (direct && direct.length > 0) {
+    albumTracksCache.set(key, {
+      expiresAt: Date.now() + ALBUM_MATCH_CACHE_TTL_MS,
+      tracks: direct,
+    });
+    return direct;
+  }
+  let bestMatch: string | null = null;
+  let bestScore = -1;
+  const wantedTokens = new Set(normalized.split(" ").filter((t) => t.length >= 2));
+  for (const candidate of tracksByAlbumKey.keys()) {
+    let overlap = 0;
+    for (const token of wantedTokens) {
+      if (candidate.includes(token)) overlap += 1;
+    }
+    if (overlap > bestScore) {
+      bestScore = overlap;
+      bestMatch = candidate;
+    }
+  }
+  if (bestMatch && bestScore >= Math.max(2, Math.ceil(wantedTokens.size / 2))) {
+    const fuzzy = tracksByAlbumKey.get(bestMatch) || [];
+    if (fuzzy.length > 0) {
+      albumTracksCache.set(key, {
+        expiresAt: Date.now() + ALBUM_MATCH_CACHE_TTL_MS,
+        tracks: fuzzy,
+      });
+      return fuzzy;
+    }
+  }
+  const attempts =
+    key === "the silver chord"
+      ? [albumTitle, "The Silver Cord"]
+      : [albumTitle];
+  for (const title of attempts) {
+    try {
+      const url =
+        `${KGLW_API_ROOT}/albums/album_title/${toApiSlug(title)}.json` +
+        "?artist_id=1&order_by=position&direction=asc";
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) continue;
+      const payload = (await res.json()) as {
+        error?: boolean;
+        data?: Array<{ song_name?: string; islive?: number | string; position?: number | string }>;
+      };
+      if (payload?.error) continue;
+      const rows = Array.isArray(payload?.data) ? payload.data : [];
+      const ordered = rows
+        .filter((r) => Number(r?.islive ?? 0) === 0)
+        .sort((a, b) => Number(a?.position ?? 0) - Number(b?.position ?? 0));
+      const out: string[] = [];
+      const seen = new Set<string>();
+      for (const row of ordered) {
+        const song = String(row?.song_name || "").trim();
+        if (!song) continue;
+        const songKey = song.toLowerCase();
+        if (seen.has(songKey)) continue;
+        seen.add(songKey);
+        out.push(song);
+      }
+      if (out.length > 0) {
+        albumTracksCache.set(key, {
+          expiresAt: Date.now() + ALBUM_MATCH_CACHE_TTL_MS,
+          tracks: out,
+        });
+        return out;
+      }
+    } catch {
+      // try next attempt
+    }
+  }
+  const safeFallback = Array.isArray(fallback) ? fallback : [];
+  albumTracksCache.set(key, {
+    expiresAt: Date.now() + ALBUM_MATCH_CACHE_TTL_MS,
+    tracks: safeFallback,
+  });
+  return safeFallback;
+}
+
+function tokensForSongTitle(title: string): string[] {
+  return tokenizeSearchInput(title).slice(0, 4);
+}
+
+function buildAlbumTokenQuery(trackTitles: string[]): string {
+  const clauses = trackTitles
+    .map((songTitle) => tokensForSongTitle(songTitle))
+    .filter((tokens) => tokens.length > 0)
+    .map((tokens) => `(${tokens.map((t) => `text:${t}*`).join(" AND ")})`);
+  return clauses.length > 0 ? clauses.join(" OR ") : "";
+}
+
+async function fetchAlbumMatchedShowKeys(
+  albumTitle: string,
+  continentFilters: string[],
+): Promise<Set<string>> {
+  const key = String(albumTitle || "").trim().toLowerCase();
+  if (!key) return new Set<string>();
+  const cached = albumMatchShowKeysCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.showKeys;
+
+  const trackTitles = await fetchDiscographyAlbumTracks(albumTitle);
+  if (trackTitles.length === 0) return new Set<string>();
+  const tokenQuery = buildAlbumTokenQuery(trackTitles);
+  if (!tokenQuery) return new Set<string>();
+
+  const fields = [
+    "identifier",
+    "title",
+    "date",
+    "publicdate",
+    "addeddate",
+    "creator",
+    "collection",
+    "coverage",
+    "venue",
+    "downloads",
+    "avg_rating",
+    "num_reviews",
+  ];
+  const SORT = "addeddate desc";
+  const q =
+    `mediatype:(audio OR etree) AND (` +
+    `(collection:(KingGizzardAndTheLizardWizard)` +
+    ` OR creator:("King Gizzard & The Lizard Wizard")` +
+    ` OR creator:("King Gizzard And The Lizard Wizard")` +
+    ` OR identifier:(kglw*)` +
+    ` OR title:("King Gizzard")` +
+    ` OR subject:("King Gizzard"))` +
+    `) AND (${tokenQuery})`;
+  const url =
+    "https://archive.org/advancedsearch.php" +
+    `?q=${encodeURIComponent(q)}` +
+    fields.map((f) => `&fl[]=${encodeURIComponent(f)}`).join("") +
+    `&rows=450&page=1&output=json` +
+    `&sort[]=${encodeURIComponent(SORT)}`;
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  try {
+    const controller = new AbortController();
+    timeout = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch(url, { cache: "no-store", signal: controller.signal });
+    if (!res.ok) return new Set<string>();
+    const payload = (await res.json()) as { response?: { docs?: IaDoc[] } };
+    const docs = Array.isArray(payload?.response?.docs) ? payload.response.docs : [];
+    const shows = buildShowsFromRecordings(buildRecordingsFromDocs(docs, continentFilters));
+    const showKeys = new Set(shows.map((s) => s.showKey));
+    albumMatchShowKeysCache.set(key, {
+      expiresAt: Date.now() + ALBUM_MATCH_CACHE_TTL_MS,
+      showKeys,
+    });
+    return showKeys;
+  } catch {
+    return new Set<string>();
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
 
@@ -1052,6 +1393,10 @@ export async function GET(req: NextRequest) {
     .getAll("showType")
     .map((s) => toShowTypeFilter(s))
     .filter(Boolean) as ShowTypeFilter[];
+  const albums = sp
+    .getAll("album")
+    .map((a) => a.trim())
+    .filter(Boolean);
   const query = (sp.get("query") || sp.get("q") || "").trim();
   const sort = (sp.get("sort") || "newest").trim().toLowerCase();
   const fastMode = sp.get("fast") === "1";
@@ -1059,12 +1404,20 @@ export async function GET(req: NextRequest) {
   const yearFilters = years.filter((y) => /^\d{4}$/.test(y));
   const continentFilters = continents.filter((c) => c && c !== "All");
   const showTypeFilters = [...showTypes].sort();
+  const albumFilters = Array.from(
+    new Set(
+      albums
+        .map((a) => a.toLowerCase())
+        .filter((a) => DISCOGRAPHY_ALBUMS_BY_KEY.has(a)),
+    ),
+  ).sort();
   const cacheKey = JSON.stringify({
     v: 1,
     page,
     years: [...yearFilters].sort(),
     continents: [...continentFilters].sort(),
     showTypes: showTypeFilters,
+    albums: albumFilters,
     query: query.toLowerCase(),
     sort,
   });
@@ -1137,6 +1490,7 @@ export async function GET(req: NextRequest) {
       yearFilters.length === 0 &&
       continentFilters.length === 0 &&
       showTypes.length === 0 &&
+      albumFilters.length === 0 &&
       sort === "newest";
     const attempts = isDefaultRootQuery ? [4500] : [UPSTREAM_TIMEOUT_MS, UPSTREAM_TIMEOUT_MS + 5000];
     for (const timeoutMs of attempts) {
@@ -1244,11 +1598,15 @@ export async function GET(req: NextRequest) {
           .sort((a, b) => a[0].localeCompare(b[0]))
           .map(([value, count]) => ({ value, count })),
         showTypes: Array.from(showTypeCounts.entries()).map(([value, count]) => ({ value, count })),
+        albums: DISCOGRAPHY_ALBUM_TITLES.map((title) => ({ value: title, count: 0 })),
+        albumShowKeys: {},
+        albumUniverseCount: fallbackShows.length,
       },
       debug: {
         years: yearFilters.length > 0 ? yearFilters : ["All"],
         continents: continentFilters.length > 0 ? continentFilters : ["All"],
         showTypes: showTypes.length > 0 ? showTypes : ["All"],
+        albums: albumFilters.length > 0 ? albumFilters : ["All"],
         query,
         sort,
         fetchedDocs: 0,
@@ -1297,7 +1655,46 @@ export async function GET(req: NextRequest) {
         return queryMatchesByTokens(haystack, qLower);
       })
     : sortedShowsForQuery;
-  const searchedShows = filterByShowTypes(searchedShowsForFacets, showTypes);
+  const searchedShowsWithoutAlbums = filterByShowTypes(searchedShowsForFacets, showTypes);
+  const showsForFacetCount = searchedShowsWithoutAlbums;
+  const scopedUniverseKeys = new Set(showsForFacetCount.map((s) => s.showKey));
+  const shouldComputeAlbumFacets = albumFilters.length > 0;
+  const albumKeySets = shouldComputeAlbumFacets && DISCOGRAPHY_ALBUM_TITLES.length > 0
+    ? await withConcurrency(
+        DISCOGRAPHY_ALBUM_TITLES,
+        3,
+        async (albumTitle) => ({
+          key: albumTitle.toLowerCase(),
+          showKeys: await fetchAlbumMatchedShowKeys(albumTitle, continentFilters),
+        }),
+      )
+    : [];
+  const albumFacetCounts = new Map<string, number>();
+  const albumFacetShowKeys: Record<string, string[]> = {};
+  const albumSetMap = new Map<string, Set<string>>();
+  for (const { key, showKeys } of albumKeySets) {
+    albumSetMap.set(key, showKeys);
+    const scoped: string[] = [];
+    for (const showKey of showKeys) {
+      if (!scopedUniverseKeys.has(showKey)) continue;
+      scoped.push(showKey);
+    }
+    albumFacetShowKeys[key] = scoped;
+    albumFacetCounts.set(key, scoped.length);
+  }
+  let searchedShows = searchedShowsWithoutAlbums;
+  if (albumFilters.length > 0) {
+    const selectedSets = albumFilters.map(
+      (albumKey) => albumSetMap.get(albumKey) || new Set<string>(),
+    );
+    const intersection = new Set<string>(scopedUniverseKeys);
+    for (const set of selectedSets) {
+      for (const key of Array.from(intersection)) {
+        if (!set.has(key)) intersection.delete(key);
+      }
+    }
+    searchedShows = searchedShowsWithoutAlbums.filter((s) => intersection.has(s.showKey));
+  }
 
   // Song/track matches come from Archive full-text indexing.
   // This catches shows where the query appears in tracklists/metadata even when
@@ -1414,6 +1811,12 @@ export async function GET(req: NextRequest) {
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([value, count]) => ({ value, count })),
     showTypes: Array.from(showTypeCounts.entries()).map(([value, count]) => ({ value, count })),
+    albums: DISCOGRAPHY_ALBUM_TITLES.map((title) => ({
+      value: title,
+      count: albumFacetCounts.get(title.toLowerCase()) || 0,
+    })),
+    albumShowKeys: albumFacetShowKeys,
+    albumUniverseCount: showsForFacetCount.length,
   };
 
   // App pagination
@@ -1447,6 +1850,7 @@ export async function GET(req: NextRequest) {
       years: yearFilters.length > 0 ? yearFilters : ["All"],
       continents: continentFilters.length > 0 ? continentFilters : ["All"],
       showTypes: showTypes.length > 0 ? showTypes : ["All"],
+      albums: albumFilters.length > 0 ? albumFilters : ["All"],
       query,
       sort,
       fetchedDocs: docs.length,
@@ -1462,6 +1866,7 @@ export async function GET(req: NextRequest) {
     yearFilters.length === 0 &&
     continentFilters.length === 0 &&
     showTypes.length === 0 &&
+    albumFilters.length === 0 &&
     sort === "newest";
   if (isDefaultRootQuery && Array.isArray(payload.items) && payload.items.length > 0) {
     lastGoodDefaultPayload = payload;

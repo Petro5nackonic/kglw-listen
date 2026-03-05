@@ -964,7 +964,7 @@ export default function PlaylistDetailPage() {
           )}
           {showAddTracksCta && (
             <div className="mt-4 rounded-xl border border-dashed border-white/15 bg-black/20 p-4 text-sm text-white/70">
-              Empty playlist. Tap "Add tracks" to search and add songs.
+              Empty playlist. Tap &quot;Add tracks&quot; to search and add songs.
             </div>
           )}
         </div>
@@ -1375,7 +1375,7 @@ export default function PlaylistDetailPage() {
                 Delete playlist?
               </div>
               <div className="mt-2 text-[13px] text-white/75">
-                This will permanently delete "{playlist.name}".
+                This will permanently delete &quot;{playlist.name}&quot;.
               </div>
               <div className="mt-4 flex items-center justify-end gap-2">
                 <button

@@ -6,25 +6,30 @@ import { useRouter } from "next/navigation";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faCirclePlay,
+  faCircleCheck,
   faSpinner,
   faBookmark,
+  faHeart,
   faChevronLeft,
   faChevronRight,
   faChevronDown,
   faEllipsisVertical,
-  faPaperPlane,
-  faPen,
-  faTrash,
   faMagnifyingGlass,
   faSliders,
   faSquare,
   faSquareCheck,
   faXmark,
 } from "@fortawesome/pro-solid-svg-icons";
+import {
+  faCircleCheck as faCircleCheckRegular,
+  faHeart as faHeartRegular,
+} from "@fortawesome/free-regular-svg-icons";
+import { faToggleOff, faToggleOn } from "@fortawesome/free-solid-svg-icons";
 import { usePlayer, type Track } from "@/components/player/store";
 import { usePlaylists } from "@/components/playlists/store";
 import { toDisplayTitle, toDisplayTrackTitle } from "@/utils/displayTitle";
 import { shouldUseDefaultArtwork } from "@/utils/archiveArtwork";
+import { logPlayedPlaylist, logPlayedShow, logPlayedSong } from "@/utils/activityFeed";
 
 type Continent =
   | "North America"
@@ -101,6 +106,9 @@ type HomeShowsCachePayload = {
     years?: { value: string; count: number }[];
     continents?: { value: string; count: number }[];
     showTypes?: { value: string; count: number }[];
+    albums?: { value: string; count: number }[];
+    albumShowKeys?: Record<string, string[]>;
+    albumUniverseCount?: number;
   };
 };
 
@@ -110,9 +118,41 @@ const SHOW_TYPE_OPTIONS = [
   { value: "Orchestra" },
   { value: "Standard" },
 ];
+const DISCOGRAPHY_ALBUM_OPTIONS = [
+  "12 Bar Bruise",
+  "Eyes Like The Sky",
+  "Float Along - Fill Your Lungs",
+  "Oddments",
+  "I'm In Your Mind Fuzz",
+  "Quarters!",
+  "Paper Mache Dream Balloon",
+  "Nonagon Infinity",
+  "Flying Microtonal Banana",
+  "Murder of the Universe",
+  "Sketches of Brunswick East",
+  "Polygondwanaland",
+  "Gumboot Soup",
+  "Fishing For Fishies",
+  "Infest the Rats' Nest",
+  "K.G.",
+  "L.W.",
+  "Butterfly 3000",
+  "Made In Timeland",
+  "Omnium Gatherum",
+  "Ice, Death, Planets, Lungs, Mushrooms and Lava",
+  "Laminated Denim",
+  "Changes",
+  "PetroDragonic Apocalypse",
+  "The Silver Chord",
+  "The Silver Chord (Extended Mix)",
+  "Flight B741",
+  "Phantom Island",
+];
 
 const FAVORITE_SHOWS_KEY = "kglw.favoriteShows.v1";
 const RECENT_SHOWS_KEY = "kglw.recentShows.v1";
+const HEARD_SHOWS_KEY = "kglw.heardShows.v1";
+const LOVED_SONGS_PLAYLIST_NAME = "Loved Songs";
 const SHOW_STATS_CACHE_KEY = "kglw.showStats.v1";
 const HOME_SHOWS_CACHE_KEY = "kglw.homeShows.v1";
 const HOME_SHOWS_CACHE_MAX_AGE_MS = 1000 * 60 * 10;
@@ -134,19 +174,6 @@ const SORT_OPTIONS: { value: string; label: string }[] = [
   { value: "show_length_longest", label: "Longest show" },
   { value: "show_length_shortest", label: "Shortest show" },
 ];
-
-function nextDefaultPlaylistName(existingNames: string[]): string {
-  const base = "My Playlist";
-  const normalized = new Set(
-    existingNames
-      .map((name) => String(name || "").trim().toLowerCase())
-      .filter(Boolean),
-  );
-  if (!normalized.has(base.toLowerCase())) return base;
-  let n = 2;
-  while (normalized.has(`${base.toLowerCase()} ${n}`)) n += 1;
-  return `${base} ${n}`;
-}
 
 function getArchiveIdentifier(url?: string): string {
   const raw = String(url || "").trim();
@@ -298,16 +325,6 @@ function showCardVariant(tag?: "ORCHESTRA" | "RAVE" | "ACOUSTIC") {
   }
 }
 
-function labelFromShowKey(showKey: string): string {
-  const raw = showKey.split("|")[1] || "";
-  if (!raw) return "";
-  return raw
-    .replace(/-/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
 type ShowsResponse = {
   page: number;
   items: ShowItem[];
@@ -322,6 +339,9 @@ type ShowsResponse = {
     years: { value: string; count: number }[];
     continents: { value: string; count: number }[];
     showTypes?: { value: string; count: number }[];
+    albums?: { value: string; count: number }[];
+    albumShowKeys?: Record<string, string[]>;
+    albumUniverseCount?: number;
   };
 };
 
@@ -330,6 +350,17 @@ function summarizeSelection(values: string[], emptyLabel = "All") {
   if (values.length === 1) return values[0];
   if (values.length === 2) return `${values[0]}, ${values[1]}`;
   return `${values[0]}, ${values[1]} +${values.length - 2}`;
+}
+
+function countIntersection(sets: Set<string>[]): number {
+  if (sets.length === 0) return 0;
+  const ordered = sets.slice().sort((a, b) => a.size - b.size);
+  const [smallest, ...rest] = ordered;
+  let count = 0;
+  for (const value of smallest) {
+    if (rest.every((s) => s.has(value))) count += 1;
+  }
+  return count;
 }
 
 function fmtSongLen(sec?: number | null): string {
@@ -399,8 +430,20 @@ function MultiSelectDropdown(props: {
   onChange: (next: string[]) => void;
   minWidthClass?: string;
   emptyLabel?: string;
+  getOptionCount?: (optionValue: string, draft: string[]) => number | undefined;
+  getApplyCount?: (draft: string[]) => number | undefined;
 }) {
-  const { id, label, options, value, onChange, minWidthClass, emptyLabel } = props;
+  const {
+    id,
+    label,
+    options,
+    value,
+    onChange,
+    minWidthClass,
+    emptyLabel,
+    getOptionCount,
+    getApplyCount,
+  } = props;
 
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<string[]>(value);
@@ -449,6 +492,7 @@ function MultiSelectDropdown(props: {
               : sum,
           0,
         );
+  const contextualApplyCount = getApplyCount?.(draft);
 
   return (
     <div
@@ -563,13 +607,22 @@ function MultiSelectDropdown(props: {
             <div className="mt-4 max-h-[44vh] space-y-2 overflow-auto pr-1">
               {options.map((opt) => {
                 const checked = draft.includes(opt.value);
+                const contextualCount = getOptionCount?.(opt.value, draft);
+                const displayCount =
+                  typeof contextualCount === "number" ? contextualCount : opt.count;
+                const disabled = !checked && typeof displayCount === "number" && displayCount <= 0;
                 return (
                   <button
                     key={opt.value}
                     type="button"
                     className={`flex w-full items-center justify-between rounded-[12px] px-4 py-4 text-left ${
-                      checked ? "bg-[rgba(48,26,89,0.65)] text-white" : "bg-[rgba(48,26,89,0.25)] text-white"
+                      checked
+                        ? "bg-[rgba(48,26,89,0.65)] text-white"
+                        : disabled
+                          ? "bg-[rgba(48,26,89,0.15)] text-white/45"
+                          : "bg-[rgba(48,26,89,0.25)] text-white"
                     }`}
+                    disabled={disabled}
                     onClick={() => {
                       setDraft((prev) =>
                         prev.includes(opt.value)
@@ -587,9 +640,9 @@ function MultiSelectDropdown(props: {
                         {opt.value}
                       </span>
                     </span>
-                    {typeof opt.count === "number" ? (
+                    {typeof displayCount === "number" ? (
                       <span className="text-[16px] text-white [font-family:var(--font-roboto-condensed)]">
-                        {opt.count}
+                        {displayCount}
                       </span>
                     ) : null}
                   </button>
@@ -610,7 +663,7 @@ function MultiSelectDropdown(props: {
                   Apply Filters
                 </span>
                 <span className="text-[14px] [font-family:var(--font-roboto-condensed)]">
-                  {draftCount} Shows
+                  {(typeof contextualApplyCount === "number" ? contextualApplyCount : draftCount)} Shows
                 </span>
               </button>
               <button
@@ -647,7 +700,7 @@ export default function HomePage() {
   const [songTotal, setSongTotal] = useState(0);
   const [venueTotal, setVenueTotal] = useState(0);
   const [resultFilter, setResultFilter] = useState<"shows" | "venues">("venues");
-  const [songLengthSort, setSongLengthSort] = useState<"desc" | "asc">("desc");
+  const [songLengthSort] = useState<"desc" | "asc">("desc");
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -656,6 +709,7 @@ export default function HomePage() {
   const [years, setYears] = useState<string[]>([]);
   const [continents, setContinents] = useState<string[]>([]);
   const [showTypes, setShowTypes] = useState<string[]>([]);
+  const [albums, setAlbums] = useState<string[]>([]);
   const [yearFacet, setYearFacet] = useState<
     { value: string; count: number }[]
   >([]);
@@ -665,6 +719,11 @@ export default function HomePage() {
   const [showTypeFacet, setShowTypeFacet] = useState<
     { value: string; count: number }[]
   >([]);
+  const [albumFacet, setAlbumFacet] = useState<
+    { value: string; count: number }[]
+  >([]);
+  const [albumShowKeysFacet, setAlbumShowKeysFacet] = useState<Record<string, string[]>>({});
+  const [albumUniverseCount, setAlbumUniverseCount] = useState(0);
   const [query, setQuery] = useState<string>("");
   const [debouncedQuery, setDebouncedQuery] = useState<string>("");
   const [sort, setSort] = useState<string>("newest");
@@ -672,6 +731,8 @@ export default function HomePage() {
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const [favoriteShows, setFavoriteShows] = useState<string[]>([]);
+  const [heardShows, setHeardShows] = useState<string[]>([]);
+  const [hideHeardShows, setHideHeardShows] = useState(false);
   const [recentShows, setRecentShows] = useState<string[]>([]);
   const [statsById, setStatsById] = useState<Record<string, ShowPlaybackStats>>({});
   const inFlightStatsIdsRef = useRef<Set<string>>(new Set());
@@ -688,7 +749,6 @@ export default function HomePage() {
     Record<string, "added" | "exists" | undefined>
   >({});
   const [songNewPlaylistName, setSongNewPlaylistName] = useState("");
-  const [homePlaylistMenuId, setHomePlaylistMenuId] = useState<string | null>(null);
   const [requestedPlaylistId, setRequestedPlaylistId] = useState<string | null>(null);
   const [clientHydrated, setClientHydrated] = useState(false);
   const [playlistRenameTarget, setPlaylistRenameTarget] = useState<{
@@ -717,6 +777,7 @@ export default function HomePage() {
     for (const y of years) params.append("year", y);
     for (const c of continents) params.append("continent", c);
     for (const t of showTypes) params.append("showType", t);
+    for (const a of albums) params.append("album", a);
     params.set("sort", sort);
     return `/api/ia/shows?${params.toString()}`; // IMPORTANT: use /api/ia/shows
   }
@@ -727,6 +788,7 @@ export default function HomePage() {
     for (const y of years) params.append("year", y);
     for (const c of continents) params.append("continent", c);
     for (const t of showTypes) params.append("showType", t);
+    for (const a of albums) params.append("album", a);
     params.set("query", debouncedQuery);
     params.set("sort", sort);
     return `/api/ia/shows?${params.toString()}`;
@@ -737,6 +799,7 @@ export default function HomePage() {
       years.length === 0 &&
       continents.length === 0 &&
       showTypes.length === 0 &&
+      albums.length === 0 &&
       !debouncedQuery &&
       sort === "newest"
     );
@@ -772,6 +835,9 @@ export default function HomePage() {
       if (data.facets?.years) setYearFacet(data.facets.years);
       if (data.facets?.continents) setContinentFacet(data.facets.continents);
       if (data.facets?.showTypes) setShowTypeFacet(data.facets.showTypes);
+      if (data.facets?.albums) setAlbumFacet(data.facets.albums);
+      setAlbumShowKeysFacet(data.facets?.albumShowKeys || {});
+      setAlbumUniverseCount(Number(data.facets?.albumUniverseCount || 0));
       if (mode === "replace") {
         setSongShows(data.song?.items || []);
         setSongTotal(data.song?.total || 0);
@@ -857,6 +923,9 @@ export default function HomePage() {
           if (parsed.facets?.years) setYearFacet(parsed.facets.years);
           if (parsed.facets?.continents) setContinentFacet(parsed.facets.continents);
           if (parsed.facets?.showTypes) setShowTypeFacet(parsed.facets.showTypes);
+      if (parsed.facets?.albums) setAlbumFacet(parsed.facets.albums);
+          setAlbumShowKeysFacet(parsed.facets?.albumShowKeys || {});
+          setAlbumUniverseCount(Number(parsed.facets?.albumUniverseCount || 0));
         }
       }
     } catch {
@@ -870,13 +939,17 @@ export default function HomePage() {
     try {
       const favRaw = localStorage.getItem(FAVORITE_SHOWS_KEY);
       const recRaw = localStorage.getItem(RECENT_SHOWS_KEY);
+      const heardRaw = localStorage.getItem(HEARD_SHOWS_KEY);
       const favParsed = JSON.parse(favRaw || "[]");
       const recParsed = JSON.parse(recRaw || "[]");
+      const heardParsed = JSON.parse(heardRaw || "[]");
       setFavoriteShows(Array.isArray(favParsed) ? favParsed : []);
       setRecentShows(Array.isArray(recParsed) ? recParsed : []);
+      setHeardShows(Array.isArray(heardParsed) ? heardParsed : []);
     } catch {
       setFavoriteShows([]);
       setRecentShows([]);
+      setHeardShows([]);
     }
   }, []);
 
@@ -970,7 +1043,7 @@ export default function HomePage() {
     setPage(1);
     loadPage(1, "replace");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [years.join("|"), continents.join("|"), showTypes.join("|"), sort]);
+  }, [years.join("|"), continents.join("|"), showTypes.join("|"), albums.join("|"), sort]);
 
   useEffect(() => {
     let alive = true;
@@ -1012,7 +1085,7 @@ export default function HomePage() {
       controller.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [years.join("|"), continents.join("|"), showTypes.join("|"), debouncedQuery, sort]);
+  }, [years.join("|"), continents.join("|"), showTypes.join("|"), albums.join("|"), debouncedQuery, sort]);
 
   useEffect(() => {
     if (!debouncedQuery) {
@@ -1026,7 +1099,7 @@ export default function HomePage() {
 
   const canInfiniteLoad = !debouncedQuery;
   const hasActiveShowFilters =
-    years.length > 0 || continents.length > 0 || showTypes.length > 0;
+    years.length > 0 || continents.length > 0 || showTypes.length > 0 || albums.length > 0;
 
   useEffect(() => {
     const el = sentinelRef.current;
@@ -1074,6 +1147,64 @@ export default function HomePage() {
     for (const s of showTypes) if (!map.has(s)) map.set(s, 0);
     return SHOW_TYPE_OPTIONS.map((o) => ({ value: o.value, count: map.get(o.value) || 0 }));
   }, [showTypeFacet, showTypes]);
+  const availableAlbums = useMemo(() => {
+    const hasFacetCounts = albumFacet.some((o) => typeof o.count === "number" && o.count > 0);
+    const map = new Map<string, number | undefined>();
+    for (const title of DISCOGRAPHY_ALBUM_OPTIONS) map.set(title, undefined);
+    for (const o of albumFacet) {
+      map.set(o.value, hasFacetCounts ? o.count : undefined);
+    }
+    for (const a of albums) if (!map.has(a)) map.set(a, undefined);
+    return Array.from(map.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([value, count]) => ({ value, count }));
+  }, [albumFacet, albums]);
+  const albumShowKeySets = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const title of DISCOGRAPHY_ALBUM_OPTIONS) {
+      const key = title.toLowerCase();
+      map.set(key, new Set(albumShowKeysFacet[key] || []));
+    }
+    for (const [key, list] of Object.entries(albumShowKeysFacet)) {
+      if (!map.has(key)) map.set(key, new Set(list || []));
+    }
+    return map;
+  }, [albumShowKeysFacet]);
+  const getDiscographyOptionCount = useMemo(
+    () => (optionValue: string, draft: string[]) => {
+      if (albumShowKeySets.size === 0) return undefined;
+      const optionKey = String(optionValue || "").toLowerCase();
+      const optionSet = albumShowKeySets.get(optionKey);
+      if (!optionSet) return undefined;
+      const selected = draft
+        .map((v) => String(v || "").toLowerCase())
+        .filter((v) => v !== optionKey);
+      const sets = [optionSet];
+      for (const key of selected) {
+        const s = albumShowKeySets.get(key);
+        if (!s) return undefined;
+        sets.push(s);
+      }
+      return countIntersection(sets);
+    },
+    [albumShowKeySets],
+  );
+  const getDiscographyApplyCount = useMemo(
+    () => (draft: string[]) => {
+      const selected = draft.map((v) => String(v || "").toLowerCase());
+      if (selected.length === 0) {
+        return albumUniverseCount > 0 ? albumUniverseCount : venueTotal;
+      }
+      const sets: Set<string>[] = [];
+      for (const key of selected) {
+        const s = albumShowKeySets.get(key);
+        if (!s) return 0;
+        sets.push(s);
+      }
+      return countIntersection(sets);
+    },
+    [albumShowKeySets, albumUniverseCount, venueTotal],
+  );
 
   const sortedSongShows = useMemo(() => {
     const arr = songShows.slice();
@@ -1087,20 +1218,28 @@ export default function HomePage() {
   }, [songShows, songLengthSort]);
 
   const favoriteSet = useMemo(() => new Set(favoriteShows), [favoriteShows]);
+  const heardSet = useMemo(() => new Set(heardShows), [heardShows]);
   const recentSet = useMemo(() => new Set(recentShows), [recentShows]);
 
   const venueShows = useMemo(() => {
-    if (showTab === "favorites") return shows.filter((s) => favoriteSet.has(s.showKey));
+    let baseShows: ShowItem[] = shows;
+    if (showTab === "favorites") {
+      baseShows = shows.filter((s) => favoriteSet.has(s.showKey));
+    }
     if (showTab === "recent") {
       const byKey = new Map(shows.map((s) => [s.showKey, s]));
       const ordered = recentShows
         .map((key) => byKey.get(key))
         .filter(Boolean) as ShowItem[];
-      if (ordered.length > 0) return ordered;
-      return shows.filter((s) => recentSet.has(s.showKey));
+      if (ordered.length > 0) {
+        baseShows = ordered;
+      } else {
+        baseShows = shows.filter((s) => recentSet.has(s.showKey));
+      }
     }
-    return shows;
-  }, [shows, showTab, favoriteSet, recentSet, recentShows]);
+    if (!hideHeardShows) return baseShows;
+    return baseShows.filter((s) => !heardSet.has(s.showKey));
+  }, [shows, showTab, favoriteSet, recentSet, recentShows, hideHeardShows, heardSet]);
   const prebuiltPlaylists = useMemo(
     () =>
       playlists.filter(
@@ -1109,20 +1248,6 @@ export default function HomePage() {
           p.prebuiltKind === "album-live-comp" ||
           PREBUILT_PLAYLIST_NAME_SET.has(p.name.trim().toLowerCase()),
       ),
-    [playlists],
-  );
-  const featuredUserPlaylists = useMemo(
-    () =>
-      playlists
-        .filter(
-          (p) =>
-            !(
-              p.source === "prebuilt" ||
-              p.prebuiltKind === "album-live-comp" ||
-              PREBUILT_PLAYLIST_NAME_SET.has(p.name.trim().toLowerCase())
-            ),
-        )
-        .slice(0, 10),
     [playlists],
   );
   const sortLabel = useMemo(() => {
@@ -1142,12 +1267,25 @@ export default function HomePage() {
         return "Newest";
     }
   }, [sort]);
+  const lovedSongsPlaylist = useMemo(
+    () =>
+      playlists.find(
+        (p) => p.name.trim().toLowerCase() === LOVED_SONGS_PLAYLIST_NAME.toLowerCase(),
+      ) || null,
+    [playlists],
+  );
+  const isCurrentSongLoved = useMemo(() => {
+    if (!songSheetTrack?.url || !lovedSongsPlaylist) return false;
+    const canonical = toDisplayTrackTitle(songSheetTrack.title).toLowerCase();
+    const slot = lovedSongsPlaylist.slots.find((s) => s.canonicalTitle === canonical);
+    if (!slot) return false;
+    return slot.variants.some((v) => v.track.url === songSheetTrack.url);
+  }, [songSheetTrack, lovedSongsPlaylist]);
   const songShowsWithTrackTitle = useMemo(
     () =>
       sortedSongShows.filter((s) => String(s.matchedSongTitle || "").trim().length > 0),
     [sortedSongShows],
   );
-  const songResultTotal = songShowsWithTrackTitle.length;
   const topSongMatch = songShowsWithTrackTitle[0] || null;
   const songAvgMinutesLabel = useMemo(() => {
     const durations = songShowsWithTrackTitle
@@ -1267,7 +1405,12 @@ export default function HomePage() {
         return b.lastPlayedDate.localeCompare(a.lastPlayedDate);
       })
       .slice(0, 5)
-      .map(({ score: _score, ...rest }) => rest);
+      .map((item) => ({
+        showKey: item.showKey,
+        title: item.title,
+        subtitle: item.subtitle,
+        lastPlayedDate: item.lastPlayedDate,
+      }));
   }, [query, searchVenueShows, venueShows]);
   const appearsInShowsSuggestions = useMemo<ShowSuggestion[]>(() => {
     const source = sortedSongShows;
@@ -1438,6 +1581,10 @@ export default function HomePage() {
     setFavoriteShows(next);
     localStorage.setItem(FAVORITE_SHOWS_KEY, JSON.stringify(next));
   }
+  function persistHeardShows(next: string[]) {
+    setHeardShows(next);
+    localStorage.setItem(HEARD_SHOWS_KEY, JSON.stringify(next));
+  }
 
   function toggleFavoriteShow(showKey: string) {
     if (favoriteSet.has(showKey)) {
@@ -1445,6 +1592,34 @@ export default function HomePage() {
       return;
     }
     persistFavorites([showKey, ...favoriteShows].slice(0, 400));
+  }
+  function getOrCreateLovedSongsPlaylistId(): string {
+    const existing = playlists.find(
+      (p) => p.name.trim().toLowerCase() === LOVED_SONGS_PLAYLIST_NAME.toLowerCase(),
+    );
+    if (existing) return existing.id;
+    return createPlaylist(LOVED_SONGS_PLAYLIST_NAME);
+  }
+  function addSongToLovedSongsPlaylist(track: SongSheetTrack) {
+    if (!track.url) return;
+    const id = getOrCreateLovedSongsPlaylistId();
+    addTrackToPlaylist(id, {
+      title: toDisplayTrackTitle(track.title),
+      url: track.url,
+      length: track.length,
+      track: track.track,
+      showKey: track.showKey,
+      showDate: track.showDate,
+      venueText: track.venueText,
+      artwork: track.artwork,
+    });
+  }
+  function toggleHeardShow(showKey: string) {
+    if (heardSet.has(showKey)) {
+      persistHeardShows(heardShows.filter((k) => k !== showKey));
+      return;
+    }
+    persistHeardShows([showKey, ...heardShows].slice(0, 800));
   }
 
   function rememberRecentShow(showKey: string) {
@@ -1531,6 +1706,7 @@ export default function HomePage() {
     const cached = queueByIdentifierRef.current[identifier];
     if (cached && cached.length > 0) {
       setQueue(cached, 0);
+      logPlayedShow({ showKey: show.showKey, showTitle: toDisplayTitle(show.title) });
       return;
     }
     if (playPendingRef.current.has(identifier)) return;
@@ -1546,6 +1722,7 @@ export default function HomePage() {
       if (queue.length === 0) return;
       queueByIdentifierRef.current[identifier] = queue;
       setQueue(queue, 0);
+      logPlayedShow({ showKey: show.showKey, showTitle: toDisplayTitle(show.title) });
     } finally {
       playPendingRef.current.delete(identifier);
     }
@@ -1598,6 +1775,11 @@ export default function HomePage() {
         )
       : 0;
     setQueue(queue, startIndex < 0 ? 0 : startIndex);
+    logPlayedSong({
+      showKey: songShow.showKey,
+      showTitle: toDisplayTitle(songShow.title),
+      songTitle: toDisplayTrackTitle(songShow.matchedSongTitle || debouncedQuery),
+    });
   }
 
   async function playPlaylistFromHome(playlistId: string) {
@@ -1642,6 +1824,7 @@ export default function HomePage() {
 
     if (queue.length === 0) return;
     setQueue(queue, 0);
+    logPlayedPlaylist({ playlistId, playlistName: playlist.name });
   }
 
   function applySongSuggestion(title: string) {
@@ -1654,27 +1837,14 @@ export default function HomePage() {
 
   return (
     <main className="min-h-screen bg-[#080017] text-white">
-      <header className="fixed inset-x-0 top-0 z-40 border-b border-white/10 bg-[rgba(13,2,33,0.8)] backdrop-blur-[34px]">
-        <div className="mx-auto flex h-[58px] w-full max-w-[1140px] items-end px-4 pb-4 md:px-6">
-          <div className="text-[16px] font-light [font-family:var(--font-roboto-condensed)]">
-            SetlistAppName
-          </div>
-        </div>
-      </header>
-
-      <div className="mx-auto w-full max-w-[1140px] px-4 pb-28 pt-[74px] md:px-6">
+      <div className="mx-auto w-full max-w-[1140px] px-4 pb-28 pt-6 md:px-6">
         <div className="space-y-10">
           {prebuiltPlaylists.length > 0 ? (
             <section>
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-[34px] leading-none font-semibold">KGLW Live Comps.</h2>
-                <Link
-                  href="/playlists"
-                  className="inline-flex items-center gap-2 rounded-full border-2 border-[#5a22c9] px-4 py-2 text-sm"
-                >
-                  <span>See All</span>
-                  <span className="text-[13px]">›</span>
-                </Link>
+              <div className="mb-4">
+                <h2 className="text-[24px] leading-none font-semibold [font-family:var(--font-roboto-condensed)]">
+                  KGLW Live Comps.
+                </h2>
               </div>
 
               <div className="relative">
@@ -1709,9 +1879,7 @@ export default function HomePage() {
                     return (
                       <div
                         key={p.id}
-                        className={`relative rounded-[16px] border border-[#7c50d8]/65 bg-linear-to-br from-[#1b0d33] via-[#180b2d] to-[#0f0820] p-3 backdrop-blur-[6px] ${
-                          homePlaylistMenuId === p.id ? "z-[90]" : "z-0"
-                        }`}
+                        className="relative z-0 rounded-[16px] border border-[#7c50d8]/65 bg-linear-to-br from-[#1b0d33] via-[#180b2d] to-[#0f0820] p-3 backdrop-blur-[6px]"
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -1802,217 +1970,10 @@ export default function HomePage() {
           ) : null}
 
           <section>
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-[34px] leading-none font-semibold">Playlists</h2>
-              <Link
-                href="/playlists"
-                className="inline-flex items-center gap-2 rounded-full border-2 border-[#5a22c9] px-4 py-2 text-sm"
-              >
-                <span>See All</span>
-                <span className="text-[13px]">›</span>
-              </Link>
-            </div>
-
-            {homePlaylistMenuId && (
-              <button
-                type="button"
-                aria-label="Close playlist menu"
-                className="fixed inset-0 z-[70]"
-                onClick={() => setHomePlaylistMenuId(null)}
-              />
-            )}
-
-            <div className="space-y-2">
-              {featuredUserPlaylists.length === 0 ? (
-                <button
-                  type="button"
-                  className="flex w-full items-center justify-center rounded-[16px] border border-white/20 bg-white/5 p-3 backdrop-blur-[6px]"
-                  onClick={() => {
-                    const suggested = nextDefaultPlaylistName(playlists.map((pl) => pl.name));
-                    const id = createPlaylist(suggested);
-                    router.push(
-                      `/playlists/${encodeURIComponent(id)}?rename=1&suggested=${encodeURIComponent(suggested)}`,
-                    );
-                  }}
-                >
-                  <div className="text-[18px] font-medium text-white [font-family:var(--font-roboto-condensed)]">
-                    Create a playlist
-                  </div>
-                </button>
-              ) : (
-                featuredUserPlaylists.map((p) => {
-                  const isPrebuilt = false;
-                  const versions = p.slots.reduce(
-                    (sum, slot) => sum + slot.variants.length,
-                    0,
-                  );
-                  const previewThumbs = p.slots
-                    .flatMap((slot) => slot.variants.map((v) => v.track))
-                    .slice(0, 4)
-                    .map((t) => {
-                      const id = getArchiveIdentifier(t.url);
-                      if (t.artwork) return t.artwork;
-                      if (!id) return DEFAULT_ARTWORK_SRC;
-                      return `https://archive.org/services/img/${encodeURIComponent(id)}`;
-                    });
-                  while (previewThumbs.length < 4) previewThumbs.push(DEFAULT_ARTWORK_SRC);
-                  const chainCount = new Set(
-                    p.slots.map((s) => s.linkGroupId).filter(Boolean),
-                  ).size;
-                  const totalSeconds = p.slots.reduce(
-                    (sum, slot) => sum + (parseLengthToSeconds(slot.variants[0]?.track.length) ?? 0),
-                    0,
-                  );
-                  const duration = formatShowLength(totalSeconds);
-                  return (
-                    <div
-                      key={p.id}
-                      className={`relative rounded-[16px] p-3 backdrop-blur-[6px] ${
-                        isPrebuilt
-                          ? "border border-[#7c50d8]/65 bg-linear-to-br from-[#1b0d33] via-[#180b2d] to-[#0f0820]"
-                          : "border border-white/20 bg-white/5"
-                      } ${
-                        homePlaylistMenuId === p.id ? "z-[90]" : "z-0"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex min-w-0 flex-1 items-center gap-3">
-                          {isPrebuilt ? (
-                            <div className="grid w-20 shrink-0 grid-cols-2 gap-1.5">
-                              {previewThumbs.map((src, idx) => (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img
-                                  key={`${p.id}-home-thumb-${idx}`}
-                                  src={src}
-                                  alt=""
-                                  className="aspect-square w-full rounded-[8px] border border-white/15 object-cover"
-                                  onError={(e) => {
-                                    const img = e.currentTarget;
-                                    if (img.src.endsWith(DEFAULT_ARTWORK_SRC)) return;
-                                    img.src = DEFAULT_ARTWORK_SRC;
-                                  }}
-                                />
-                              ))}
-                            </div>
-                          ) : null}
-                          <Link
-                            href={clientHydrated ? `/playlists/${p.id}` : "/playlists"}
-                            className="min-w-0 flex-1"
-                          >
-                            <div className="truncate text-[18px] font-medium text-white [font-family:var(--font-roboto-condensed)]">
-                              {p.name}
-                            </div>
-                            <div className="mt-1 flex flex-wrap items-center gap-x-[6px] text-[12px] font-medium text-white/70 [font-family:var(--font-roboto-condensed)]">
-                              <span>
-                                {p.slots.length} Track{p.slots.length === 1 ? "" : "s"}
-                              </span>
-                              <span className="size-[3px] rounded-full bg-white/60" />
-                              <span>
-                                {versions} Version{versions === 1 ? "" : "s"}
-                              </span>
-                              <span className="size-[3px] rounded-full bg-white/60" />
-                              <span>
-                                {chainCount} Chain{chainCount === 1 ? "" : "s"}
-                              </span>
-                              {duration ? (
-                                <>
-                                  <span className="size-[3px] rounded-full bg-white/60" />
-                                  <span>{duration}</span>
-                                </>
-                              ) : null}
-                            </div>
-                          </Link>
-                        </div>
-                        <div className="ml-4 flex shrink-0 items-center gap-4 text-white">
-                          <button
-                            type="button"
-                            aria-label={`Play playlist ${p.name}`}
-                            className="text-[26px] text-white"
-                            onClick={async () => {
-                              setRequestedPlaylistId(p.id);
-                              try {
-                                await playPlaylistFromHome(p.id);
-                              } finally {
-                                if (!usePlayer.getState().loading) {
-                                  setRequestedPlaylistId((prev) => (prev === p.id ? null : prev));
-                                }
-                              }
-                            }}
-                          >
-                            <FontAwesomeIcon
-                              icon={requestedPlaylistId === p.id ? faSpinner : faCirclePlay}
-                              className={requestedPlaylistId === p.id ? "animate-spin" : ""}
-                            />
-                          </button>
-                          <button
-                            type="button"
-                            aria-label="Playlist options"
-                            className="text-[20px] text-white/90"
-                            onClick={() =>
-                              setHomePlaylistMenuId((prev) => (prev === p.id ? null : p.id))
-                            }
-                          >
-                            <FontAwesomeIcon icon={faEllipsisVertical} />
-                          </button>
-                        </div>
-                      </div>
-                      {homePlaylistMenuId === p.id && (
-                        <div className="absolute right-3 top-10 z-[95] w-44 rounded-[12px] border border-white/15 bg-[#16052c] p-1.5 shadow-[0_8px_18px_rgba(0,0,0,0.45)]">
-                          <button
-                            type="button"
-                            className="flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-left text-[14px] text-white/90 hover:bg-white/10 [font-family:var(--font-roboto-condensed)]"
-                            onClick={async () => {
-                              const shareUrl =
-                                typeof window !== "undefined"
-                                  ? `${window.location.origin}/playlists/${p.id}`
-                                  : "";
-                              try {
-                                if (!shareUrl) return;
-                                await navigator.clipboard.writeText(shareUrl);
-                              } catch {
-                                // ignore clipboard failures
-                              }
-                              setHomePlaylistMenuId(null);
-                            }}
-                          >
-                            <FontAwesomeIcon icon={faPaperPlane} className="text-[12px]" />
-                            <span>Share playlist</span>
-                          </button>
-                          <button
-                            type="button"
-                            className="mt-1 flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-left text-[14px] text-white/90 hover:bg-white/10 [font-family:var(--font-roboto-condensed)]"
-                            onClick={() => {
-                              setPlaylistRenameTarget({ id: p.id, name: p.name });
-                              setPlaylistRenameValue(p.name);
-                              setHomePlaylistMenuId(null);
-                            }}
-                          >
-                            <FontAwesomeIcon icon={faPen} className="text-[11px]" />
-                            <span>Rename playlist</span>
-                          </button>
-                          <button
-                            type="button"
-                            className="mt-1 flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-left text-[14px] text-rose-200 hover:bg-rose-500/20 [font-family:var(--font-roboto-condensed)]"
-                            onClick={() => {
-                              setPlaylistDeleteTarget({ id: p.id, name: p.name });
-                              setHomePlaylistMenuId(null);
-                            }}
-                          >
-                            <FontAwesomeIcon icon={faTrash} className="text-[12px]" />
-                            <span>Delete playlist</span>
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </section>
-
-          <section>
             <div className="mb-3">
-              <h2 className="text-[34px] leading-none font-semibold">Shows</h2>
+              <h2 className="text-[24px] leading-none font-semibold [font-family:var(--font-roboto-condensed)]">
+                Shows
+              </h2>
             </div>
 
             <div className="relative mb-3">
@@ -2137,8 +2098,23 @@ export default function HomePage() {
                     setShowTab((prev) => (prev === "favorites" ? "all" : "favorites"))
                   }
                 >
-                  <span>Saved</span>
+                  <span>Favorites</span>
                   <FontAwesomeIcon icon={faBookmark} />
+                </button>
+                <button
+                  type="button"
+                  className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-[12px] transition ${
+                    hideHeardShows
+                      ? "bg-transparent text-white"
+                      : "bg-transparent text-white hover:bg-transparent"
+                  }`}
+                  onClick={() => setHideHeardShows((v) => !v)}
+                >
+                  <span>Hide shows you&apos;ve heard</span>
+                  <FontAwesomeIcon
+                    icon={hideHeardShows ? faToggleOn : faToggleOff}
+                    className={`text-[18px] ${hideHeardShows ? "text-[#5A22C9]" : "text-white/70"}`}
+                  />
                 </button>
               </div>
               <div ref={sortMenuRef} className="relative">
@@ -2208,6 +2184,17 @@ export default function HomePage() {
                     onChange={setShowTypes}
                     minWidthClass="min-w-[102px]"
                     emptyLabel="Show Type"
+                  />
+                  <MultiSelectDropdown
+                    id="albums"
+                    label=""
+                    options={availableAlbums}
+                    value={albums}
+                    onChange={setAlbums}
+                    minWidthClass="min-w-[128px]"
+                    emptyLabel="Discography"
+                    getOptionCount={getDiscographyOptionCount}
+                    getApplyCount={getDiscographyApplyCount}
                   />
                 </div>
               </div>
@@ -2327,6 +2314,7 @@ export default function HomePage() {
                 <div className="grid w-full grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
                   {venueShows.map((s) => {
                     const isFav = favoriteSet.has(s.showKey);
+                    const isHeard = heardSet.has(s.showKey);
                     const clientStats = statsById[s.defaultId];
                     const showLengthSeconds =
                       s.showLengthSeconds ?? clientStats?.showLengthSeconds ?? null;
@@ -2410,7 +2398,7 @@ export default function HomePage() {
                         </button>
 
                         <div className="mt-auto flex justify-center pt-3">
-                          <div className="inline-flex h-[31px] items-center justify-center gap-[10px] rounded-[8px] border border-black/20 bg-black/20 px-3">
+                          <div className="inline-flex min-h-[39px] items-center justify-center gap-[10px] rounded-[8px] border border-black/20 bg-black/20 px-4 py-1">
                             <button
                               type="button"
                               aria-label={isFav ? "Remove favorite show" : "Favorite show"}
@@ -2429,15 +2417,28 @@ export default function HomePage() {
                             <span className="h-[29px] w-px bg-black/30" />
                             <button
                               type="button"
-                              className="inline-flex items-center gap-1 text-[12px] text-white [font-family:var(--font-roboto-condensed)]"
+                              className="inline-flex items-center gap-1 text-[14px] text-white [font-family:var(--font-roboto-condensed)]"
                               onClick={() => {
                                 void playShowFromCard(s);
                               }}
                             >
-                              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-                                <path d="M8 6v12l10-6-10-6Z" />
-                              </svg>
+                              <FontAwesomeIcon icon={faCirclePlay} className="h-4 w-4" />
                               <span>Play</span>
+                            </button>
+                            <span className="h-[29px] w-px bg-black/30" />
+                            <button
+                              type="button"
+                              aria-label={isHeard ? "Mark show as not heard" : "Mark show as heard"}
+                              className={`inline-flex h-[15px] w-[16px] items-center justify-center ${
+                                isHeard ? "text-emerald-300" : "text-white/85"
+                              }`}
+                              onClick={() => toggleHeardShow(s.showKey)}
+                              title={isHeard ? "Mark as not heard" : "Mark as heard"}
+                            >
+                              <FontAwesomeIcon
+                                icon={isHeard ? faCircleCheck : faCircleCheckRegular}
+                                className="h-4 w-4"
+                              />
                             </button>
                           </div>
                         </div>
@@ -2533,7 +2534,7 @@ export default function HomePage() {
                 Delete playlist?
               </div>
               <div className="mt-2 text-[13px] text-white/75">
-                This will permanently delete "{playlistDeleteTarget.name}".
+                This will permanently delete &quot;{playlistDeleteTarget.name}&quot;.
               </div>
               <div className="mt-4 flex items-center justify-end gap-2">
                 <button
@@ -2590,10 +2591,16 @@ export default function HomePage() {
                     <button
                       type="button"
                       className="flex items-center justify-center gap-2 rounded-xl bg-[rgba(48,26,89,0.25)] px-4 py-4 text-base hover:bg-[rgba(72,36,124,0.35)] transition"
-                      onClick={() => toggleFavoriteShow(songSheetTrack.showKey)}
+                      onClick={() => {
+                        if (isCurrentSongLoved) return;
+                        addSongToLovedSongsPlaylist(songSheetTrack);
+                      }}
                     >
-                      <span>{favoriteSet.has(songSheetTrack.showKey) ? "★" : "♡"}</span>
-                      <span>{favoriteSet.has(songSheetTrack.showKey) ? "Favorited show" : "Favorite show"}</span>
+                      <FontAwesomeIcon
+                        icon={isCurrentSongLoved ? faHeart : faHeartRegular}
+                        className={isCurrentSongLoved ? "text-rose-300" : "text-white"}
+                      />
+                      <span>{isCurrentSongLoved ? "Loved song" : "Love song"}</span>
                     </button>
 
                     <button
