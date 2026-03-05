@@ -311,7 +311,7 @@
         {
           "canonicalTitle": "mirage city",
           "variants": [
-            { "title": "Mirage City", "url": "https://archive.org/download/kglw2024-09-08.matrix/kglw2024-09-08t08.flac", "track": "1" },
+            { "title": "Mirage City", "url": "https://archive.org/download/kglw2025-06-08.SBD.flac/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20in%20Bulgaria%20'25%20-%2008%20Mirage%20City%20(Live%20in%20Bulgaria%20'25).flac", "track": "1" },
             { "title": "Mirage City", "url": "https://archive.org/download/kglw2025-06-09.tora.m5/03+-+Mirage+City.flac", "track": "1" }
           ]
         },
@@ -340,7 +340,7 @@
         {
           "canonicalTitle": "hog calling contest",
           "variants": [
-            { "title": "Hog Calling Contest", "url": "https://archive.org/download/kglw2024-09-01.at853/06+Hog+Calling+Contest.flac", "track": "1" }
+            { "title": "Hog Calling Contest", "url": "https://archive.org/download/kglw2025-06-10.SBD.flac/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20in%20Bulgaria%20'25%20-%2036%20Hog%20Calling%20Contest%20(Live%20in%20Bulgaria%20'25).mp3", "track": "1" }
           ]
         },
         {
@@ -354,7 +354,7 @@
         {
           "canonicalTitle": "flight b741",
           "variants": [
-            { "title": "Flight b741", "url": "https://archive.org/download/kglw2024-11-08.Vegas/Flight+b741.flac", "track": "1" },
+            { "title": "Flight b741", "url": "https://archive.org/download/kglw2025-05-24.SBD.flac/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20in%20Barcelona%20'25%20-%2006%20Flight%20b741%20(Live%20in%20Barcelona%20'25).flac", "track": "1" },
             { "title": "Flight b741", "url": "https://archive.org/download/kglw2025-06-09.tora.m5/03+-+Flight+b741.flac", "track": "1" }
           ]
         },
@@ -369,14 +369,14 @@
           "canonicalTitle": "rats in the sky",
           "variants": [
             { "title": "Rats in the Sky", "url": "https://archive.org/download/kglw2024-09-01/07.%20Rats%20in%20the%20Sky.mp3", "track": "1" },
-            { "title": "Rats in the Sky", "url": "https://archive.org/download/kglw2024-11-08.Vegas/Rats+in+the+Sky.flac", "track": "1" }
+            { "title": "Rats in the Sky", "url": "https://archive.org/download/kglw2024-05-23.SBD.flac/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20in%20Barcelona%20'25%20-%2004%20Rats%20In%20The%20Sky%20(Live%20in%20Barcelona%20'25).mp3", "track": "1" }
           ]
         },
         {
           "canonicalTitle": "daily blues",
           "variants": [
             { "title": "Daily Blues", "url": "https://archive.org/download/kglw2024-09-01/08.%20Daily%20Blues.mp3", "track": "1" },
-            { "title": "Daily Blues", "url": "https://archive.org/download/kglw2024-09-08.matrix/kglw2024-09-08t12.flac", "track": "1" },
+            { "title": "Daily Blues", "url": "https://archive.org/download/kglw2025-12-03.Sydney/13.Daily%20Blues.flac", "track": "1" },
             { "title": "Daily Blues", "url": "https://archive.org/download/kglw2025-12-03.Sydney/04+Daily+Blues.flac", "track": "1" }
           ]
         }

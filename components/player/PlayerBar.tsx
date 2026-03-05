@@ -313,6 +313,14 @@ export function PlayerBar() {
     return true;
   }
 
+  function tryRecoverCurrentTrack(audio: HTMLAudioElement | null, failingSrc: string): boolean {
+    if (!audio || !failingSrc) return false;
+    if (tryFormatFallback(audio, failingSrc)) return true;
+    if (tryBackupTrackSource(audio, failingSrc)) return true;
+    if (tryArchiveItemFallback(audio, failingSrc)) return true;
+    return false;
+  }
+
   const [current, setCurrent] = useState(0);
   const [duration, setDuration] = useState(0);
   const [minimized, setMinimized] = useState(false);
@@ -356,6 +364,14 @@ export function PlayerBar() {
     const timeout = setTimeout(() => {
       if (!playingRef.current) return;
       if (srcRef.current !== src) return;
+      const audio = audioRef.current;
+      const failingSrc = getFailingSrc(audio, src);
+      if (tryRecoverCurrentTrack(audio, failingSrc)) {
+        // Restart buffering watchdog for the newly attempted source.
+        setIsBuffering(false);
+        requestAnimationFrame(() => setIsBuffering(true));
+        return;
+      }
       setIsBuffering(false);
       next?.();
     }, 12000);
@@ -391,9 +407,7 @@ export function PlayerBar() {
       setIsBuffering(true);
       audio.play().catch((err) => {
         const failingSrc = getFailingSrc(audio, src);
-        if (tryFormatFallback(audio, failingSrc)) return;
-        if (tryBackupTrackSource(audio, failingSrc)) return;
-        if (tryArchiveItemFallback(audio, failingSrc)) return;
+        if (tryRecoverCurrentTrack(audio, failingSrc)) return;
         setIsBuffering(false);
         console.error("play() blocked/failed:", err);
         next?.();
@@ -426,9 +440,7 @@ export function PlayerBar() {
       setIsBuffering(true);
       audio.play().catch((err) => {
         const failingSrc = getFailingSrc(audio, src);
-        if (tryFormatFallback(audio, failingSrc)) return;
-        if (tryBackupTrackSource(audio, failingSrc)) return;
-        if (tryArchiveItemFallback(audio, failingSrc)) return;
+        if (tryRecoverCurrentTrack(audio, failingSrc)) return;
         setIsBuffering(false);
         console.error("play() blocked/failed:", err);
         next?.();
@@ -501,9 +513,7 @@ export function PlayerBar() {
           const a = audioRef.current;
           if (!a || !src) return;
           const failingSrc = getFailingSrc(a, src);
-          if (tryFormatFallback(a, failingSrc)) return;
-          if (tryBackupTrackSource(a, failingSrc)) return;
-          if (tryArchiveItemFallback(a, failingSrc)) return;
+          if (tryRecoverCurrentTrack(a, failingSrc)) return;
           setIsBuffering(false);
           console.error("AUDIO ERROR", a?.error, a?.src);
           next?.();
