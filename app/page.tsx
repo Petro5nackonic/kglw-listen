@@ -610,6 +610,12 @@ function MultiSelectDropdown(props: {
                 const contextualCount = getOptionCount?.(opt.value, draft);
                 const displayCount =
                   typeof contextualCount === "number" ? contextualCount : opt.count;
+                const visibleCount =
+                  typeof displayCount === "number"
+                    ? displayCount
+                    : typeof opt.count === "number"
+                      ? opt.count
+                      : 0;
                 const disabled = !checked && typeof displayCount === "number" && displayCount <= 0;
                 return (
                   <button
@@ -640,11 +646,9 @@ function MultiSelectDropdown(props: {
                         {opt.value}
                       </span>
                     </span>
-                    {typeof displayCount === "number" ? (
-                      <span className="text-[16px] text-white [font-family:var(--font-roboto-condensed)]">
-                        {displayCount}
-                      </span>
-                    ) : null}
+                    <span className="text-[16px] text-white [font-family:var(--font-roboto-condensed)]">
+                      {visibleCount}
+                    </span>
                   </button>
                 );
               })}
@@ -794,6 +798,18 @@ export default function HomePage() {
     return `/api/ia/shows?${params.toString()}`;
   }
 
+  function buildAlbumFacetsUrl() {
+    const params = new URLSearchParams();
+    params.set("page", "1");
+    for (const y of years) params.append("year", y);
+    for (const c of continents) params.append("continent", c);
+    for (const t of showTypes) params.append("showType", t);
+    if (debouncedQuery) params.set("query", debouncedQuery);
+    params.set("sort", sort);
+    params.set("includeAlbumFacets", "1");
+    return `/api/ia/shows?${params.toString()}`;
+  }
+
   function canUseHomeCacheForCurrentFilters() {
     return (
       years.length === 0 &&
@@ -831,13 +847,17 @@ export default function HomePage() {
       const res = await fetchShowsWithRetry(buildUrl(p));
       if (!res) throw new Error("Request failed");
       const data = (await res.json()) as ShowsResponse;
+      const hasAlbumFacetData =
+        Object.keys(data.facets?.albumShowKeys || {}).length > 0;
 
       if (data.facets?.years) setYearFacet(data.facets.years);
       if (data.facets?.continents) setContinentFacet(data.facets.continents);
       if (data.facets?.showTypes) setShowTypeFacet(data.facets.showTypes);
-      if (data.facets?.albums) setAlbumFacet(data.facets.albums);
-      setAlbumShowKeysFacet(data.facets?.albumShowKeys || {});
-      setAlbumUniverseCount(Number(data.facets?.albumUniverseCount || 0));
+      if (hasAlbumFacetData) {
+        if (data.facets?.albums) setAlbumFacet(data.facets.albums);
+        setAlbumShowKeysFacet(data.facets?.albumShowKeys || {});
+        setAlbumUniverseCount(Number(data.facets?.albumUniverseCount || 0));
+      }
       if (mode === "replace") {
         setSongShows(data.song?.items || []);
         setSongTotal(data.song?.total || 0);
@@ -913,6 +933,8 @@ export default function HomePage() {
           validItems.length > 0 &&
           canUseHomeCacheForCurrentFilters()
         ) {
+          const hasAlbumFacetData =
+            Object.keys(parsed.facets?.albumShowKeys || {}).length > 0;
           hydrated = true;
           setShows(validItems);
           setHasMore(Boolean(parsed.hasMore));
@@ -923,9 +945,11 @@ export default function HomePage() {
           if (parsed.facets?.years) setYearFacet(parsed.facets.years);
           if (parsed.facets?.continents) setContinentFacet(parsed.facets.continents);
           if (parsed.facets?.showTypes) setShowTypeFacet(parsed.facets.showTypes);
-      if (parsed.facets?.albums) setAlbumFacet(parsed.facets.albums);
-          setAlbumShowKeysFacet(parsed.facets?.albumShowKeys || {});
-          setAlbumUniverseCount(Number(parsed.facets?.albumUniverseCount || 0));
+          if (hasAlbumFacetData) {
+            if (parsed.facets?.albums) setAlbumFacet(parsed.facets.albums);
+            setAlbumShowKeysFacet(parsed.facets?.albumShowKeys || {});
+            setAlbumUniverseCount(Number(parsed.facets?.albumUniverseCount || 0));
+          }
         }
       }
     } catch {
@@ -1044,6 +1068,29 @@ export default function HomePage() {
     loadPage(1, "replace");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [years.join("|"), continents.join("|"), showTypes.join("|"), albums.join("|"), sort]);
+
+  useEffect(() => {
+    let alive = true;
+    async function loadAlbumFacets() {
+      if (albums.length > 0) return;
+      try {
+        const res = await fetchShowsWithRetry(buildAlbumFacetsUrl());
+        if (!res || !alive) return;
+        const data = (await res.json()) as ShowsResponse;
+        if (!alive) return;
+        if (data.facets?.albums) setAlbumFacet(data.facets.albums);
+        setAlbumShowKeysFacet(data.facets?.albumShowKeys || {});
+        setAlbumUniverseCount(Number(data.facets?.albumUniverseCount || 0));
+      } catch {
+        // Keep current facet state on prefetch failure.
+      }
+    }
+    void loadAlbumFacets();
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [years.join("|"), continents.join("|"), showTypes.join("|"), debouncedQuery, sort, albums.join("|")]);
 
   useEffect(() => {
     let alive = true;
@@ -1170,9 +1217,13 @@ export default function HomePage() {
     }
     return map;
   }, [albumShowKeysFacet]);
+  const hasComputedAlbumFacetData = useMemo(
+    () => Object.keys(albumShowKeysFacet).length > 0,
+    [albumShowKeysFacet],
+  );
   const getDiscographyOptionCount = useMemo(
     () => (optionValue: string, draft: string[]) => {
-      if (albumShowKeySets.size === 0) return undefined;
+      if (!hasComputedAlbumFacetData || albumShowKeySets.size === 0) return undefined;
       const optionKey = String(optionValue || "").toLowerCase();
       const optionSet = albumShowKeySets.get(optionKey);
       if (!optionSet) return undefined;
@@ -1187,10 +1238,11 @@ export default function HomePage() {
       }
       return countIntersection(sets);
     },
-    [albumShowKeySets],
+    [albumShowKeySets, hasComputedAlbumFacetData],
   );
   const getDiscographyApplyCount = useMemo(
     () => (draft: string[]) => {
+      if (!hasComputedAlbumFacetData) return venueTotal;
       const selected = draft.map((v) => String(v || "").toLowerCase());
       if (selected.length === 0) {
         return albumUniverseCount > 0 ? albumUniverseCount : venueTotal;
@@ -1203,7 +1255,7 @@ export default function HomePage() {
       }
       return countIntersection(sets);
     },
-    [albumShowKeySets, albumUniverseCount, venueTotal],
+    [albumShowKeySets, albumUniverseCount, hasComputedAlbumFacetData, venueTotal],
   );
 
   const sortedSongShows = useMemo(() => {
@@ -2101,21 +2153,6 @@ export default function HomePage() {
                   <span>Favorites</span>
                   <FontAwesomeIcon icon={faBookmark} />
                 </button>
-                <button
-                  type="button"
-                  className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-[12px] transition ${
-                    hideHeardShows
-                      ? "bg-transparent text-white"
-                      : "bg-transparent text-white hover:bg-transparent"
-                  }`}
-                  onClick={() => setHideHeardShows((v) => !v)}
-                >
-                  <span>Hide shows you&apos;ve heard</span>
-                  <FontAwesomeIcon
-                    icon={hideHeardShows ? faToggleOn : faToggleOff}
-                    className={`text-[18px] ${hideHeardShows ? "text-[#5A22C9]" : "text-white/70"}`}
-                  />
-                </button>
               </div>
               <div ref={sortMenuRef} className="relative">
                 <button
@@ -2201,6 +2238,23 @@ export default function HomePage() {
             )}
 
             <div className="mb-3 text-[12px] font-medium text-white">{venueTotal} Shows</div>
+            <div className="mb-3">
+              <button
+                type="button"
+                className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-[12px] transition ${
+                  hideHeardShows
+                    ? "bg-transparent text-white"
+                    : "bg-transparent text-white hover:bg-transparent"
+                }`}
+                onClick={() => setHideHeardShows((v) => !v)}
+              >
+                <span>Hide shows you&apos;ve heard</span>
+                <FontAwesomeIcon
+                  icon={hideHeardShows ? faToggleOn : faToggleOff}
+                  className={`text-[18px] ${hideHeardShows ? "text-[#5A22C9]" : "text-white/70"}`}
+                />
+              </button>
+            </div>
 
             {error && (
               <div className="mb-3 rounded-xl border border-red-400/30 bg-red-600/15 p-3 text-sm text-red-100">

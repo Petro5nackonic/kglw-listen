@@ -1400,6 +1400,7 @@ export async function GET(req: NextRequest) {
   const query = (sp.get("query") || sp.get("q") || "").trim();
   const sort = (sp.get("sort") || "newest").trim().toLowerCase();
   const fastMode = sp.get("fast") === "1";
+  const includeAlbumFacets = sp.get("includeAlbumFacets") === "1";
 
   const yearFilters = years.filter((y) => /^\d{4}$/.test(y));
   const continentFilters = continents.filter((c) => c && c !== "All");
@@ -1420,6 +1421,7 @@ export async function GET(req: NextRequest) {
     albums: albumFilters,
     query: query.toLowerCase(),
     sort,
+    includeAlbumFacets,
   });
   const cached = showsResponseCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
@@ -1658,7 +1660,7 @@ export async function GET(req: NextRequest) {
   const searchedShowsWithoutAlbums = filterByShowTypes(searchedShowsForFacets, showTypes);
   const showsForFacetCount = searchedShowsWithoutAlbums;
   const scopedUniverseKeys = new Set(showsForFacetCount.map((s) => s.showKey));
-  const shouldComputeAlbumFacets = albumFilters.length > 0;
+  const shouldComputeAlbumFacets = includeAlbumFacets || albumFilters.length > 0;
   const albumKeySets = shouldComputeAlbumFacets && DISCOGRAPHY_ALBUM_TITLES.length > 0
     ? await withConcurrency(
         DISCOGRAPHY_ALBUM_TITLES,
