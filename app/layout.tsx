@@ -4,6 +4,7 @@ import { PlayerBar } from "@/components/player/PlayerBar";
 import { BottomNav } from "@/components/navigation/BottomNav";
 import { PrebuiltPlaylistsSync } from "@/components/playlists/PrebuiltPlaylistsSync";
 import { config } from "@fortawesome/fontawesome-svg-core";
+import type { Viewport } from "next";
 import { Roboto, Roboto_Condensed } from "next/font/google";
 
 config.autoAddCss = false;
@@ -23,6 +24,10 @@ const robotoCondensed = Roboto_Condensed({
 export const metadata = {
   title: "KGLW-Listen",
   description: "Live archive player for King Gizzard & The Lizard Wizard",
+};
+
+export const viewport: Viewport = {
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

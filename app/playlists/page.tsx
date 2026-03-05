@@ -5,6 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
+  faCheck,
+  faChevronDown,
   faCirclePlay,
   faEllipsisVertical,
   faPaperPlane,
@@ -94,6 +96,15 @@ function parseTrackNum(t?: string): number {
   return m ? Number(m[1]) : Number.POSITIVE_INFINITY;
 }
 
+const PLAYLIST_SORT_OPTIONS = [
+  { value: "date_added", label: "Date Added" },
+  { value: "updated", label: "Updated" },
+  { value: "title", label: "Title" },
+  { value: "duration", label: "Duration" },
+] as const;
+
+type PlaylistSortValue = (typeof PLAYLIST_SORT_OPTIONS)[number]["value"];
+
 export default function PlaylistsPage() {
   const router = useRouter();
   const setQueue = usePlayer((s) => s.setQueue);
@@ -105,11 +116,47 @@ export default function PlaylistsPage() {
   const [playlistMenuId, setPlaylistMenuId] = useState<string | null>(null);
   const [requestedPlaylistId, setRequestedPlaylistId] = useState<string | null>(null);
   const [clientHydrated, setClientHydrated] = useState(false);
+  const [sortBy, setSortBy] = useState<PlaylistSortValue>("date_added");
+  const [sortMenuOpen, setSortMenuOpen] = useState(false);
+  const [pageMenuOpen, setPageMenuOpen] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [selectedPlaylistIds, setSelectedPlaylistIds] = useState<string[]>([]);
 
   const userPlaylists = useMemo(
     () => playlists.filter((p) => p.source !== "prebuilt"),
     [playlists],
   );
+  const selectedSet = useMemo(() => new Set(selectedPlaylistIds), [selectedPlaylistIds]);
+  const sortLabel = useMemo(
+    () => PLAYLIST_SORT_OPTIONS.find((opt) => opt.value === sortBy)?.label || "Date Added",
+    [sortBy],
+  );
+  const playlistRows = useMemo(() => {
+    const rows = userPlaylists.map((p) => {
+      const versions = p.slots.reduce((sum, slot) => sum + slot.variants.length, 0);
+      const chainCount = new Set(p.slots.map((s) => s.linkGroupId).filter(Boolean)).size;
+      const totalSeconds = p.slots.reduce(
+        (sum, slot) => sum + (parseLengthToSeconds(slot.variants[0]?.track.length) ?? 0),
+        0,
+      );
+      return {
+        playlist: p,
+        versions,
+        chainCount,
+        totalSeconds,
+        duration: formatShowLength(totalSeconds),
+      };
+    });
+    return rows.sort((a, b) => {
+      if (sortBy === "title") return a.playlist.name.localeCompare(b.playlist.name);
+      if (sortBy === "updated") return b.playlist.updatedAt - a.playlist.updatedAt;
+      if (sortBy === "duration") {
+        if (b.totalSeconds !== a.totalSeconds) return b.totalSeconds - a.totalSeconds;
+        return a.playlist.name.localeCompare(b.playlist.name);
+      }
+      return b.playlist.createdAt - a.playlist.createdAt;
+    });
+  }, [userPlaylists, sortBy]);
 
   useEffect(() => {
     setClientHydrated(true);
@@ -117,6 +164,11 @@ export default function PlaylistsPage() {
   useEffect(() => {
     if (!playerLoading) setRequestedPlaylistId(null);
   }, [playerLoading]);
+  useEffect(() => {
+    setSelectedPlaylistIds((prev) =>
+      prev.filter((id) => userPlaylists.some((playlist) => playlist.id === id)),
+    );
+  }, [userPlaylists]);
 
   async function playPlaylist(playlistId: string) {
     const playlist = userPlaylists.find((p) => p.id === playlistId);
@@ -144,29 +196,96 @@ export default function PlaylistsPage() {
     setQueue(queue, 0);
     logPlayedPlaylist({ playlistId, playlistName: playlist.name });
   }
+  function toggleSelectPlaylist(playlistId: string) {
+    setSelectedPlaylistIds((prev) =>
+      prev.includes(playlistId)
+        ? prev.filter((id) => id !== playlistId)
+        : [...prev, playlistId],
+    );
+  }
 
   return (
     <main className="min-h-screen bg-[#080017] text-white">
-      <div className="relative h-[170px] w-full overflow-hidden">
-        <div className="absolute inset-0 bg-linear-to-b from-[#17003a] via-[#110028] to-[#080017]" />
-        <div className="absolute inset-x-0 top-0 mx-auto w-full max-w-md px-6 pt-8">
-          <div className="flex items-center justify-between">
-            <Link href="/" className="text-white/80 hover:text-white text-lg">
-              ←
-            </Link>
-            <span className="text-xs tracking-[0.24em] text-white/55 uppercase">
-              Setlist
-            </span>
-          </div>
-          <div className="mt-5 text-center">
-            <div className="text-[28px] font-medium tracking-tight">Playlists</div>
+      <div className="mx-auto w-full max-w-md px-6 pb-8 pt-6">
+        <div className="mb-4 flex items-center justify-between">
+          <h1 className="text-[24px] font-semibold [font-family:var(--font-roboto-condensed)]">
+            Playlists
+          </h1>
+          <div className="flex items-center gap-2">
+            <div className="relative z-20">
+              <button
+                id="playlist-sort"
+                type="button"
+                aria-label="Sort playlists"
+                aria-haspopup="menu"
+                aria-expanded={sortMenuOpen}
+                className="inline-flex items-center gap-2 rounded-full border border-white px-3 py-2 text-[12px] text-white"
+                onClick={() => {
+                  setSortMenuOpen((v) => !v);
+                  setPageMenuOpen(false);
+                }}
+              >
+                <span>{sortLabel}</span>
+                <FontAwesomeIcon icon={faChevronDown} />
+              </button>
+              {sortMenuOpen && (
+                <div className="absolute right-0 top-9 z-30 w-44 rounded-[12px] border border-white/15 bg-[#16052c] p-1.5 shadow-[0_8px_18px_rgba(0,0,0,0.45)]">
+                  {PLAYLIST_SORT_OPTIONS.map((opt) => {
+                    const active = sortBy === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        className={`flex w-full items-center rounded-[10px] px-2.5 py-2 text-left text-[14px] [font-family:var(--font-roboto-condensed)] ${
+                          active ? "bg-white/15 text-white" : "text-white/90 hover:bg-white/10"
+                        }`}
+                        onClick={() => {
+                          setSortBy(opt.value);
+                          setSortMenuOpen(false);
+                        }}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            <div className="relative z-20">
+              <button
+                type="button"
+                aria-label="Playlist page options"
+                className="text-[20px] text-white/90"
+                onClick={() => {
+                  setPageMenuOpen((v) => !v);
+                  setSortMenuOpen(false);
+                }}
+              >
+                <FontAwesomeIcon icon={faEllipsisVertical} />
+              </button>
+              {pageMenuOpen && (
+                <div className="absolute right-0 top-9 z-30 w-40 rounded-[12px] border border-white/15 bg-[#16052c] p-1.5 shadow-[0_8px_18px_rgba(0,0,0,0.45)]">
+                  <button
+                    type="button"
+                    disabled={userPlaylists.length === 0}
+                    className="flex w-full items-center rounded-[10px] px-2.5 py-2 text-left text-[14px] text-white/90 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40 [font-family:var(--font-roboto-condensed)]"
+                    onClick={() => {
+                      if (userPlaylists.length === 0) return;
+                      setEditMode((prev) => !prev);
+                      setSelectedPlaylistIds([]);
+                      setPlaylistMenuId(null);
+                      setPageMenuOpen(false);
+                    }}
+                  >
+                    {editMode ? "Done editing" : "Edit"}
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
-      </div>
-
-      <div className="mx-auto -mt-3 max-w-md px-6 pb-8">
         {userPlaylists.length === 0 ? (
-          <div className="flex min-h-[calc(100vh-190px)] flex-col items-center justify-center gap-3 text-center">
+          <div className="flex min-h-[calc(100vh-130px)] flex-col items-center justify-center gap-3 text-center">
             <div className="text-[18px] text-white/80 [font-family:var(--font-roboto-condensed)]">
               Create your first playlist!
             </div>
@@ -188,6 +307,17 @@ export default function PlaylistsPage() {
           </div>
         ) : (
           <section>
+            {(sortMenuOpen || pageMenuOpen) && (
+              <button
+                type="button"
+                aria-label="Close menus"
+                className="fixed inset-0 z-10"
+                onClick={() => {
+                  setSortMenuOpen(false);
+                  setPageMenuOpen(false);
+                }}
+              />
+            )}
             {playlistMenuId && (
               <button
                 type="button"
@@ -198,14 +328,7 @@ export default function PlaylistsPage() {
             )}
 
             <div className="space-y-2 text-left">
-              {userPlaylists.map((p) => {
-                const versions = p.slots.reduce((sum, slot) => sum + slot.variants.length, 0);
-                const chainCount = new Set(p.slots.map((s) => s.linkGroupId).filter(Boolean)).size;
-                const totalSeconds = p.slots.reduce(
-                  (sum, slot) => sum + (parseLengthToSeconds(slot.variants[0]?.track.length) ?? 0),
-                  0,
-                );
-                const duration = formatShowLength(totalSeconds);
+              {playlistRows.map(({ playlist: p, versions, chainCount, duration }) => {
                 return (
                   <div
                     key={p.id}
@@ -215,66 +338,113 @@ export default function PlaylistsPage() {
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex min-w-0 flex-1 items-center gap-3">
-                        <Link
-                          href={clientHydrated ? `/playlists/${p.id}` : "/playlists"}
-                          className="min-w-0 flex-1"
-                        >
-                          <div className="truncate text-[18px] font-medium text-white [font-family:var(--font-roboto-condensed)]">
-                            {p.name}
-                          </div>
-                          <div className="mt-1 flex flex-wrap items-center gap-x-[6px] text-[12px] font-medium text-white/70 [font-family:var(--font-roboto-condensed)]">
-                            <span>
-                              {p.slots.length} Track{p.slots.length === 1 ? "" : "s"}
-                            </span>
-                            <span className="size-[3px] rounded-full bg-white/60" />
-                            <span>
-                              {versions} Version{versions === 1 ? "" : "s"}
-                            </span>
-                            <span className="size-[3px] rounded-full bg-white/60" />
-                            <span>
-                              {chainCount} Chain{chainCount === 1 ? "" : "s"}
-                            </span>
-                            {duration ? (
-                              <>
-                                <span className="size-[3px] rounded-full bg-white/60" />
-                                <span>{duration}</span>
-                              </>
-                            ) : null}
-                          </div>
-                        </Link>
+                        {editMode ? (
+                          <button
+                            type="button"
+                            aria-label={selectedSet.has(p.id) ? `Deselect ${p.name}` : `Select ${p.name}`}
+                            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${
+                              selectedSet.has(p.id)
+                                ? "border-rose-400 bg-rose-500 text-white"
+                                : "border-white/45 text-transparent"
+                            }`}
+                            onClick={() => toggleSelectPlaylist(p.id)}
+                          >
+                            <FontAwesomeIcon icon={faCheck} className="text-[11px]" />
+                          </button>
+                        ) : null}
+                        {editMode ? (
+                          <button
+                            type="button"
+                            className="min-w-0 flex-1 text-left"
+                            onClick={() => toggleSelectPlaylist(p.id)}
+                          >
+                            <div className="truncate text-[18px] font-medium text-white [font-family:var(--font-roboto-condensed)]">
+                              {p.name}
+                            </div>
+                            <div className="mt-1 flex flex-wrap items-center gap-x-[6px] text-[12px] font-medium text-white/70 [font-family:var(--font-roboto-condensed)]">
+                              <span>
+                                {p.slots.length} Track{p.slots.length === 1 ? "" : "s"}
+                              </span>
+                              <span className="size-[3px] rounded-full bg-white/60" />
+                              <span>
+                                {versions} Version{versions === 1 ? "" : "s"}
+                              </span>
+                              <span className="size-[3px] rounded-full bg-white/60" />
+                              <span>
+                                {chainCount} Chain{chainCount === 1 ? "" : "s"}
+                              </span>
+                              {duration ? (
+                                <>
+                                  <span className="size-[3px] rounded-full bg-white/60" />
+                                  <span>{duration}</span>
+                                </>
+                              ) : null}
+                            </div>
+                          </button>
+                        ) : (
+                          <Link
+                            href={clientHydrated ? `/playlists/${p.id}` : "/playlists"}
+                            className="min-w-0 flex-1"
+                          >
+                            <div className="truncate text-[18px] font-medium text-white [font-family:var(--font-roboto-condensed)]">
+                              {p.name}
+                            </div>
+                            <div className="mt-1 flex flex-wrap items-center gap-x-[6px] text-[12px] font-medium text-white/70 [font-family:var(--font-roboto-condensed)]">
+                              <span>
+                                {p.slots.length} Track{p.slots.length === 1 ? "" : "s"}
+                              </span>
+                              <span className="size-[3px] rounded-full bg-white/60" />
+                              <span>
+                                {versions} Version{versions === 1 ? "" : "s"}
+                              </span>
+                              <span className="size-[3px] rounded-full bg-white/60" />
+                              <span>
+                                {chainCount} Chain{chainCount === 1 ? "" : "s"}
+                              </span>
+                              {duration ? (
+                                <>
+                                  <span className="size-[3px] rounded-full bg-white/60" />
+                                  <span>{duration}</span>
+                                </>
+                              ) : null}
+                            </div>
+                          </Link>
+                        )}
                       </div>
-                      <div className="ml-4 flex shrink-0 items-center gap-4 text-white">
-                        <button
-                          type="button"
-                          aria-label={`Play playlist ${p.name}`}
-                          className="text-[26px] text-white"
-                          onClick={async () => {
-                            setRequestedPlaylistId(p.id);
-                            try {
-                              await playPlaylist(p.id);
-                            } finally {
-                              if (!usePlayer.getState().loading) {
-                                setRequestedPlaylistId((prev) => (prev === p.id ? null : prev));
+                      {!editMode ? (
+                        <div className="ml-4 flex shrink-0 items-center gap-4 text-white">
+                          <button
+                            type="button"
+                            aria-label={`Play playlist ${p.name}`}
+                            className="text-[26px] text-white"
+                            onClick={async () => {
+                              setRequestedPlaylistId(p.id);
+                              try {
+                                await playPlaylist(p.id);
+                              } finally {
+                                if (!usePlayer.getState().loading) {
+                                  setRequestedPlaylistId((prev) => (prev === p.id ? null : prev));
+                                }
                               }
-                            }
-                          }}
-                        >
-                          <FontAwesomeIcon
-                            icon={requestedPlaylistId === p.id ? faSpinner : faCirclePlay}
-                            className={requestedPlaylistId === p.id ? "animate-spin" : ""}
-                          />
-                        </button>
-                        <button
-                          type="button"
-                          aria-label="Playlist options"
-                          className="text-[20px] text-white/90"
-                          onClick={() => setPlaylistMenuId((prev) => (prev === p.id ? null : p.id))}
-                        >
-                          <FontAwesomeIcon icon={faEllipsisVertical} />
-                        </button>
-                      </div>
+                            }}
+                          >
+                            <FontAwesomeIcon
+                              icon={requestedPlaylistId === p.id ? faSpinner : faCirclePlay}
+                              className={requestedPlaylistId === p.id ? "animate-spin" : ""}
+                            />
+                          </button>
+                          <button
+                            type="button"
+                            aria-label="Playlist options"
+                            className="text-[20px] text-white/90"
+                            onClick={() => setPlaylistMenuId((prev) => (prev === p.id ? null : p.id))}
+                          >
+                            <FontAwesomeIcon icon={faEllipsisVertical} />
+                          </button>
+                        </div>
+                      ) : null}
                     </div>
-                    {playlistMenuId === p.id && (
+                    {!editMode && playlistMenuId === p.id && (
                       <div className="absolute right-3 top-10 z-[95] w-44 rounded-[12px] border border-white/15 bg-[#16052c] p-1.5 shadow-[0_8px_18px_rgba(0,0,0,0.45)]">
                         <button
                           type="button"
@@ -327,6 +497,34 @@ export default function PlaylistsPage() {
                 );
               })}
             </div>
+            {editMode && selectedPlaylistIds.length > 0 ? (
+              <div className="pointer-events-none fixed inset-x-0 bottom-[calc(64px+env(safe-area-inset-bottom))] z-[96] px-6">
+                <div className="mx-auto w-full max-w-md">
+                  <button
+                    type="button"
+                    className="pointer-events-auto w-full rounded-[14px] bg-rose-600 px-4 py-3 text-[14px] font-semibold text-white shadow-[0_10px_20px_rgba(0,0,0,0.35)] hover:bg-rose-500"
+                    onClick={() => {
+                      if (
+                        !confirm(
+                          `Delete ${selectedPlaylistIds.length} selected playlist${
+                            selectedPlaylistIds.length === 1 ? "" : "s"
+                          }?`,
+                        )
+                      ) {
+                        return;
+                      }
+                      for (const id of selectedPlaylistIds) {
+                        deletePlaylist(id);
+                      }
+                      setSelectedPlaylistIds([]);
+                      setEditMode(false);
+                    }}
+                  >
+                    Delete {selectedPlaylistIds.length} selected
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </section>
         )}
       </div>
