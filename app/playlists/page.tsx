@@ -121,6 +121,8 @@ export default function PlaylistsPage() {
   const [sortBy, setSortBy] = useState<PlaylistSortValue>("date_added");
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const [pageMenuOpen, setPageMenuOpen] = useState(false);
+  const [showCreatePlaylistDialog, setShowCreatePlaylistDialog] = useState(false);
+  const [newPlaylistName, setNewPlaylistName] = useState("");
   const [editMode, setEditMode] = useState(false);
   const [selectedPlaylistIds, setSelectedPlaylistIds] = useState<string[]>([]);
 
@@ -214,12 +216,17 @@ export default function PlaylistsPage() {
     );
   }
 
-  function createAndOpenPlaylist() {
+  function openCreatePlaylistDialog() {
     const suggested = nextDefaultPlaylistName(playlists.map((pl) => pl.name));
-    const id = createPlaylist(suggested);
-    router.push(
-      `/playlists/${encodeURIComponent(id)}?rename=1&suggested=${encodeURIComponent(suggested)}`,
-    );
+    setNewPlaylistName(suggested);
+    setShowCreatePlaylistDialog(true);
+  }
+
+  function createAndOpenPlaylist() {
+    const nextName = newPlaylistName.trim() || nextDefaultPlaylistName(playlists.map((pl) => pl.name));
+    const id = createPlaylist(nextName);
+    setShowCreatePlaylistDialog(false);
+    router.push(`/playlists/${encodeURIComponent(id)}`);
   }
 
   return (
@@ -277,7 +284,7 @@ export default function PlaylistsPage() {
               type="button"
               aria-label="Create playlist"
               className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white text-[14px] text-white"
-              onClick={createAndOpenPlaylist}
+              onClick={openCreatePlaylistDialog}
             >
               <FontAwesomeIcon icon={faPlus} />
             </button>
@@ -322,7 +329,7 @@ export default function PlaylistsPage() {
             <button
               type="button"
               className="mx-auto inline-flex w-fit items-center justify-center rounded-[16px] border-2 border-[#5a22c9] bg-[#5a22c9] px-6 py-3 text-white transition hover:bg-[#6a33d9]"
-              onClick={createAndOpenPlaylist}
+              onClick={openCreatePlaylistDialog}
             >
               <div className="text-[18px] font-medium text-white [font-family:var(--font-roboto-condensed)]">
                 Create a playlist
@@ -558,6 +565,50 @@ export default function PlaylistsPage() {
           </section>
         )}
       </div>
+
+      {showCreatePlaylistDialog && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/55 px-6"
+          onClick={() => setShowCreatePlaylistDialog(false)}
+        >
+          <div
+            className="w-full max-w-[361px] rounded-xl border border-white/15 bg-[#120326] p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-base font-medium">Create new playlist</div>
+            <div className="mt-1 text-xs text-white/65">
+              Name your playlist.
+            </div>
+
+            <input
+              type="text"
+              value={newPlaylistName}
+              onChange={(e) => setNewPlaylistName(e.target.value)}
+              placeholder="New playlist"
+              maxLength={60}
+              autoFocus
+              className="mt-3 w-full rounded-lg border border-white/20 bg-black/25 px-3 py-2 text-sm text-white placeholder:text-white/40 outline-none focus:border-white/45"
+            />
+
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                className="rounded-lg border border-white/15 bg-white/8 px-3 py-2 text-sm hover:bg-white/12 transition"
+                onClick={() => setShowCreatePlaylistDialog(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="rounded-lg border border-fuchsia-300/45 bg-fuchsia-500/20 px-3 py-2 text-sm hover:bg-fuchsia-500/30 transition"
+                onClick={createAndOpenPlaylist}
+              >
+                Create
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

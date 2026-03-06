@@ -20,6 +20,7 @@ type PlaylistsState = {
   ensureMindFuzzLiveCompPlaylist: () => Promise<void>;
   ensureRequestedAlbumPlaylists: () => Promise<void>;
   seedDefaultAlbumPlaylists: () => Promise<void>;
+  duplicatePlaylistAsUser: (playlistId: string, name?: string) => string | null;
   renamePlaylist: (playlistId: string, name: string) => void;
   deletePlaylist: (playlistId: string) => void;
 
@@ -27,6 +28,7 @@ type PlaylistsState = {
   fuseTrack: (playlistId: string, track: Track) => "added" | "fused" | "exists";
   removeTrack: (playlistId: string, playlistSlotId: string) => void;
   removeTrackVariantByUrl: (playlistId: string, trackUrl: string) => boolean;
+  setSlotVariants: (playlistId: string, playlistSlotId: string, tracks: Track[]) => void;
   moveTrack: (playlistId: string, fromIndex: number, toIndex: number) => void;
   linkWithNext: (playlistId: string, slotId: string) => void;
   unlinkSlot: (playlistId: string, slotId: string) => void;
@@ -587,6 +589,53 @@ export const usePlaylists = create<PlaylistsState>()(
         };
 
         set({ playlists: [playlist, ...get().playlists] });
+        return id;
+      },
+
+      duplicatePlaylistAsUser: (playlistId, name) => {
+        const source = get().playlists.find((p) => p.id === playlistId);
+        if (!source) return null;
+        const now = Date.now();
+        const id = safeUUID();
+        const normalizedName = normalizeName(name || `${source.name} Copy`) || `${source.name} Copy`;
+        const groupIdMap = new Map<string, string>();
+        const slots = source.slots.map((slot, slotIdx) => {
+          const mappedGroupId = slot.linkGroupId
+            ? (groupIdMap.get(slot.linkGroupId) ||
+              (() => {
+                const nextId = safeUUID();
+                groupIdMap.set(slot.linkGroupId as string, nextId);
+                return nextId;
+              })())
+            : undefined;
+          return {
+            id: safeUUID(),
+            canonicalTitle: slot.canonicalTitle,
+            // Preserve source ordering when rendering by keeping deterministic timestamps.
+            addedAt: now + slotIdx,
+            updatedAt: now + slotIdx,
+            linkGroupId: mappedGroupId,
+            chainOrder: slot.chainOrder,
+            variants: slot.variants.map((variant, variantIdx) => ({
+              id: safeUUID(),
+              addedAt: now + slotIdx + variantIdx,
+              track: {
+                ...variant.track,
+                playlistId: undefined,
+                playlistSource: undefined,
+              },
+            })),
+          };
+        });
+        const duplicate: Playlist = {
+          id,
+          name: normalizedName,
+          createdAt: now,
+          updatedAt: now,
+          source: "user",
+          slots,
+        };
+        set({ playlists: [duplicate, ...get().playlists] });
         return id;
       },
 
@@ -1634,6 +1683,54 @@ export const usePlaylists = create<PlaylistsState>()(
           }),
         });
         return removed;
+      },
+      setSlotVariants: (playlistId, playlistSlotId, tracks) => {
+        const cleaned = Array.isArray(tracks)
+          ? tracks.filter((track) => Boolean(String(track?.url || "").trim()))
+          : [];
+        const deduped: Track[] = [];
+        const seenUrls = new Set<string>();
+        for (const track of cleaned) {
+          const url = String(track.url || "").trim();
+          if (!url || seenUrls.has(url)) continue;
+          seenUrls.add(url);
+          deduped.push(track);
+        }
+        set({
+          playlists: get().playlists.map((p) => {
+            if (p.id !== playlistId) return p;
+            const now = Date.now();
+            const targetIdx = p.slots.findIndex((slot) => slot.id === playlistSlotId);
+            if (targetIdx < 0) return p;
+
+            if (deduped.length === 0) {
+              return {
+                ...p,
+                updatedAt: now,
+                slots: p.slots.filter((slot) => slot.id !== playlistSlotId),
+              };
+            }
+
+            const current = p.slots[targetIdx];
+            const nextSlot: PlaylistSlot = {
+              ...current,
+              canonicalTitle: canonicalTrackTitle(deduped[0]),
+              updatedAt: now,
+              variants: deduped.map((track, idx) => ({
+                id: safeUUID(),
+                addedAt: now + idx,
+                track,
+              })),
+            };
+            const nextSlots = p.slots.slice();
+            nextSlots[targetIdx] = nextSlot;
+            return {
+              ...p,
+              updatedAt: now,
+              slots: nextSlots,
+            };
+          }),
+        });
       },
 
       moveTrack: (playlistId, fromIndex, toIndex) => {

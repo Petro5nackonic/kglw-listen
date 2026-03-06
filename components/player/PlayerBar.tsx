@@ -8,8 +8,10 @@ import {
   faEyeSlash,
   faForwardStep,
   faListMusic,
+  faMerge,
   faPause,
   faPlay,
+  faStop,
 } from "@fortawesome/pro-solid-svg-icons";
 import { usePlayer } from "@/components/player/store";
 import { usePlaylists } from "@/components/playlists/store";
@@ -198,6 +200,7 @@ export function PlayerBar() {
     play?: () => void;
     pause?: () => void;
     setLoading?: (v: boolean) => void;
+    stop?: () => void;
     next?: () => void;
     prev?: () => void;
   };
@@ -210,6 +213,7 @@ export function PlayerBar() {
     play,
     pause,
     setLoading,
+    stop,
     next,
     prev,
   } = playerState;
@@ -554,6 +558,69 @@ export function PlayerBar() {
         .filter((item) => item.idx > index),
     [queue, index],
   );
+  const currentVariantContext = useMemo(() => {
+    const activeUrl = String(currentTrack?.url || "").trim();
+    if (!activeUrl) return null;
+
+    const preferredPlaylistId = String(currentTrack?.playlistId || "").trim();
+    const playlistPool = preferredPlaylistId
+      ? [
+          ...playlists.filter((p) => p.id === preferredPlaylistId),
+          ...playlists.filter((p) => p.id !== preferredPlaylistId),
+        ]
+      : playlists;
+
+    for (const playlist of playlistPool) {
+      const slot = playlist.slots.find((s) =>
+        s.variants.some((variant) => String(variant.track?.url || "").trim() === activeUrl),
+      );
+      if (!slot) continue;
+
+      const variants = slot.variants
+        .map((variant) => variant.track)
+        .filter((track) => Boolean(String(track?.url || "").trim()));
+      if (variants.length < 2) continue;
+
+      const currentVariantIndex = variants.findIndex(
+        (variant) => String(variant.url || "").trim() === activeUrl,
+      );
+      if (currentVariantIndex < 0) continue;
+      const alternateVariants = variants.filter((_, idx) => idx !== currentVariantIndex);
+      if (alternateVariants.length === 0) continue;
+
+      const resolvedSource = currentTrack?.playlistSource || playlist.source;
+      return {
+        variants,
+        currentVariantIndex,
+        playlistId: currentTrack?.playlistId || playlist.id,
+        playlistSource:
+          resolvedSource === "prebuilt" || resolvedSource === "user" ? resolvedSource : undefined,
+      };
+    }
+
+    return null;
+  }, [currentTrack, playlists]);
+
+  function onNextVariantPress() {
+    if (!currentVariantContext || !hasQueue || !currentTrack) return;
+    const choices = currentVariantContext.variants.filter(
+      (_, idx) => idx !== currentVariantContext.currentVariantIndex,
+    );
+    const randomized = choices[Math.floor(Math.random() * choices.length)];
+    if (!randomized?.url) return;
+    const nextQueue = queue.slice();
+    nextQueue[index] = {
+      ...currentTrack,
+      ...randomized,
+      playlistId: currentVariantContext.playlistId,
+      playlistSource: currentVariantContext.playlistSource,
+    };
+    setQueue(nextQueue, index);
+    if (!playing) {
+      pause?.();
+    }
+  }
+
   useEffect(() => {
     if (hasQueue) return;
     setQueueSheetOpen(false);
@@ -724,7 +791,7 @@ export function PlayerBar() {
           </div>
         </>
       )}
-      <div className="fixed right-0 bottom-[52px] left-0 z-30 bg-black/65 backdrop-blur">
+      <div className="fixed right-0 bottom-[52px] left-0 z-30 bg-[#080017]/95 backdrop-blur">
         <div className="mx-auto w-full max-w-[1140px] px-4 pb-4 pt-3 [font-family:var(--font-roboto-condensed)] md:px-6">
           {isBuffering && playing && src ? (
             <div className="mb-2">
@@ -768,6 +835,16 @@ export function PlayerBar() {
               </button>
             </div>
             <div className="flex items-center gap-3">
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 rounded-[6px] bg-linear-to-r from-fuchsia-500/35 to-orange-400/30 px-[6px] py-[3px] text-[22px] text-white/95 hover:from-fuchsia-500/45 hover:to-orange-400/45 hover:text-white disabled:opacity-40"
+                onClick={onNextVariantPress}
+                disabled={!currentVariantContext}
+                title="Next version"
+              >
+                <FontAwesomeIcon icon={faMerge} className="text-[15px]" />
+                <FontAwesomeIcon icon={faForwardStep} className="text-[15px]" />
+              </button>
               <button
                 type="button"
                 className="text-[22px] text-white/95 hover:text-white disabled:opacity-40"
@@ -846,6 +923,15 @@ export function PlayerBar() {
                 <FontAwesomeIcon icon={faForwardStep} />
               </button>
             </div>
+            <button
+              type="button"
+              className="absolute left-0 top-1/2 -translate-y-1/2 text-[19px] text-white/95 hover:text-white disabled:opacity-40"
+              onClick={() => stop?.()}
+              disabled={!hasQueue}
+              title="Stop playback"
+            >
+              <FontAwesomeIcon icon={faStop} />
+            </button>
             <button
               type="button"
               className="absolute right-0 top-1/2 -translate-y-1/2 text-[19px] text-white/95 hover:text-white disabled:opacity-40"

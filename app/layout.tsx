@@ -34,10 +34,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body
-        className={`${roboto.variable} ${robotoCondensed.variable} min-h-screen bg-black text-white`}
+        className={`${roboto.variable} ${robotoCondensed.variable} min-h-screen bg-[#080017] text-white`}
       >
         <PrebuiltPlaylistsSync />
-        <div className="w-full pb-44">{children}</div>
+        <div className="w-full pb-44 bg-[#080017]">{children}</div>
         <BottomNav />
         <PlayerBar />
       </body>
