@@ -947,6 +947,20 @@ const showsResponseCache = new Map<
 >();
 let lastGoodDefaultPayload: unknown | null = null;
 
+function hasUsableDefaultIds(payload: unknown): boolean {
+  if (!payload || typeof payload !== "object") return false;
+  const items = Array.isArray((payload as { items?: unknown[] }).items)
+    ? (payload as { items: unknown[] }).items
+    : [];
+  if (items.length === 0) return false;
+  const withIds = items.filter((item) => {
+    if (!item || typeof item !== "object") return false;
+    const id = String((item as { defaultId?: unknown }).defaultId || "").trim();
+    return id.length > 0;
+  }).length;
+  return withIds >= Math.max(1, Math.floor(items.length * 0.5));
+}
+
 function audioExtRank(name: string): number {
   const n = name.toLowerCase();
   if (n.endsWith(".flac")) return 1;
@@ -1401,6 +1415,7 @@ export async function GET(req: NextRequest) {
   const sort = (sp.get("sort") || "newest").trim().toLowerCase();
   const fastMode = sp.get("fast") === "1";
   const includeAlbumFacets = sp.get("includeAlbumFacets") === "1";
+  const forceRefresh = sp.get("refresh") === "1";
 
   const yearFilters = years.filter((y) => /^\d{4}$/.test(y));
   const continentFilters = continents.filter((c) => c && c !== "All");
@@ -1413,7 +1428,7 @@ export async function GET(req: NextRequest) {
     ),
   ).sort();
   const cacheKey = JSON.stringify({
-    v: 1,
+    v: 2,
     page,
     years: [...yearFilters].sort(),
     continents: [...continentFilters].sort(),
@@ -1424,8 +1439,21 @@ export async function GET(req: NextRequest) {
     includeAlbumFacets,
   });
   const cached = showsResponseCache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) {
-    return Response.json(cached.payload, { headers: SUCCESS_CACHE_HEADERS });
+  if (!forceRefresh && cached && cached.expiresAt > Date.now()) {
+    const payload = cached.payload;
+    const isDefaultRootQuery =
+      page === 1 &&
+      !query &&
+      yearFilters.length === 0 &&
+      continentFilters.length === 0 &&
+      showTypes.length === 0 &&
+      albumFilters.length === 0 &&
+      sort === "newest";
+    if (isDefaultRootQuery && !hasUsableDefaultIds(payload)) {
+      showsResponseCache.delete(cacheKey);
+    } else {
+      return Response.json(payload, { headers: SUCCESS_CACHE_HEADERS });
+    }
   }
 
   const PAGE_SIZE = 25;
@@ -1469,7 +1497,7 @@ export async function GET(req: NextRequest) {
   // This prevents “missing date field in advancedsearch” from hiding shows.
   const IA_ROWS = 500;
   // Keep requests responsive; very large scans can stall UI loading.
-  const MAX_IA_PAGES = query ? 2 : 3;
+  const MAX_IA_PAGES = fastMode ? 1 : query ? 2 : 3;
 
   // Use a stable sort that IA *does* reliably have: addeddate desc
   const SORT = "addeddate desc";
@@ -1487,14 +1515,7 @@ export async function GET(req: NextRequest) {
       `&sort[]=${encodeURIComponent(SORT)}`;
 
     let res: Response | null = null;
-    const isDefaultRootQuery =
-      !query &&
-      yearFilters.length === 0 &&
-      continentFilters.length === 0 &&
-      showTypes.length === 0 &&
-      albumFilters.length === 0 &&
-      sort === "newest";
-    const attempts = isDefaultRootQuery ? [4500] : [UPSTREAM_TIMEOUT_MS, UPSTREAM_TIMEOUT_MS + 5000];
+    const attempts = fastMode ? [5000] : [UPSTREAM_TIMEOUT_MS, UPSTREAM_TIMEOUT_MS + 5000];
     for (const timeoutMs of attempts) {
       let timeout: ReturnType<typeof setTimeout> | null = null;
       try {
@@ -1521,7 +1542,37 @@ export async function GET(req: NextRequest) {
 
     docs = docs.concat(batch);
     iaPage++;
-    if (isDefaultRootQuery && Date.now() - requestStartedAt > 7000) break;
+  }
+
+  if (docs.length === 0 && !query && !fastMode) {
+    // Emergency retry with a simpler query before using schedule fallback.
+    // This keeps homepage/explore cards playable when the richer query returns
+    // no docs due upstream query parsing or transient Archive behavior.
+    try {
+      const emergencyQ = "mediatype:(audio OR etree) AND identifier:(kglw*)";
+      const emergencyUrl =
+        "https://archive.org/advancedsearch.php" +
+        `?q=${encodeURIComponent(emergencyQ)}` +
+        fields.map((f) => `&fl[]=${encodeURIComponent(f)}`).join("") +
+        `&rows=${IA_ROWS}&page=1&output=json` +
+        `&sort[]=${encodeURIComponent(SORT)}`;
+      const emergencyController = new AbortController();
+      const emergencyTimeout = setTimeout(() => emergencyController.abort(), 10000);
+      const emergencyRes = await fetch(emergencyUrl, {
+        cache: "no-store",
+        signal: emergencyController.signal,
+      });
+      clearTimeout(emergencyTimeout);
+      if (emergencyRes.ok) {
+        const emergencyData = (await emergencyRes.json()) as { response?: { docs?: IaDoc[] } };
+        const emergencyDocs = Array.isArray(emergencyData?.response?.docs)
+          ? emergencyData.response.docs
+          : [];
+        if (emergencyDocs.length > 0) docs = emergencyDocs;
+      }
+    } catch {
+      // Fall through to schedule fallback below.
+    }
   }
 
   if (docs.length === 0 && !query) {
@@ -1636,7 +1687,7 @@ export async function GET(req: NextRequest) {
   const sortedShowsForQuery = sortShows(taggedShows.slice(), sort);
 
   const qLower = query.toLowerCase();
-  const searchedShowsForFacets = query
+  let searchedShowsForFacets = query
     ? sortedShowsForQuery.filter((s) => {
         const normalizedShowKey = String(s.showKey || "").replaceAll("-", " ");
         const haystack = [
@@ -1708,8 +1759,8 @@ export async function GET(req: NextRequest) {
     const songTokenQuery = buildSongTokenQuery(songTerm);
 
     if (songTerm && songTokenQuery) {
-      const SONG_ROWS = 500;
-      const MAX_SONG_DOCS = fastMode ? 250 : 1000;
+      const SONG_ROWS = fastMode ? 200 : 500;
+      const MAX_SONG_DOCS = fastMode ? 120 : 1000;
       const MAX_SONG_PAGES = Math.ceil(MAX_SONG_DOCS / SONG_ROWS);
       let songPage = 1;
 
@@ -1723,7 +1774,7 @@ export async function GET(req: NextRequest) {
           `&sort[]=${encodeURIComponent(SORT)}`;
 
         let songRes: Response | null = null;
-        for (const timeoutMs of [UPSTREAM_TIMEOUT_MS, UPSTREAM_TIMEOUT_MS + 5000]) {
+        for (const timeoutMs of fastMode ? [4500] : [UPSTREAM_TIMEOUT_MS, UPSTREAM_TIMEOUT_MS + 5000]) {
           let songTimeout: ReturnType<typeof setTimeout> | null = null;
           try {
             const controller = new AbortController();
@@ -1784,6 +1835,16 @@ export async function GET(req: NextRequest) {
         }));
       }
     }
+  }
+
+  if (query && songMatchedShows.length > 0) {
+    const mergedByKey = new Map<string, ShowListItem>();
+    for (const s of searchedShows) mergedByKey.set(s.showKey, s);
+    for (const s of songMatchedShows) {
+      if (!mergedByKey.has(s.showKey)) mergedByKey.set(s.showKey, s);
+    }
+    searchedShows = sortShows(Array.from(mergedByKey.values()), sort);
+    searchedShowsForFacets = searchedShows;
   }
 
   const yearCounts = new Map<string, number>();

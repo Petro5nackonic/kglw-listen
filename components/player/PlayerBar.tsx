@@ -835,16 +835,17 @@ export function PlayerBar() {
               </button>
             </div>
             <div className="flex items-center gap-3">
-              <button
-                type="button"
-                className="inline-flex items-center gap-1 rounded-[6px] bg-linear-to-r from-fuchsia-500/35 to-orange-400/30 px-[6px] py-[3px] text-[22px] text-white/95 hover:from-fuchsia-500/45 hover:to-orange-400/45 hover:text-white disabled:opacity-40"
-                onClick={onNextVariantPress}
-                disabled={!currentVariantContext}
-                title="Next version"
-              >
-                <FontAwesomeIcon icon={faMerge} className="text-[15px]" />
-                <FontAwesomeIcon icon={faForwardStep} className="text-[15px]" />
-              </button>
+              {currentVariantContext ? (
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 rounded-[6px] bg-linear-to-r from-fuchsia-500/35 to-orange-400/30 px-[6px] py-[3px] text-[22px] text-white/95 hover:from-fuchsia-500/45 hover:to-orange-400/45 hover:text-white"
+                  onClick={onNextVariantPress}
+                  title="Next version"
+                >
+                  <FontAwesomeIcon icon={faMerge} className="text-[15px]" />
+                  <FontAwesomeIcon icon={faForwardStep} className="text-[15px]" />
+                </button>
+              ) : null}
               <button
                 type="button"
                 className="text-[22px] text-white/95 hover:text-white disabled:opacity-40"

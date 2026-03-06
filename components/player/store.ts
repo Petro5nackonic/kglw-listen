@@ -26,6 +26,7 @@ type PlayerState = {
   pause: () => void;
   setPlaying: (v: boolean) => void;
   setLoading: (v: boolean) => void;
+  stop: () => void;
   next: () => void;
   prev: () => void;
 };
@@ -42,6 +43,7 @@ export const usePlayer = create<PlayerState>((set, get) => ({
   pause: () => set({ playing: false, loading: false }),
   setPlaying: (v) => set({ playing: v, loading: v ? true : false }),
   setLoading: (v) => set({ loading: v }),
+  stop: () => set({ queue: [], index: 0, playing: false, loading: false }),
 
   next: () => {
     const { index, queue } = get();

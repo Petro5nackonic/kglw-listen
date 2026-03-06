@@ -486,6 +486,8 @@ export default function PlaylistDetailPage() {
     [playlist],
   );
   const isPrebuiltPlaylist = playlist?.source === "prebuilt";
+  const cameFromHome = searchParams?.get("from") === "home";
+  const backHref = cameFromHome || isPrebuiltPlaylist ? "/" : "/playlists";
   const isLovedSongsPlaylist =
     String(playlist?.name || "").trim().toLowerCase() === LOVED_SONGS_PLAYLIST_NAME.toLowerCase();
   const isLockedPlaylist = isPrebuiltPlaylist || isLovedSongsPlaylist;
@@ -900,7 +902,7 @@ export default function PlaylistDetailPage() {
       <main className="min-h-screen bg-[#080017] text-white">
         <div className="mx-auto max-w-md px-6 py-8">
           <Link
-            href="/playlists"
+            href={backHref}
             className="text-sm text-white/70 hover:text-white"
           >
             ← Back
@@ -916,7 +918,7 @@ export default function PlaylistDetailPage() {
       <main className="min-h-screen bg-[#080017] text-white">
         <div className="mx-auto max-w-md px-6 py-8">
           <Link
-            href="/playlists"
+            href={backHref}
             className="text-sm text-white/70 hover:text-white"
           >
             ← Back
@@ -947,7 +949,7 @@ export default function PlaylistDetailPage() {
 
         <div className="relative mx-auto w-full max-w-[393px] px-6 pb-6 pt-12">
           <div className="flex items-center">
-            <Link href="/playlists" className="text-white/85 hover:text-white" aria-label="Back">
+            <Link href={backHref} className="text-white/85 hover:text-white" aria-label="Back">
               <FontAwesomeIcon icon={faChevronLeft} className="text-[17px]" />
             </Link>
           </div>
@@ -1353,18 +1355,47 @@ export default function PlaylistDetailPage() {
                             : "";
                         const isSlotActive = Boolean(activeVariantId);
                         const isLastInChain = chainIdx === entry.items.length - 1;
+                        const versionsExpanded =
+                          slot.variants.length > 1 && Boolean(expandedVariants[slot.id]);
+                        const connectorDotCount = isLastInChain
+                          ? 0
+                          : versionsExpanded
+                            ? Math.min(9, Math.max(5, slot.variants.length + 1))
+                            : 3;
                         return (
-                          <div key={slot.id} className="flex items-start gap-[10px]">
-                            <div className="relative mt-[8px] flex w-[14px] shrink-0 justify-center">
-                              {chainIdx === 0 ? (
-                                <FontAwesomeIcon
-                                  icon={faChain}
-                                  className="text-[14pt] text-[#5a22c9]"
-                                  style={{ transform: "rotate(-49deg)" }}
-                                />
-                              ) : (
-                                <span className="size-[6px] rounded-full bg-[#5a22c9]" aria-hidden />
-                              )}
+                          <div key={slot.id} className="flex items-stretch gap-[10px]">
+                            <div className="mb-[6px] mt-[6px] flex w-[16px] shrink-0 self-stretch flex-col items-center">
+                              <span className="flex h-[14px] items-center justify-center">
+                                {chainIdx === 0 ? (
+                                  <FontAwesomeIcon
+                                    icon={faChain}
+                                    className="text-[14pt] text-[#5a22c9]"
+                                    style={{ transform: "rotate(-49deg)" }}
+                                  />
+                                ) : (
+                                  <span
+                                    className="size-[7px] rounded-full border border-[#5a22c9]/80 bg-[#5a22c9]"
+                                    aria-hidden
+                                  />
+                                )}
+                              </span>
+                              {!isLastInChain ? (
+                                <span
+                                  className={
+                                    versionsExpanded
+                                      ? "mb-1 mt-1 flex w-full flex-1 flex-col items-center justify-evenly"
+                                      : "mb-1 mt-1 flex min-h-[24px] w-full flex-col items-center justify-between"
+                                  }
+                                  aria-hidden
+                                >
+                                  {Array.from({ length: connectorDotCount }).map((_, dotIdx) => (
+                                    <span
+                                      key={`${slot.id}-connector-dot-${dotIdx}`}
+                                      className="size-[3px] rounded-full bg-[#5a22c9]/85"
+                                    />
+                                  ))}
+                                </span>
+                              ) : null}
                             </div>
                             <div className="min-w-0 flex-1">
                             <div className="flex items-start justify-between gap-3 rounded-[10px] px-2 py-1">

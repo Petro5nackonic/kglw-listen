@@ -323,6 +323,10 @@ export default function ShowPage() {
 
     return safeDecode(raw);
   }, [params, pathname]);
+  const seededIdentifierFromUrl = useMemo(() => {
+    const raw = (searchParams?.get("id") || searchParams?.get("identifier") || "").trim();
+    return raw || null;
+  }, [searchParams]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -376,15 +380,34 @@ export default function ShowPage() {
     let alive = true;
 
     async function run() {
+      const seededShow: ShowApiResponse | null =
+        showKey && seededIdentifierFromUrl
+          ? {
+              key: showKey,
+              showDate: showKey.split("|")[0] || "",
+              defaultId: seededIdentifierFromUrl,
+              sources: [
+                {
+                  identifier: seededIdentifierFromUrl,
+                  title: seededIdentifierFromUrl,
+                  hint: "UNKNOWN",
+                  downloads: 0,
+                  avg_rating: 0,
+                  num_reviews: 0,
+                  score: 0,
+                },
+              ],
+            }
+          : null;
       const detailsCacheKey = `${SHOW_DETAILS_CACHE_PREFIX}${showKey}`;
       const cachedShow = showKey
         ? readCacheEntry<ShowApiResponse>(detailsCacheKey, SHOW_DETAILS_CACHE_MAX_AGE_MS)
         : null;
       const hydratedFromCache = Boolean(cachedShow);
-      setLoading(!hydratedFromCache);
+      setLoading(!(hydratedFromCache || Boolean(seededShow)));
       setError(null);
-      setShow(cachedShow || null);
-      setSelectedId(cachedShow?.defaultId ?? cachedShow?.sources?.[0]?.identifier ?? null);
+      setShow(cachedShow || seededShow || null);
+      setSelectedId(cachedShow?.defaultId ?? cachedShow?.sources?.[0]?.identifier ?? seededIdentifierFromUrl ?? null);
       setMeta(null);
 
       // Guard: if we still don't have a key, show a real error instead of calling API with undefined
@@ -401,10 +424,18 @@ export default function ShowPage() {
 
         if (!alive) return;
         setShow(data);
-        setSelectedId(data.defaultId ?? data.sources?.[0]?.identifier ?? null);
+        setSelectedId(
+          data.defaultId ?? data.sources?.[0]?.identifier ?? seededIdentifierFromUrl ?? null,
+        );
         writeCacheEntry(detailsCacheKey, data);
       } catch (e: unknown) {
         if (!alive) return;
+        if (seededIdentifierFromUrl) {
+          // Keep seeded playback path usable even if key-based lookup is flaky.
+          setShow((prev) => prev || seededShow);
+          setSelectedId((prev) => prev || seededIdentifierFromUrl);
+          return;
+        }
         if (e instanceof Error) setError(e.message);
         else setError("Failed to load show");
       } finally {
@@ -417,7 +448,7 @@ export default function ShowPage() {
     return () => {
       alive = false;
     };
-  }, [showKey]);
+  }, [showKey, seededIdentifierFromUrl]);
 
   useEffect(() => {
     let alive = true;
@@ -672,7 +703,7 @@ export default function ShowPage() {
         <div className="mx-auto max-w-md px-6 py-8 text-sm text-white/60">
           No show data returned.
         </div>
-      ) : show.sources.length === 0 ? (
+      ) : show.sources.length === 0 && !selectedId ? (
         <div className="mx-auto mt-6 max-w-md rounded-lg border border-white/10 bg-white/5 p-4 text-sm text-white/70 whitespace-pre-wrap">
           No sources found for this show.
         </div>
@@ -736,25 +767,27 @@ export default function ShowPage() {
               </div>
             </div>
 
-            <div className="-mt-4 rounded-b-2xl border border-white/20 border-t-0 px-4 pb-3 pt-7">
-              <select
-                className="w-full rounded-xl bg-black/30 py-2 pr-3 text-sm"
-                value={selectedId ?? ""}
-                onChange={(e) => {
-                  setSelectedId(e.target.value);
-                }}
-              >
-                {show.sources.map((s) => (
-                  <option key={s.identifier} value={s.identifier}>
-                    {s.hint} • {s.downloads.toLocaleString()} dl •{" "}
-                    {(() => {
-                      const v = toDisplayTitle(s.title);
-                      return v.length > 60 ? `${v.slice(0, 57).trimEnd()}...` : v;
-                    })()}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {show.sources.length > 0 ? (
+              <div className="-mt-4 rounded-b-2xl border border-white/20 border-t-0 px-4 pb-3 pt-7">
+                <select
+                  className="w-full rounded-xl bg-black/30 py-2 pr-3 text-sm"
+                  value={selectedId ?? ""}
+                  onChange={(e) => {
+                    setSelectedId(e.target.value);
+                  }}
+                >
+                  {show.sources.map((s) => (
+                    <option key={s.identifier} value={s.identifier}>
+                      {s.hint} • {s.downloads.toLocaleString()} dl •{" "}
+                      {(() => {
+                        const v = toDisplayTitle(s.title);
+                        return v.length > 60 ? `${v.slice(0, 57).trimEnd()}...` : v;
+                      })()}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
           </section>
 
           <section className="space-y-1.5">

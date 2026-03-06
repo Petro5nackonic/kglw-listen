@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 const SHOW_METADATA_CACHE_TTL_MS = 1000 * 60 * 5;
+const SHOW_METADATA_TIMEOUTS_MS = [8000, 12000, 18000];
 const SUCCESS_CACHE_HEADERS = {
   "Cache-Control": "public, s-maxage=120, stale-while-revalidate=300",
 };
@@ -59,10 +60,16 @@ export async function GET(req: NextRequest) {
     return Response.json(cached.payload, { headers: SUCCESS_CACHE_HEADERS });
   }
 
-  const payload =
-    (await fetchArchiveMetadata(id, 4500)) ||
-    (await fetchArchiveMetadata(id, 8000));
+  let payload: IaMetadataResponse | null = null;
+  for (const timeoutMs of SHOW_METADATA_TIMEOUTS_MS) {
+    payload = await fetchArchiveMetadata(id, timeoutMs);
+    if (payload) break;
+  }
   if (!payload) {
+    if (cached?.payload) {
+      // Serve stale cached metadata when Archive is slow/unavailable.
+      return Response.json(cached.payload, { headers: SUCCESS_CACHE_HEADERS });
+    }
     return Response.json({ error: "Archive metadata failed" }, { status: 502 });
   }
   showMetadataCache.set(id, {

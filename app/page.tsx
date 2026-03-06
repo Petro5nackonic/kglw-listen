@@ -62,6 +62,9 @@ type ShowItem = {
   showTrackCount?: number | null;
   specialTag?: "ORCHESTRA" | "RAVE" | "ACOUSTIC";
 };
+type MicrotonalityShowItem = ShowItem & {
+  microtonalMatchCount: number;
+};
 
 type ShowPlaybackStats = {
   showLengthSeconds: number | null;
@@ -111,6 +114,13 @@ type HomeShowsCachePayload = {
     albumUniverseCount?: number;
   };
 };
+type DiscoveryRowsCachePayload = {
+  savedAt: number;
+  takingFlightShows: ShowItem[];
+  dripDripShows: ShowItem[];
+  jamSpamShows: ShowItem[];
+  microtonalityShows: MicrotonalityShowItem[];
+};
 
 const SHOW_TYPE_OPTIONS = [
   { value: "Rave" },
@@ -153,9 +163,11 @@ const FAVORITE_SHOWS_KEY = "kglw.favoriteShows.v1";
 const RECENT_SHOWS_KEY = "kglw.recentShows.v1";
 const HEARD_SHOWS_KEY = "kglw.heardShows.v1";
 const LOVED_SONGS_PLAYLIST_NAME = "Loved Songs";
-const SHOW_STATS_CACHE_KEY = "kglw.showStats.v1";
-const HOME_SHOWS_CACHE_KEY = "kglw.homeShows.v1";
+const SHOW_STATS_CACHE_KEY = "kglw.showStats.v3";
+const HOME_SHOWS_CACHE_KEY = "kglw.homeShows.v3";
 const HOME_SHOWS_CACHE_MAX_AGE_MS = 1000 * 60 * 10;
+const DISCOVERY_ROWS_CACHE_KEY = "kglw.discoveryRows.v1";
+const DISCOVERY_ROWS_CACHE_MAX_AGE_MS = 1000 * 60 * 10;
 const DEFAULT_ARTWORK_SRC = "/api/default-artwork";
 const PREBUILT_PLAYLIST_NAME_SET = new Set([
   "flight b741 live comp.",
@@ -174,6 +186,39 @@ const JAM_SPAM_SONGS = [
   "Magma",
   "Iron Lung",
   "Ice V",
+];
+const MICROTONALITY_SONGS = [
+  "If Not Now, Then When?",
+  "O.N.E.",
+  "Pleura",
+  "Supreme Ascendancy",
+  "Static Electricity",
+  "East West Link",
+  "Ataraxia",
+  "See Me",
+  "K.G.L.W.",
+  "Automation",
+  "Minimum Brain Size",
+  "Straws In The Wind",
+  "Some Of Us",
+  "Ontology",
+  "Intrasport",
+  "Oddlife",
+  "Honey",
+  "The Hungry Wolf Of Fate",
+  "Greenhouse Heat Death",
+  "All Is Known",
+  "D-Day",
+  "The Book",
+  "Rattlesnake",
+  "Melting",
+  "Open Water",
+  "Sleep Drifter",
+  "Billabong Valley",
+  "Anoxia",
+  "Doom City",
+  "Nuclear Fusion",
+  "Flying Microtonal Banana",
 ];
 const SORT_OPTIONS: { value: string; label: string }[] = [
   { value: "newest", label: "Newest" },
@@ -751,6 +796,8 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
   const [statsById, setStatsById] = useState<Record<string, ShowPlaybackStats>>({});
   const inFlightStatsIdsRef = useRef<Set<string>>(new Set());
   const queueByIdentifierRef = useRef<Record<string, Track[]>>({});
+  const inFlightQueueByIdentifierRef = useRef<Record<string, Promise<Track[]>>>({});
+  const prewarmedShowKeysRef = useRef<Set<string>>(new Set());
   const resolvedShowIdsRef = useRef<Record<string, string>>({});
   const playPendingRef = useRef<Set<string>>(new Set());
   const [songSheetTrack, setSongSheetTrack] = useState<SongSheetTrack | null>(null);
@@ -760,9 +807,11 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
   const [takingFlightShows, setTakingFlightShows] = useState<ShowItem[]>([]);
   const [dripDripShows, setDripDripShows] = useState<ShowItem[]>([]);
   const [jamSpamShows, setJamSpamShows] = useState<ShowItem[]>([]);
+  const [microtonalityShows, setMicrotonalityShows] = useState<MicrotonalityShowItem[]>([]);
   const [takingFlightLoading, setTakingFlightLoading] = useState(true);
   const [dripDripLoading, setDripDripLoading] = useState(true);
   const [jamSpamLoading, setJamSpamLoading] = useState(true);
+  const [microtonalityLoading, setMicrotonalityLoading] = useState(true);
   const [songShareState, setSongShareState] = useState<"idle" | "copied" | "error">(
     "idle",
   );
@@ -837,6 +886,7 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
   function buildAlbumFacetsUrl() {
     const params = new URLSearchParams();
     params.set("page", "1");
+    params.set("fast", "1");
     for (const y of years) params.append("year", y);
     for (const c of continents) params.append("continent", c);
     for (const t of showTypes) params.append("showType", t);
@@ -1098,13 +1148,61 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
       setTakingFlightLoading(false);
       setDripDripLoading(false);
       setJamSpamLoading(false);
+      setMicrotonalityLoading(false);
       return;
+    }
+    try {
+      const raw = localStorage.getItem(DISCOVERY_ROWS_CACHE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as DiscoveryRowsCachePayload;
+        const isFresh =
+          typeof parsed?.savedAt === "number" &&
+          Date.now() - parsed.savedAt <= DISCOVERY_ROWS_CACHE_MAX_AGE_MS;
+        if (isFresh) {
+          const cachedTakingFlight = Array.isArray(parsed?.takingFlightShows)
+            ? parsed.takingFlightShows
+            : [];
+          const cachedDripDrip = Array.isArray(parsed?.dripDripShows)
+            ? parsed.dripDripShows
+            : [];
+          const cachedJamSpam = Array.isArray(parsed?.jamSpamShows)
+            ? parsed.jamSpamShows
+            : [];
+          const cachedMicrotonality = Array.isArray(parsed?.microtonalityShows)
+            ? parsed.microtonalityShows
+            : [];
+          if (
+            cachedTakingFlight.length > 0 ||
+            cachedDripDrip.length > 0 ||
+            cachedJamSpam.length > 0 ||
+            cachedMicrotonality.length > 0
+          ) {
+            setTakingFlightShows(cachedTakingFlight);
+            setDripDripShows(cachedDripDrip);
+            setJamSpamShows(cachedJamSpam);
+            setMicrotonalityShows(cachedMicrotonality);
+            setTakingFlightLoading(false);
+            setDripDripLoading(false);
+            setJamSpamLoading(false);
+            setMicrotonalityLoading(false);
+            return;
+          }
+        }
+      }
+    } catch {
+      // Ignore bad cache payload and fetch normally.
     }
     let alive = true;
     async function loadDiscoveryRows() {
       setTakingFlightLoading(true);
       setDripDripLoading(true);
       setJamSpamLoading(true);
+      setMicrotonalityLoading(true);
+      const DISCOVERY_TIMEOUT_MS = 12000;
+      let nextTakingFlightShows: ShowItem[] = [];
+      let nextDripDripShows: ShowItem[] = [];
+      let nextJamSpamShows: ShowItem[] = [];
+      let nextMicrotonalityShows: MicrotonalityShowItem[] = [];
       const buildDiscoveryUrl = (options: {
         sort: "most_played" | "newest";
         query?: string;
@@ -1113,6 +1211,7 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
         const params = new URLSearchParams();
         params.set("page", "1");
         params.set("sort", options.sort);
+        params.set("fast", "1");
         if (options.query) params.set("query", options.query);
         if (options.album) params.set("album", options.album);
         return `/api/ia/shows?${params.toString()}`;
@@ -1124,8 +1223,8 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
       }): Promise<ShowsResponse | null> => {
         const primary = buildDiscoveryUrl({ ...options, sort: "most_played" });
         const fallback = buildDiscoveryUrl({ ...options, sort: "newest" });
-        const firstRes = await fetchShowsWithRetry(primary, 20000);
-        const chosenRes = firstRes || (await fetchShowsWithRetry(fallback, 20000));
+        const firstRes = await fetchShowsWithRetry(primary, DISCOVERY_TIMEOUT_MS);
+        const chosenRes = firstRes || (await fetchShowsWithRetry(fallback, DISCOVERY_TIMEOUT_MS));
         if (!chosenRes) return null;
         return (await chosenRes.json()) as ShowsResponse;
       };
@@ -1136,8 +1235,8 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
             const primary = buildDiscoveryUrl({ sort: "most_played" });
             const fallback = buildDiscoveryUrl({ sort: "newest" });
             const res =
-              (await fetchShowsWithRetry(primary, 20000)) ||
-              (await fetchShowsWithRetry(fallback, 20000));
+              (await fetchShowsWithRetry(primary, DISCOVERY_TIMEOUT_MS)) ||
+              (await fetchShowsWithRetry(fallback, DISCOVERY_TIMEOUT_MS));
             if (!res) return [];
             const data = (await res.json()) as ShowsResponse;
             return Array.isArray(data?.items) ? data.items : [];
@@ -1158,16 +1257,19 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
           const withPlays = takingFlightItems.filter((s) => Number(s.plays || 0) > 0);
           const selected = (withPlays.length > 0 ? withPlays : takingFlightItems).slice(0, 10);
           if (selected.length > 0) {
+            nextTakingFlightShows = selected;
             setTakingFlightShows(selected);
             return;
           }
           const fallbackItems = (await getPopularFallback()).slice(0, 10);
+          nextTakingFlightShows = fallbackItems;
           setTakingFlightShows(
             fallbackItems,
           );
         } catch {
           if (!alive) return;
           const fallbackItems = (await getPopularFallback()).slice(0, 10);
+          nextTakingFlightShows = fallbackItems;
           setTakingFlightShows(fallbackItems);
         } finally {
           if (!alive) return;
@@ -1187,14 +1289,18 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
               ? dripDripData.items
               : [];
           if (dripItems.length > 0) {
-            setDripDripShows(dripItems.slice(0, 10));
+            const selected = dripItems.slice(0, 10);
+            nextDripDripShows = selected;
+            setDripDripShows(selected);
             return;
           }
           const fallbackItems = (await getPopularFallback()).slice(8, 18);
+          nextDripDripShows = fallbackItems;
           setDripDripShows(fallbackItems);
         } catch {
           if (!alive) return;
           const fallbackItems = (await getPopularFallback()).slice(8, 18);
+          nextDripDripShows = fallbackItems;
           setDripDripShows(fallbackItems);
         } finally {
           if (!alive) return;
@@ -1235,14 +1341,17 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
             .slice(0, 12);
           if (!alive) return;
           if (ranked.length > 0) {
+            nextJamSpamShows = ranked;
             setJamSpamShows(ranked);
             return;
           }
           const fallbackItems = (await getPopularFallback()).slice(16, 28);
+          nextJamSpamShows = fallbackItems;
           setJamSpamShows(fallbackItems);
         } catch {
           if (!alive) return;
           const fallbackItems = (await getPopularFallback()).slice(16, 28);
+          nextJamSpamShows = fallbackItems;
           setJamSpamShows(fallbackItems);
         } finally {
           if (!alive) return;
@@ -1250,7 +1359,98 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
         }
       })();
 
-      await Promise.allSettled([takingFlightTask, dripDripTask, jamSpamTask]);
+      const microtonalityTask = (async () => {
+        try {
+          const microtonalitySeedSongs = MICROTONALITY_SONGS.slice(0, 12);
+          const payloads: Array<ShowsResponse | null> = [];
+          for (let i = 0; i < microtonalitySeedSongs.length; i += 4) {
+            const chunk = microtonalitySeedSongs.slice(i, i + 4);
+            const chunkPayloads = await Promise.all(
+              chunk.map((song) => fetchDiscoveryResponse({ query: song })),
+            );
+            payloads.push(...chunkPayloads);
+          }
+
+          const byShow = new Map<string, { item: ShowItem; songs: Set<string> }>();
+          for (let i = 0; i < payloads.length; i += 1) {
+            const songTitle = microtonalitySeedSongs[i];
+            const songKey = songTitle.toLowerCase();
+            const payload = payloads[i];
+            const items = Array.isArray(payload?.song?.items)
+              ? payload.song.items
+              : Array.isArray(payload?.items)
+                ? payload.items
+                : [];
+            for (const item of items) {
+              const existing = byShow.get(item.showKey);
+              if (!existing) {
+                byShow.set(item.showKey, { item, songs: new Set([songKey]) });
+                continue;
+              }
+              existing.songs.add(songKey);
+              const currentSec =
+                typeof item.matchedSongSeconds === "number" ? item.matchedSongSeconds : -1;
+              const existingSec =
+                typeof existing.item.matchedSongSeconds === "number"
+                  ? existing.item.matchedSongSeconds
+                  : -1;
+              if (currentSec > existingSec) {
+                existing.item = item;
+              }
+            }
+          }
+
+          const ranked = Array.from(byShow.values())
+            .map(({ item, songs }) => ({
+              ...item,
+              microtonalMatchCount: songs.size,
+            }))
+            .sort((a, b) => {
+              if (b.microtonalMatchCount !== a.microtonalMatchCount) {
+                return b.microtonalMatchCount - a.microtonalMatchCount;
+              }
+              return Number(b.plays || 0) - Number(a.plays || 0);
+            })
+            .slice(0, 12);
+
+          if (!alive) return;
+          if (ranked.length > 0) {
+            nextMicrotonalityShows = ranked;
+            setMicrotonalityShows(ranked);
+            return;
+          }
+          const fallbackItems = (await getPopularFallback())
+            .slice(22, 34)
+            .map((item) => ({ ...item, microtonalMatchCount: 0 }));
+          nextMicrotonalityShows = fallbackItems;
+          setMicrotonalityShows(fallbackItems);
+        } catch {
+          if (!alive) return;
+          const fallbackItems = (await getPopularFallback())
+            .slice(22, 34)
+            .map((item) => ({ ...item, microtonalMatchCount: 0 }));
+          nextMicrotonalityShows = fallbackItems;
+          setMicrotonalityShows(fallbackItems);
+        } finally {
+          if (!alive) return;
+          setMicrotonalityLoading(false);
+        }
+      })();
+
+      await Promise.allSettled([takingFlightTask, dripDripTask, jamSpamTask, microtonalityTask]);
+      if (!alive) return;
+      try {
+        const payload: DiscoveryRowsCachePayload = {
+          savedAt: Date.now(),
+          takingFlightShows: nextTakingFlightShows,
+          dripDripShows: nextDripDripShows,
+          jamSpamShows: nextJamSpamShows,
+          microtonalityShows: nextMicrotonalityShows,
+        };
+        localStorage.setItem(DISCOVERY_ROWS_CACHE_KEY, JSON.stringify(payload));
+      } catch {
+        // Ignore storage errors.
+      }
     }
     void loadDiscoveryRows();
     return () => {
@@ -1272,6 +1472,7 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
   useEffect(() => {
     let alive = true;
     async function loadAlbumFacets() {
+      if (!advancedFiltersOpen) return;
       if (albums.length > 0) return;
       try {
         const res = await fetchShowsWithRetry(buildAlbumFacetsUrl());
@@ -1290,7 +1491,15 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [years.join("|"), continents.join("|"), showTypes.join("|"), debouncedQuery, sort, albums.join("|")]);
+  }, [
+    advancedFiltersOpen,
+    years.join("|"),
+    continents.join("|"),
+    showTypes.join("|"),
+    debouncedQuery,
+    sort,
+    albums.join("|"),
+  ]);
 
   useEffect(() => {
     let alive = true;
@@ -1421,6 +1630,7 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
   const showTakingFlightSkeleton = takingFlightLoading;
   const showDripDripSkeleton = dripDripLoading && dripDripShows.length === 0;
   const showJamSpamSkeleton = jamSpamLoading && jamSpamShows.length === 0;
+  const showMicrotonalitySkeleton = microtonalityLoading && microtonalityShows.length === 0;
   const renderPrebuiltSkeletonCards = () =>
     Array.from({ length: 4 }, (_, idx) => (
       <div
@@ -1843,6 +2053,44 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
   }, [venueShows, router]);
 
   useEffect(() => {
+    let cancelled = false;
+    const source = showOnlyShows
+      ? venueShows.slice(0, 8)
+      : [
+          ...takingFlightShows.slice(0, 3),
+          ...dripDripShows.slice(0, 3),
+          ...jamSpamShows.slice(0, 2),
+          ...microtonalityShows.slice(0, 2),
+        ];
+    const deduped: ShowItem[] = [];
+    const seen = new Set<string>();
+    for (const s of source) {
+      if (!s?.showKey || seen.has(s.showKey)) continue;
+      seen.add(s.showKey);
+      if (prewarmedShowKeysRef.current.has(s.showKey)) continue;
+      deduped.push(s);
+    }
+    deduped.forEach((s, idx) => {
+      const delay = 300 + idx * 350;
+      setTimeout(() => {
+        if (cancelled) return;
+        prewarmedShowKeysRef.current.add(s.showKey);
+        void prewarmShowQueue(s);
+      }, delay);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    showOnlyShows,
+    venueShows,
+    takingFlightShows,
+    dripDripShows,
+    jamSpamShows,
+    microtonalityShows,
+  ]);
+
+  useEffect(() => {
     const el = compCarouselRef.current;
     if (!el) {
       setCanScrollCompsPrev(false);
@@ -2011,9 +2259,17 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
   function onTakingFlightCarouselPointerDown(e: React.PointerEvent<HTMLDivElement>) {
     const el = takingFlightCarouselRef.current;
     if (!el) return;
-    const target = e.target as HTMLElement | null;
+    const composedPath = typeof e.nativeEvent.composedPath === "function"
+      ? e.nativeEvent.composedPath()
+      : [];
+    const pathHasNoDrag = composedPath.some(
+      (node) => node instanceof Element && node.hasAttribute("data-no-drag"),
+    );
+    if (pathHasNoDrag) return;
+    const target = e.target;
     if (
-      target?.closest(
+      target instanceof Element &&
+      target.closest(
         "button, a, input, select, textarea, [role='button'], [data-no-drag]",
       )
     ) {
@@ -2045,9 +2301,17 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
   function onDripDripCarouselPointerDown(e: React.PointerEvent<HTMLDivElement>) {
     const el = dripDripCarouselRef.current;
     if (!el) return;
-    const target = e.target as HTMLElement | null;
+    const composedPath = typeof e.nativeEvent.composedPath === "function"
+      ? e.nativeEvent.composedPath()
+      : [];
+    const pathHasNoDrag = composedPath.some(
+      (node) => node instanceof Element && node.hasAttribute("data-no-drag"),
+    );
+    if (pathHasNoDrag) return;
+    const target = e.target;
     if (
-      target?.closest(
+      target instanceof Element &&
+      target.closest(
         "button, a, input, select, textarea, [role='button'], [data-no-drag]",
       )
     ) {
@@ -2079,9 +2343,17 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
   function onJamSpamCarouselPointerDown(e: React.PointerEvent<HTMLDivElement>) {
     const el = jamSpamCarouselRef.current;
     if (!el) return;
-    const target = e.target as HTMLElement | null;
+    const composedPath = typeof e.nativeEvent.composedPath === "function"
+      ? e.nativeEvent.composedPath()
+      : [];
+    const pathHasNoDrag = composedPath.some(
+      (node) => node instanceof Element && node.hasAttribute("data-no-drag"),
+    );
+    if (pathHasNoDrag) return;
+    const target = e.target;
     if (
-      target?.closest(
+      target instanceof Element &&
+      target.closest(
         "button, a, input, select, textarea, [role='button'], [data-no-drag]",
       )
     ) {
@@ -2162,6 +2434,13 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
     localStorage.setItem(RECENT_SHOWS_KEY, JSON.stringify(next));
   }
 
+  function buildShowHref(show: ShowItem): string {
+    const base = `/show/${encodeURIComponent(show.showKey)}`;
+    const id = String(show.defaultId || "").trim();
+    if (!id) return base;
+    return `${base}?id=${encodeURIComponent(id)}`;
+  }
+
   async function fetchPlayableQueueForIdentifier(
     identifier: string,
     context?: {
@@ -2232,6 +2511,32 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
     }
   }
 
+  async function ensurePlayableQueueForIdentifier(
+    identifier: string,
+    context?: {
+      showKey?: string;
+      showDate?: string;
+      venueText?: string;
+      artwork?: string;
+    },
+  ): Promise<Track[]> {
+    const cached = queueByIdentifierRef.current[identifier];
+    if (cached && cached.length > 0) return cached;
+    const inFlight = inFlightQueueByIdentifierRef.current[identifier];
+    if (inFlight) return inFlight;
+    const task = fetchPlayableQueueForIdentifier(identifier, context);
+    inFlightQueueByIdentifierRef.current[identifier] = task;
+    try {
+      const queue = await task;
+      if (queue.length > 0) {
+        queueByIdentifierRef.current[identifier] = queue;
+      }
+      return queue;
+    } finally {
+      delete inFlightQueueByIdentifierRef.current[identifier];
+    }
+  }
+
   async function resolveIdentifierForShow(show: ShowItem): Promise<string> {
     const direct = String(show.defaultId || "").trim();
     if (direct) return direct;
@@ -2267,19 +2572,31 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
         logPlayedShow({ showKey: show.showKey, showTitle: toDisplayTitle(show.title) });
         return;
       }
-      const queue = await fetchPlayableQueueForIdentifier(identifier, {
+      const queue = await ensurePlayableQueueForIdentifier(identifier, {
         showKey: show.showKey,
         showDate: show.showDate,
         venueText: toDisplayTitle(show.title),
         artwork: show.artwork,
       });
       if (queue.length === 0) return;
-      queueByIdentifierRef.current[identifier] = queue;
       setQueue(queue, 0);
       logPlayedShow({ showKey: show.showKey, showTitle: toDisplayTitle(show.title) });
     } finally {
       playPendingRef.current.delete(pendingKey);
     }
+  }
+
+  async function prewarmShowQueue(show: ShowItem): Promise<void> {
+    const seededIdentifier = String(show.defaultId || "").trim();
+    const identifier = seededIdentifier || (await resolveIdentifierForShow(show));
+    if (!identifier) return;
+    if (queueByIdentifierRef.current[identifier]?.length) return;
+    await ensurePlayableQueueForIdentifier(identifier, {
+      showKey: show.showKey,
+      showDate: show.showDate,
+      venueText: toDisplayTitle(show.title),
+      artwork: show.artwork,
+    });
   }
 
   function normalizeSongText(v: string): string {
@@ -2308,14 +2625,13 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
       if (playPendingRef.current.has(identifier)) return;
       playPendingRef.current.add(identifier);
       try {
-        queue = await fetchPlayableQueueForIdentifier(identifier, {
+        queue = await ensurePlayableQueueForIdentifier(identifier, {
           showKey: songShow.showKey,
           showDate: songShow.showDate,
           venueText: toDisplayTitle(songShow.title),
           artwork: songShow.artwork,
         });
         if (!queue || queue.length === 0) return;
-        queueByIdentifierRef.current[identifier] = queue;
       } finally {
         playPendingRef.current.delete(identifier);
       }
@@ -2462,7 +2778,7 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
                               ))}
                             </div>
                             <Link
-                              href={clientHydrated ? `/playlists/${p.id}` : "/playlists"}
+                              href={clientHydrated ? `/playlists/${p.id}?from=home` : "/playlists"}
                               className="min-w-0 flex-1"
                             >
                               <div className="truncate text-[18px] font-medium text-white [font-family:var(--font-roboto-condensed)]">
@@ -2545,116 +2861,10 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
             <section>
               <div className="mb-4">
                 <h2 className="text-[24px] font-semibold [font-family:var(--font-roboto-condensed)]">
-                  Taking Flight
-                </h2>
-                <div className="mt-1 text-[13px] text-white/70 [font-family:var(--font-roboto-condensed)]">
-                  Shows with the most songs from Flight B741
-                </div>
-              </div>
-              <div className="relative">
-                <div
-                  ref={takingFlightCarouselRef}
-                  className="cursor-grab overflow-x-auto pb-1 select-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-                  onPointerDown={onTakingFlightCarouselPointerDown}
-                  onPointerMove={onTakingFlightCarouselPointerMove}
-                  onPointerUp={onTakingFlightCarouselPointerEnd}
-                  onPointerCancel={onTakingFlightCarouselPointerEnd}
-                  onPointerLeave={onTakingFlightCarouselPointerEnd}
-                >
-                  <div className="grid w-max auto-cols-[minmax(300px,300px)] grid-flow-col grid-rows-1 gap-3 md:auto-cols-[minmax(340px,340px)]">
-                    {showTakingFlightSkeleton
-                      ? renderDiscoverySkeletonCards("taking-flight")
-                      : takingFlightCards.length === 0
-                        ? [renderDiscoveryEmptyCard("taking-flight-empty", "Taking Flight shows are unavailable right now.")]
-                        : takingFlightCards.map((s) => {
-                    const imageSrc = shouldUseDefaultArtwork(s.defaultId)
-                      ? DEFAULT_ARTWORK_SRC
-                      : s.artwork;
-                    return (
-                      <div
-                        key={`taking-flight-${s.showKey}`}
-                        className="relative z-0 rounded-[16px] border border-[#7c50d8]/65 bg-linear-to-br from-[#1b0d33] via-[#180b2d] to-[#0f0820] p-3 backdrop-blur-[6px]"
-                      >
-                        <div className="flex items-center justify-between">
-                          <button
-                            type="button"
-                            className="flex min-w-0 flex-1 items-center gap-3 text-left"
-                            onClick={() => {
-                              rememberRecentShow(s.showKey);
-                              router.push(`/show/${encodeURIComponent(s.showKey)}`);
-                            }}
-                          >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={imageSrc}
-                              alt=""
-                              className="h-14 w-14 shrink-0 rounded-[8px] border border-white/15 object-cover"
-                              onError={(e) => {
-                                const img = e.currentTarget;
-                                if (img.src.endsWith(DEFAULT_ARTWORK_SRC)) return;
-                                img.src = DEFAULT_ARTWORK_SRC;
-                              }}
-                            />
-                            <div className="min-w-0">
-                              <div className="truncate text-[16px] font-medium text-white [font-family:var(--font-roboto-condensed)]">
-                                {toDisplayTitle(s.title)}
-                              </div>
-                              <div className="mt-1 text-[12px] text-white/70 [font-family:var(--font-roboto-condensed)]">
-                                {formatCardDate(s.showDate)}
-                              </div>
-                              <div className="mt-0.5 text-[12px] text-white/65 [font-family:var(--font-roboto-condensed)]">
-                                {Number(s.plays || 0).toLocaleString()} plays
-                              </div>
-                            </div>
-                          </button>
-                          <button
-                            type="button"
-                            aria-label={`Play show ${s.title}`}
-                            className="ml-4 shrink-0 text-[24px] text-white"
-                            onClick={() => {
-                              void playShowFromCard(s);
-                            }}
-                          >
-                            <FontAwesomeIcon icon={faCirclePlay} />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                        })}
-                  </div>
-                </div>
-                {canScrollTakingFlightPrev ? (
-                  <button
-                    type="button"
-                    aria-label="Previous Taking Flight shows"
-                    className="absolute top-1/2 left-0 hidden -translate-y-1/2 rounded-full border border-white/25 bg-black/55 px-3 py-2 text-sm text-white shadow-[0_8px_18px_rgba(0,0,0,0.35)] backdrop-blur md:flex"
-                    onClick={scrollTakingFlightPrevPage}
-                  >
-                    ‹
-                  </button>
-                ) : null}
-                {canScrollTakingFlightNext ? (
-                  <button
-                    type="button"
-                    aria-label="Next Taking Flight shows"
-                    className="absolute top-1/2 right-0 hidden -translate-y-1/2 rounded-full border border-white/25 bg-black/55 px-3 py-2 text-sm text-white shadow-[0_8px_18px_rgba(0,0,0,0.35)] backdrop-blur md:flex"
-                    onClick={scrollTakingFlightNextPage}
-                  >
-                    ›
-                  </button>
-                ) : null}
-              </div>
-            </section>
-          ) : null}
-
-          {!showOnlyShows ? (
-            <section>
-              <div className="mb-4">
-                <h2 className="text-[24px] font-semibold [font-family:var(--font-roboto-condensed)]">
-                  Drip Drip
-                </h2>
-                <div className="mt-1 text-[13px] text-white/70 [font-family:var(--font-roboto-condensed)]">
                   Wish I learnt how to swim
+                </h2>
+                <div className="mt-1 text-[13px] text-white/70 [font-family:var(--font-roboto-condensed)]">
+                  Shows featuring the drippingest taps
                 </div>
               </div>
               <div className="relative">
@@ -2684,10 +2894,11 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
                         <div className="flex items-center justify-between">
                           <button
                             type="button"
+                            data-no-drag
                             className="flex min-w-0 flex-1 items-center gap-3 text-left"
                             onClick={() => {
                               rememberRecentShow(s.showKey);
-                              router.push(`/show/${encodeURIComponent(s.showKey)}`);
+                              router.push(buildShowHref(s));
                             }}
                           >
                             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -2708,13 +2919,11 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
                               <div className="mt-1 text-[12px] text-white/70 [font-family:var(--font-roboto-condensed)]">
                                 {formatCardDate(s.showDate)}
                               </div>
-                              <div className="mt-0.5 text-[12px] text-white/65 [font-family:var(--font-roboto-condensed)]">
-                                {Number(s.plays || 0).toLocaleString()} plays
-                              </div>
                             </div>
                           </button>
                           <button
                             type="button"
+                            data-no-drag
                             aria-label={`Play show ${s.title}`}
                             className="ml-4 shrink-0 text-[24px] text-white"
                             onClick={() => {
@@ -2792,10 +3001,11 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
                           <div className="flex items-center justify-between">
                             <button
                               type="button"
+                              data-no-drag
                               className="flex min-w-0 flex-1 items-center gap-3 text-left"
                               onClick={() => {
                                 rememberRecentShow(s.showKey);
-                                router.push(`/show/${encodeURIComponent(s.showKey)}`);
+                                router.push(buildShowHref(s));
                               }}
                             >
                               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -2814,15 +3024,15 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
                                   {toDisplayTitle(s.title)}
                                 </div>
                                 <div className="mt-1 text-[12px] text-white/70 [font-family:var(--font-roboto-condensed)]">
-                                  {jamTitle ? `${jamTitle} ${jamLength ? `• ${jamLength}` : ""}` : "Longest jam"}
-                                </div>
-                                <div className="mt-0.5 text-[12px] text-white/65 [font-family:var(--font-roboto-condensed)]">
-                                  {Number(s.plays || 0).toLocaleString()} plays
+                                  {jamTitle
+                                    ? `Longest ${jamTitle}${jamLength ? ` • ${jamLength}` : ""}`
+                                    : formatCardDate(s.showDate)}
                                 </div>
                               </div>
                             </button>
                             <button
                               type="button"
+                              data-no-drag
                               aria-label={`Play show ${s.title}`}
                               className="ml-4 shrink-0 text-[24px] text-white"
                               onClick={() => {
@@ -2857,6 +3067,86 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
                     ›
                   </button>
                 ) : null}
+              </div>
+            </section>
+          ) : null}
+
+          {!showOnlyShows ? (
+            <section>
+              <div className="mb-4">
+                <h2 className="text-[24px] font-semibold [font-family:var(--font-roboto-condensed)]">
+                  Microtonality
+                </h2>
+                <div className="mt-1 text-[13px] text-white/70 [font-family:var(--font-roboto-condensed)]">
+                  Shows featuring the most songs from K.G., L.W., FMB, and more
+                </div>
+              </div>
+              <div className="cursor-grab overflow-x-auto pb-1 select-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <div className="grid w-max auto-cols-[minmax(300px,300px)] grid-flow-col grid-rows-1 gap-3 md:auto-cols-[minmax(340px,340px)]">
+                  {showMicrotonalitySkeleton
+                    ? renderDiscoverySkeletonCards("microtonality")
+                    : microtonalityShows.length === 0
+                      ? [renderDiscoveryEmptyCard("microtonality-empty", "Microtonality shows are unavailable right now.")]
+                      : microtonalityShows.map((s) => {
+                    const imageSrc = shouldUseDefaultArtwork(s.defaultId)
+                      ? DEFAULT_ARTWORK_SRC
+                      : s.artwork;
+                    return (
+                      <div
+                        key={`microtonality-${s.showKey}`}
+                        className="relative z-0 rounded-[16px] border border-[#7c50d8]/65 bg-linear-to-br from-[#1b0d33] via-[#180b2d] to-[#0f0820] p-3 backdrop-blur-[6px]"
+                      >
+                        <div className="flex items-center justify-between">
+                          <button
+                            type="button"
+                            data-no-drag
+                            className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                            onClick={() => {
+                              rememberRecentShow(s.showKey);
+                              router.push(buildShowHref(s));
+                            }}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={imageSrc}
+                              alt=""
+                              className="h-14 w-14 shrink-0 rounded-[8px] border border-white/15 object-cover"
+                              onError={(e) => {
+                                const img = e.currentTarget;
+                                if (img.src.endsWith(DEFAULT_ARTWORK_SRC)) return;
+                                img.src = DEFAULT_ARTWORK_SRC;
+                              }}
+                            />
+                            <div className="min-w-0">
+                              <div className="truncate text-[16px] font-medium text-white [font-family:var(--font-roboto-condensed)]">
+                                {toDisplayTitle(s.title)}
+                              </div>
+                              <div className="mt-1 text-[12px] text-white/70 [font-family:var(--font-roboto-condensed)]">
+                                {formatCardDate(s.showDate)}
+                              </div>
+                              <div className="mt-0.5 text-[12px] text-white/65 [font-family:var(--font-roboto-condensed)]">
+                                {s.microtonalMatchCount > 0
+                                  ? `${s.microtonalMatchCount} matching songs`
+                                  : "Microtonal match"}
+                              </div>
+                            </div>
+                          </button>
+                          <button
+                            type="button"
+                            data-no-drag
+                            aria-label={`Play show ${s.title}`}
+                            className="ml-4 shrink-0 text-[24px] text-white"
+                            onClick={() => {
+                              void playShowFromCard(s);
+                            }}
+                          >
+                            <FontAwesomeIcon icon={faCirclePlay} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                      })}
+                </div>
               </div>
             </section>
           ) : null}
@@ -3218,6 +3508,7 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
                     const isStatsLoading =
                       !Number.isFinite(showTrackCount ?? NaN) &&
                       !Number.isFinite(showLengthSeconds ?? NaN) &&
+                      Boolean(String(s.defaultId || "").trim()) &&
                       !Object.prototype.hasOwnProperty.call(statsById, s.defaultId);
                     const lengthText = formatShowLength(showLengthSeconds);
                     const trackCount = Number.isFinite(showTrackCount ?? NaN)
@@ -3239,7 +3530,7 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
                           className="flex w-full flex-1 flex-col text-center"
                           onClick={() => {
                             rememberRecentShow(s.showKey);
-                            router.push(`/show/${encodeURIComponent(s.showKey)}`);
+                            router.push(buildShowHref(s));
                           }}
                         >
                           <div className="relative h-[144px] w-full overflow-hidden rounded-lg bg-black/30">
