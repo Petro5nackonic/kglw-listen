@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, usePathname, useSearchParams } from "next/navigation";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faMapPin } from "@fortawesome/pro-solid-svg-icons";
+import { faHeart, faMapPin } from "@fortawesome/pro-solid-svg-icons";
+import { faHeart as faHeartRegular } from "@fortawesome/free-regular-svg-icons";
 import { usePlayer } from "@/components/player/store";
 import { usePlaylists } from "@/components/playlists/store";
 import { toDisplayTitle, toDisplayTrackTitle } from "@/utils/displayTitle";
@@ -600,6 +601,16 @@ export default function ShowPage() {
     if (!slot) return false;
     return slot.variants.some((v) => v.track.url === sheetTrack.url);
   }, [sheetTrack, lovedSongsPlaylist]);
+  const lovedTrackUrls = useMemo(() => {
+    if (!lovedSongsPlaylist) return new Set<string>();
+    const urls = new Set<string>();
+    for (const slot of lovedSongsPlaylist.slots) {
+      for (const v of slot.variants) {
+        if (v?.track?.url) urls.add(v.track.url);
+      }
+    }
+    return urls;
+  }, [lovedSongsPlaylist]);
 
   function closeSheet() {
     setSheetTrack(null);
@@ -849,8 +860,17 @@ export default function ShowPage() {
                       {displayTrackTitle(t.title)}
                     </span>
                     {t.length ? (
-                      <span className="shrink-0 text-[14px] tracking-[0.04em] text-white/85 [font-family:var(--font-roboto-condensed)]">
-                        {t.length}
+                      <span className="flex shrink-0 items-center gap-[12px]">
+                        {lovedTrackUrls.has(t.url) ? (
+                          <FontAwesomeIcon
+                            icon={faHeart}
+                            className="text-[12px] text-white"
+                            aria-hidden
+                          />
+                        ) : null}
+                        <span className="text-[14px] tracking-[0.04em] text-white/85 [font-family:var(--font-roboto-condensed)]">
+                          {t.length}
+                        </span>
                       </span>
                     ) : null}
                   </button>
@@ -914,13 +934,16 @@ export default function ShowPage() {
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
-                      className="flex items-center justify-center gap-2 rounded-xl bg-[rgba(48,26,89,0.25)] px-4 py-4 text-base hover:bg-[rgba(72,36,124,0.35)] transition"
+                      className={`flex items-center justify-center gap-2 rounded-xl bg-[rgba(48,26,89,0.25)] px-4 py-4 text-base hover:bg-[rgba(72,36,124,0.35)] transition ${isSheetSongLoved ? "text-rose-300" : ""}`}
                       onClick={() => {
                         toggleSheetSongLove();
                       }}
                       title={isSheetSongLoved ? "Loved song" : "Love song"}
                     >
-                      <span>{isSheetSongLoved ? "♥" : "♡"}</span>
+                      <FontAwesomeIcon
+                        icon={isSheetSongLoved ? faHeart : faHeartRegular}
+                        className="text-[14px]"
+                      />
                       <span>{isSheetSongLoved ? "Loved" : "Love"}</span>
                     </button>
 

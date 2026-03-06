@@ -121,6 +121,7 @@ type DiscoveryRowsCachePayload = {
   dripDripShows: ShowItem[];
   jamSpamShows: ShowItem[];
   microtonalityShows: MicrotonalityShowItem[];
+  metalShows: ShowItem[];
 };
 
 const SHOW_TYPE_OPTIONS = [
@@ -167,7 +168,7 @@ const LOVED_SONGS_PLAYLIST_NAME = "Loved Songs";
 const SHOW_STATS_CACHE_KEY = "kglw.showStats.v3";
 const HOME_SHOWS_CACHE_KEY = "kglw.homeShows.v3";
 const HOME_SHOWS_CACHE_MAX_AGE_MS = 1000 * 60 * 10;
-const DISCOVERY_ROWS_CACHE_KEY = "kglw.discoveryRows.v4";
+const DISCOVERY_ROWS_CACHE_KEY = "kglw.discoveryRows.v7";
 const DISCOVERY_ROWS_CACHE_MAX_AGE_MS = 1000 * 60 * 10;
 const DEFAULT_ARTWORK_SRC = "/api/default-artwork";
 const PREBUILT_PLAYLIST_NAME_SET = new Set([
@@ -189,6 +190,30 @@ const JAM_SPAM_SONGS = [
   "The Dripping Tap",
 ];
 const MICROTONALITY_ALBUMS = ["K.G.", "L.W.", "Flying Microtonal Banana"];
+// Song-based queries for metal (PetroDragonic, Infest the Rats' Nest, Murder of the Universe)
+const METAL_SONGS = [
+  "Planet B",
+  "Mars for the Rich",
+  "Organ Farmer",
+  "Superbug",
+  "Venusian 1",
+  "Perihelion",
+  "Venusian 2",
+  "Self-Immolate",
+  "Hell",
+  "Motor Spirit",
+  "Supercell",
+  "Converge",
+  "Witchcraft",
+  "Gila Monster",
+  "Dragon",
+  "Flamethrower",
+  "K.G.L.W.",
+  "Vomit Coffin",
+  "Digital Black",
+  "The Lord of Lightning",
+  "The Balrog",
+];
 const SORT_OPTIONS: { value: string; label: string }[] = [
   { value: "newest", label: "Newest" },
   { value: "oldest", label: "Oldest" },
@@ -798,10 +823,12 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
   const [dripDripShows, setDripDripShows] = useState<ShowItem[]>([]);
   const [jamSpamShows, setJamSpamShows] = useState<ShowItem[]>([]);
   const [microtonalityShows, setMicrotonalityShows] = useState<MicrotonalityShowItem[]>([]);
+  const [metalShows, setMetalShows] = useState<ShowItem[]>([]);
   const [takingFlightLoading, setTakingFlightLoading] = useState(true);
   const [dripDripLoading, setDripDripLoading] = useState(true);
   const [jamSpamLoading, setJamSpamLoading] = useState(true);
   const [microtonalityLoading, setMicrotonalityLoading] = useState(true);
+  const [metalLoading, setMetalLoading] = useState(true);
   const [songShareState, setSongShareState] = useState<"idle" | "copied" | "error">(
     "idle",
   );
@@ -827,6 +854,7 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
   const takingFlightCarouselRef = useRef<HTMLDivElement | null>(null);
   const dripDripCarouselRef = useRef<HTMLDivElement | null>(null);
   const jamSpamCarouselRef = useRef<HTMLDivElement | null>(null);
+  const metalCarouselRef = useRef<HTMLDivElement | null>(null);
   const compDraggingRef = useRef(false);
   const compDragStartXRef = useRef(0);
   const compDragStartScrollLeftRef = useRef(0);
@@ -839,6 +867,9 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
   const jamSpamDraggingRef = useRef(false);
   const jamSpamDragStartXRef = useRef(0);
   const jamSpamDragStartScrollLeftRef = useRef(0);
+  const metalDraggingRef = useRef(false);
+  const metalDragStartXRef = useRef(0);
+  const metalDragStartScrollLeftRef = useRef(0);
   const [canScrollCompsPrev, setCanScrollCompsPrev] = useState(false);
   const [canScrollCompsNext, setCanScrollCompsNext] = useState(false);
   const [canScrollTakingFlightPrev, setCanScrollTakingFlightPrev] = useState(false);
@@ -847,6 +878,8 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
   const [canScrollDripDripNext, setCanScrollDripDripNext] = useState(false);
   const [canScrollJamSpamPrev, setCanScrollJamSpamPrev] = useState(false);
   const [canScrollJamSpamNext, setCanScrollJamSpamNext] = useState(false);
+  const [canScrollMetalPrev, setCanScrollMetalPrev] = useState(false);
+  const [canScrollMetalNext, setCanScrollMetalNext] = useState(false);
   const didHydrateInitialShowsRef = useRef(false);
   const didRunFilterReloadRef = useRef(false);
 
@@ -1161,20 +1194,24 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
           const cachedMicrotonality = Array.isArray(parsed?.microtonalityShows)
             ? parsed.microtonalityShows
             : [];
+          const cachedMetal = Array.isArray(parsed?.metalShows) ? parsed.metalShows : [];
           if (
             cachedTakingFlight.length > 0 ||
             cachedDripDrip.length > 0 ||
             cachedJamSpam.length > 0 ||
-            cachedMicrotonality.length > 0
+            cachedMicrotonality.length > 0 ||
+            cachedMetal.length > 0
           ) {
             setTakingFlightShows(cachedTakingFlight);
             setDripDripShows(cachedDripDrip);
             setJamSpamShows(cachedJamSpam);
             setMicrotonalityShows(cachedMicrotonality);
+            setMetalShows(cachedMetal);
             setTakingFlightLoading(false);
             setDripDripLoading(false);
             setJamSpamLoading(false);
             setMicrotonalityLoading(false);
+            setMetalLoading(false);
             return;
           }
         }
@@ -1188,11 +1225,13 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
       setDripDripLoading(true);
       setJamSpamLoading(true);
       setMicrotonalityLoading(true);
+      setMetalLoading(true);
       const DISCOVERY_TIMEOUT_MS = 12000;
       let nextTakingFlightShows: ShowItem[] = [];
       let nextDripDripShows: ShowItem[] = [];
       let nextJamSpamShows: ShowItem[] = [];
       let nextMicrotonalityShows: MicrotonalityShowItem[] = [];
+      let nextMetalShows: ShowItem[] = [];
       const buildDiscoveryUrl = (options: {
         sort: "most_played" | "newest";
         query?: string;
@@ -1429,10 +1468,74 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
         }
       };
 
+      const metalTask = async (excludeShowKeys: Set<string>) => {
+        try {
+          const metalData = await Promise.all(
+            METAL_SONGS.map((song) => fetchDiscoveryResponse({ query: song })),
+          );
+
+          const byShow = new Map<string, ShowItem>();
+          for (const payload of metalData) {
+            const items = Array.isArray(payload?.song?.items)
+              ? payload.song.items
+              : Array.isArray(payload?.items)
+                ? payload.items
+                : [];
+            for (const item of items) {
+              const prev = byShow.get(item.showKey);
+              const currentSec =
+                typeof item.matchedSongSeconds === "number" ? item.matchedSongSeconds : -1;
+              const prevSec =
+                typeof prev?.matchedSongSeconds === "number" ? prev.matchedSongSeconds : -1;
+              if (!prev || currentSec > prevSec) byShow.set(item.showKey, item);
+            }
+          }
+
+          const ranked = Array.from(byShow.values()).sort((a, b) => {
+            const aSec = typeof a.matchedSongSeconds === "number" ? a.matchedSongSeconds : -1;
+            const bSec = typeof b.matchedSongSeconds === "number" ? b.matchedSongSeconds : -1;
+            if (bSec !== aSec) return bSec - aSec;
+            return Number(b.plays || 0) - Number(a.plays || 0);
+          });
+          const withId = ranked.filter((s) => Boolean(String(s.defaultId || "").trim()));
+          const filtered = withId.filter((s) => !excludeShowKeys.has(s.showKey));
+          const shuffled = shuffleArray(filtered);
+          const selected = shuffled.slice(0, 12);
+
+          if (!alive) return;
+          if (selected.length > 0) {
+            nextMetalShows = selected;
+            setMetalShows(selected);
+            return;
+          }
+          const fallbackItems = (await getPopularFallback())
+            .filter((s) => Boolean(String(s.defaultId || "").trim()) && !excludeShowKeys.has(s.showKey))
+            .slice(0, 12);
+          const fallbackShuffled = shuffleArray(fallbackItems);
+          nextMetalShows = fallbackShuffled.length > 0 ? fallbackShuffled : withId.slice(0, 12);
+          setMetalShows(nextMetalShows);
+        } catch {
+          if (!alive) return;
+          const fallbackItems = shuffleArray(
+            (await getPopularFallback())
+              .filter((s) => Boolean(String(s.defaultId || "").trim()) && !excludeShowKeys.has(s.showKey))
+              .slice(0, 12),
+          );
+          nextMetalShows = fallbackItems;
+          setMetalShows(fallbackItems);
+        } finally {
+          if (!alive) return;
+          setMetalLoading(false);
+        }
+      };
+
       await dripDripTask;
       const dripDripKeys = new Set(nextDripDripShows.map((s) => s.showKey));
       await jamSpamTask(dripDripKeys);
-      await microtonalityTask(new Set());
+      const jamSpamKeys = new Set(nextJamSpamShows.map((s) => s.showKey));
+      await microtonalityTask(new Set([...dripDripKeys, ...jamSpamKeys]));
+      const microtonalityKeys = new Set(nextMicrotonalityShows.map((s) => s.showKey));
+      await metalTask(new Set([...dripDripKeys, ...jamSpamKeys, ...microtonalityKeys]));
       await takingFlightTask;
       if (!alive) return;
       try {
@@ -1442,6 +1545,7 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
           dripDripShows: nextDripDripShows,
           jamSpamShows: nextJamSpamShows,
           microtonalityShows: nextMicrotonalityShows,
+          metalShows: nextMetalShows,
         };
         localStorage.setItem(DISCOVERY_ROWS_CACHE_KEY, JSON.stringify(payload));
       } catch {
@@ -1627,6 +1731,7 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
   const showDripDripSkeleton = dripDripLoading && dripDripShows.length === 0;
   const showJamSpamSkeleton = jamSpamLoading && jamSpamShows.length === 0;
   const showMicrotonalitySkeleton = microtonalityLoading && microtonalityShows.length === 0;
+  const showMetalSkeleton = metalLoading && metalShows.length === 0;
   const renderPrebuiltSkeletonCards = () =>
     Array.from({ length: 4 }, (_, idx) => (
       <div
@@ -1988,6 +2093,7 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
       ...dripDripShows,
       ...jamSpamShows,
       ...microtonalityShows,
+      ...metalShows,
     ];
     const unresolvedIds = Array.from(
       new Set(
@@ -2041,7 +2147,7 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
     return () => {
       cancelled = true;
     };
-  }, [venueShows, dripDripShows, jamSpamShows, microtonalityShows, statsById]);
+  }, [venueShows, dripDripShows, jamSpamShows, microtonalityShows, metalShows, statsById]);
 
   useEffect(() => {
     const targets = venueShows.slice(0, 16);
@@ -2059,6 +2165,7 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
           ...dripDripShows.slice(0, 3),
           ...jamSpamShows.slice(0, 2),
           ...microtonalityShows.slice(0, 2),
+          ...metalShows.slice(0, 2),
         ];
     const deduped: ShowItem[] = [];
     const seen = new Set<string>();
@@ -2086,6 +2193,7 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
     dripDripShows,
     jamSpamShows,
     microtonalityShows,
+    metalShows,
   ]);
 
   useEffect(() => {
@@ -2168,6 +2276,26 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
       window.removeEventListener("resize", update);
     };
   }, [jamSpamShows.length]);
+  useEffect(() => {
+    const el = metalCarouselRef.current;
+    if (!el) {
+      setCanScrollMetalPrev(false);
+      setCanScrollMetalNext(false);
+      return;
+    }
+    const update = () => {
+      const maxLeft = Math.max(0, el.scrollWidth - el.clientWidth);
+      setCanScrollMetalPrev(el.scrollLeft > 2);
+      setCanScrollMetalNext(el.scrollLeft < maxLeft - 2);
+    };
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    return () => {
+      el.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+    };
+  }, [metalShows.length]);
 
   function scrollCompsPrevPage() {
     const el = compCarouselRef.current;
@@ -2213,6 +2341,18 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
   }
   function scrollJamSpamNextPage() {
     const el = jamSpamCarouselRef.current;
+    if (!el) return;
+    const delta = Math.max(320, Math.floor(el.clientWidth * 0.88));
+    el.scrollBy({ left: delta, behavior: "smooth" });
+  }
+  function scrollMetalPrevPage() {
+    const el = metalCarouselRef.current;
+    if (!el) return;
+    const delta = Math.max(320, Math.floor(el.clientWidth * 0.88));
+    el.scrollBy({ left: -delta, behavior: "smooth" });
+  }
+  function scrollMetalNextPage() {
+    const el = metalCarouselRef.current;
     if (!el) return;
     const delta = Math.max(320, Math.floor(el.clientWidth * 0.88));
     el.scrollBy({ left: delta, behavior: "smooth" });
@@ -2377,6 +2517,48 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
   function onJamSpamCarouselPointerEnd() {
     jamSpamDraggingRef.current = false;
     const el = jamSpamCarouselRef.current;
+    if (!el) return;
+    el.classList.remove("cursor-grabbing");
+  }
+  function onMetalCarouselPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    const el = metalCarouselRef.current;
+    if (!el) return;
+    const composedPath = typeof e.nativeEvent.composedPath === "function"
+      ? e.nativeEvent.composedPath()
+      : [];
+    const pathHasNoDrag = composedPath.some(
+      (node) => node instanceof Element && node.hasAttribute("data-no-drag"),
+    );
+    if (pathHasNoDrag) return;
+    const target = e.target;
+    if (
+      target instanceof Element &&
+      target.closest(
+        "button, a, input, select, textarea, [role='button'], [data-no-drag]",
+      )
+    ) {
+      return;
+    }
+    metalDraggingRef.current = true;
+    metalDragStartXRef.current = e.clientX;
+    metalDragStartScrollLeftRef.current = el.scrollLeft;
+    el.classList.add("cursor-grabbing");
+    try {
+      el.setPointerCapture(e.pointerId);
+    } catch {
+      // Ignore if pointer capture is unavailable.
+    }
+  }
+  function onMetalCarouselPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (!metalDraggingRef.current) return;
+    const el = metalCarouselRef.current;
+    if (!el) return;
+    const dx = e.clientX - metalDragStartXRef.current;
+    el.scrollLeft = metalDragStartScrollLeftRef.current - dx;
+  }
+  function onMetalCarouselPointerEnd() {
+    metalDraggingRef.current = false;
+    const el = metalCarouselRef.current;
     if (!el) return;
     el.classList.remove("cursor-grabbing");
   }
@@ -3148,6 +3330,67 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
                           renderDiscoveryShowCard(s, `microtonality-${s.showKey}`),
                         )}
                 </div>
+              </div>
+            </section>
+          ) : null}
+
+          {!showOnlyShows ? (
+            <section>
+              <div className="mb-4">
+                <h2 className="text-[24px] font-semibold [font-family:var(--font-roboto-condensed)]">
+                  Metal
+                </h2>
+                <div className="mt-1 text-[13px] text-white/70 [font-family:var(--font-roboto-condensed)]">
+                  Shows featuring the most songs from PetroDragonic, Infest the Rats&apos; Nest, Murder of the Universe, and more
+                </div>
+              </div>
+              <div className="relative">
+                <div
+                  ref={metalCarouselRef}
+                  className="cursor-grab overflow-x-auto pb-1 select-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                  onPointerDown={onMetalCarouselPointerDown}
+                  onPointerMove={onMetalCarouselPointerMove}
+                  onPointerUp={onMetalCarouselPointerEnd}
+                  onPointerCancel={onMetalCarouselPointerEnd}
+                  onPointerLeave={onMetalCarouselPointerEnd}
+                >
+                  <div className="grid w-max auto-cols-[minmax(300px,300px)] grid-flow-col grid-rows-1 gap-3 md:auto-cols-[minmax(264px,264px)]">
+                    {showMetalSkeleton
+                      ? renderDiscoverySkeletonCards("metal")
+                      : metalShows.length === 0
+                        ? [renderDiscoveryEmptyCard("metal-empty", "Metal shows are unavailable right now.")]
+                        : metalShows.map((s) => {
+                            const metalLength = displaySongLength(s.matchedSongLength, s.matchedSongSeconds);
+                            const metalTitle = toDisplayTrackTitle(s.matchedSongTitle || "");
+                            const subtitle = metalTitle
+                              ? `Longest ${metalTitle}${metalLength ? ` • ${metalLength}` : ""}`
+                              : undefined;
+                            return renderDiscoveryShowCard(s, `metal-${s.showKey}`, {
+                              subtitle,
+                            });
+                          })}
+                  </div>
+                </div>
+                {canScrollMetalPrev ? (
+                  <button
+                    type="button"
+                    aria-label="Previous Metal shows"
+                    className="absolute top-1/2 left-0 hidden -translate-y-1/2 rounded-full border border-white/25 bg-black/55 px-3 py-2 text-sm text-white shadow-[0_8px_18px_rgba(0,0,0,0.35)] backdrop-blur md:flex"
+                    onClick={scrollMetalPrevPage}
+                  >
+                    ‹
+                  </button>
+                ) : null}
+                {canScrollMetalNext ? (
+                  <button
+                    type="button"
+                    aria-label="Next Metal shows"
+                    className="absolute top-1/2 right-0 hidden -translate-y-1/2 rounded-full border border-white/25 bg-black/55 px-3 py-2 text-sm text-white shadow-[0_8px_18px_rgba(0,0,0,0.35)] backdrop-blur md:flex"
+                    onClick={scrollMetalNextPage}
+                  >
+                    ›
+                  </button>
+                ) : null}
               </div>
             </section>
           ) : null}
