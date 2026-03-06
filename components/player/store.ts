@@ -4,6 +4,8 @@ export type Track = {
   title: string;
   url: string;
   backupUrls?: string[];
+  playlistId?: string;
+  playlistSource?: "user" | "prebuilt";
   name?: string;
   length?: string;
   track?: string;

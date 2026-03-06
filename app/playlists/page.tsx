@@ -105,6 +105,7 @@ const PLAYLIST_SORT_OPTIONS = [
 ] as const;
 
 type PlaylistSortValue = (typeof PLAYLIST_SORT_OPTIONS)[number]["value"];
+const LOVED_SONGS_PLAYLIST_NAME = "Loved Songs";
 
 export default function PlaylistsPage() {
   const router = useRouter();
@@ -163,6 +164,14 @@ export default function PlaylistsPage() {
     setClientHydrated(true);
   }, []);
   useEffect(() => {
+    if (!clientHydrated) return;
+    const hasLovedSongs = playlists.some(
+      (p) => p.name.trim().toLowerCase() === LOVED_SONGS_PLAYLIST_NAME.toLowerCase(),
+    );
+    if (hasLovedSongs) return;
+    createPlaylist(LOVED_SONGS_PLAYLIST_NAME);
+  }, [clientHydrated, playlists, createPlaylist]);
+  useEffect(() => {
     if (!playerLoading) setRequestedPlaylistId(null);
   }, [playerLoading]);
   useEffect(() => {
@@ -217,10 +226,10 @@ export default function PlaylistsPage() {
     <main className="min-h-screen bg-[#080017] text-white">
       <div className="mx-auto w-full max-w-md px-6 pb-8 pt-6">
         <div className="mb-4 flex items-center justify-between">
-          <h1 className="text-[24px] font-semibold [font-family:var(--font-roboto-condensed)]">
-            Playlists
-          </h1>
           <div className="flex items-center gap-2">
+            <h1 className="text-[24px] font-semibold [font-family:var(--font-roboto-condensed)]">
+              Playlists
+            </h1>
             {userPlaylists.length > 0 ? (
               <div className="relative z-20">
                 <button
@@ -239,7 +248,7 @@ export default function PlaylistsPage() {
                   <FontAwesomeIcon icon={faChevronDown} />
                 </button>
                 {sortMenuOpen && (
-                  <div className="absolute right-0 top-9 z-30 w-44 rounded-[12px] border border-white/15 bg-[#16052c] p-1.5 shadow-[0_8px_18px_rgba(0,0,0,0.45)]">
+                  <div className="absolute left-0 top-9 z-30 w-44 rounded-[12px] border border-white/15 bg-[#16052c] p-1.5 shadow-[0_8px_18px_rgba(0,0,0,0.45)]">
                     {PLAYLIST_SORT_OPTIONS.map((opt) => {
                       const active = sortBy === opt.value;
                       return (
@@ -262,6 +271,8 @@ export default function PlaylistsPage() {
                 )}
               </div>
             ) : null}
+          </div>
+          <div className="flex items-center gap-2">
             <button
               type="button"
               aria-label="Create playlist"
@@ -342,10 +353,16 @@ export default function PlaylistsPage() {
 
             <div className="space-y-2 text-left">
               {playlistRows.map(({ playlist: p, versions, chainCount, duration }) => {
+                const isLovedSongs =
+                  p.name.trim().toLowerCase() === LOVED_SONGS_PLAYLIST_NAME.toLowerCase();
                 return (
                   <div
                     key={p.id}
-                    className={`relative rounded-[16px] border border-white/20 bg-white/5 p-3 backdrop-blur-[6px] ${
+                    className={`relative rounded-[16px] p-3 backdrop-blur-[6px] ${
+                      isLovedSongs
+                        ? "border border-[#7c50d8]/65 bg-linear-to-br from-[#1b0d33] via-[#180b2d] to-[#0f0820]"
+                        : "border border-white/20 bg-white/5"
+                    } ${
                       playlistMenuId === p.id ? "z-[90]" : "z-0"
                     }`}
                   >

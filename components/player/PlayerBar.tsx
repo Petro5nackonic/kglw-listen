@@ -7,10 +7,12 @@ import {
   faBackwardStep,
   faEyeSlash,
   faForwardStep,
+  faListMusic,
   faPause,
   faPlay,
 } from "@fortawesome/pro-solid-svg-icons";
 import { usePlayer } from "@/components/player/store";
+import { usePlaylists } from "@/components/playlists/store";
 import { toDisplayTrackTitle } from "@/utils/displayTitle";
 
 function fmt(sec: number) {
@@ -29,6 +31,30 @@ function formatCardDate(input?: string): string {
   const mm = String(Number(m[2]));
   const dd = String(Number(m[3]));
   return `${mm}-${dd}-${yy}`;
+}
+
+function formatCreatedDate(timestamp?: number): string {
+  const value = Number(timestamp);
+  if (!Number.isFinite(value) || value <= 0) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function formatTrackLengthLabel(length?: string): string {
+  const raw = String(length || "").trim();
+  if (!raw) return "";
+  if (/^\d+(\.\d+)?$/.test(raw)) {
+    return fmt(Number(raw));
+  }
+  const parts = raw.split(":").map((p) => Number(p));
+  if (parts.some((n) => !Number.isFinite(n) || n < 0)) return raw;
+  if (parts.length === 2) return fmt(parts[0] * 60 + parts[1]);
+  if (parts.length === 3) return fmt(parts[0] * 3600 + parts[1] * 60 + parts[2]);
+  return raw;
 }
 
 function getArchiveIdentifier(url?: string): string {
@@ -112,6 +138,7 @@ function pickBestArchiveTrackUrl(
 
 export function PlayerBar() {
   const router = useRouter();
+  const playlists = usePlaylists((s) => s.playlists);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const preloadAudioRef = useRef<HTMLAudioElement | null>(null);
   const fallbackTriedRef = useRef<Set<string>>(new Set());
@@ -125,6 +152,8 @@ export function PlayerBar() {
     title: string;
     url: string;
     backupUrls?: string[];
+    playlistId?: string;
+    playlistSource?: "user" | "prebuilt";
     track?: string;
     showKey?: string;
     showDate?: string;
@@ -137,6 +166,8 @@ export function PlayerBar() {
       title: string;
       url: string;
       backupUrls?: string[];
+      playlistId?: string;
+      playlistSource?: "user" | "prebuilt";
       track?: string;
       showKey?: string;
       showDate?: string;
@@ -151,6 +182,8 @@ export function PlayerBar() {
         title: string;
         url: string;
         backupUrls?: string[];
+        playlistId?: string;
+        playlistSource?: "user" | "prebuilt";
         track?: string;
         showKey?: string;
         showDate?: string;
@@ -200,6 +233,13 @@ export function PlayerBar() {
 
   function openCurrentShow() {
     setMinimized(false);
+    if (
+      currentTrack?.playlistSource === "prebuilt" &&
+      currentTrack?.playlistId
+    ) {
+      router.push(`/playlists/${encodeURIComponent(currentTrack.playlistId)}`);
+      return;
+    }
     if (!currentTrack?.showKey) return;
     const song = encodeURIComponent(toDisplayTrackTitle(currentTrack.title));
     router.push(`/show/${encodeURIComponent(currentTrack.showKey)}?song=${song}`);
@@ -324,6 +364,7 @@ export function PlayerBar() {
   const [current, setCurrent] = useState(0);
   const [duration, setDuration] = useState(0);
   const [minimized, setMinimized] = useState(false);
+  const [queueSheetOpen, setQueueSheetOpen] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
   const [bufferProgress, setBufferProgress] = useState(0);
   const progress = useMemo(() => {
@@ -478,8 +519,49 @@ export function PlayerBar() {
       ? `${currentTrack.track}. ${baseTitle}`
       : baseTitle;
   }, [currentTrack]);
+  const activePlaylist = useMemo(() => {
+    const id = String(currentTrack?.playlistId || "").trim();
+    if (!id) return null;
+    return playlists.find((p) => p.id === id) || null;
+  }, [currentTrack?.playlistId, playlists]);
+  const isPrebuiltContext = Boolean(
+    currentTrack?.playlistSource === "prebuilt" ||
+      (activePlaylist &&
+        (activePlaylist.source === "prebuilt" ||
+          activePlaylist.prebuiltKind === "album-live-comp")),
+  );
+  const queueContextTitle = useMemo(() => {
+    if (activePlaylist?.name) return activePlaylist.name;
+    const venue = String(currentTrack?.venueText || "").trim();
+    if (venue) return venue;
+    return "Current Show";
+  }, [activePlaylist, currentTrack?.venueText]);
+  const queueContextSubtitle = useMemo(() => {
+    if (activePlaylist) {
+      if (isPrebuiltContext) return "";
+      const created = formatCreatedDate(activePlaylist.createdAt);
+      return created ? `Created ${created}` : "";
+    }
+    return formatCardDate(currentTrack?.showDate);
+  }, [activePlaylist, isPrebuiltContext, currentTrack?.showDate]);
+  const queueItems = useMemo(
+    () =>
+      queue
+        .map((track, idx) => ({ track, idx }))
+        .filter((item) => item.idx > index),
+    [queue, index],
+  );
+  useEffect(() => {
+    if (hasQueue) return;
+    setQueueSheetOpen(false);
+  }, [hasQueue]);
 
   if (!hasQueue) return null;
+
+  const canOpenCurrentContext = Boolean(
+    (currentTrack?.playlistSource === "prebuilt" && currentTrack?.playlistId) ||
+      currentTrack?.showKey,
+  );
 
   const audioElements = (
     <>
@@ -561,6 +643,84 @@ export function PlayerBar() {
   return (
     <>
       {audioElements}
+      {queueSheetOpen && (
+        <>
+          <button
+            type="button"
+            aria-label="Close queue"
+            className="fixed inset-0 z-40 bg-black/50"
+            onClick={() => setQueueSheetOpen(false)}
+          />
+          <div className="fixed inset-x-0 bottom-0 z-50 mx-auto w-full max-w-[393px] rounded-t-2xl border border-white/15 bg-[#080017] px-6 pb-10 pt-6 shadow-[0_-4px_16px_rgba(0,0,0,0.4)] [font-family:var(--font-roboto-condensed)]">
+            <div className="mb-5">
+              <div className="flex items-start gap-3">
+                <div className="h-11 w-11 shrink-0 overflow-hidden rounded-[8px] border border-white/15 bg-black/30">
+                  {artworkSrc ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={artworkSrc} alt="" className="h-full w-full object-cover" />
+                  ) : null}
+                </div>
+                <div className="min-w-0">
+                  <div className="line-clamp-2 text-[22px] leading-[1.05] text-white">
+                    {queueContextTitle}
+                  </div>
+                  {queueContextSubtitle ? (
+                    <div className="mt-1 text-[13px] text-white/65">{queueContextSubtitle}</div>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+            <div className="max-h-[50vh] space-y-1.5 overflow-auto pr-1">
+              {currentTrack ? (
+                <div className="flex items-center justify-between gap-2 rounded-lg px-1 py-1">
+                  <div className="min-w-0 truncate text-[16px] leading-none text-[#EFD50F]">
+                    {toDisplayTrackTitle(currentTrack.title)}
+                  </div>
+                  {currentTrack.length ? (
+                    <span className="shrink-0 text-[14px] tracking-[0.04em] text-[#EFD50F]">
+                      {formatTrackLengthLabel(currentTrack.length)}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
+              {queueItems.map((item) => {
+                return (
+                  <button
+                    key={`${item.track.url}-${item.idx}`}
+                    type="button"
+                    className="flex w-full items-center justify-between gap-2 rounded-lg px-1 py-1 text-left hover:bg-white/6"
+                    onClick={() => {
+                      const nextQueue = queue.slice(item.idx);
+                      if (nextQueue.length === 0) return;
+                      setQueue(nextQueue, 0);
+                      setQueueSheetOpen(false);
+                    }}
+                  >
+                    <div className="min-w-0 truncate text-[16px] leading-none text-white">
+                      {toDisplayTrackTitle(item.track.title)}
+                    </div>
+                    {item.track.length ? (
+                      <span className="shrink-0 text-[14px] tracking-[0.04em] text-white/85">
+                        {formatTrackLengthLabel(item.track.length)}
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
+              {queueItems.length === 0 ? (
+                <div className="text-[13px] text-white/60">No upcoming songs.</div>
+              ) : null}
+            </div>
+            <button
+              type="button"
+              className="mt-5 w-full text-center text-[16px] text-white/90 hover:text-white transition"
+              onClick={() => setQueueSheetOpen(false)}
+            >
+              Close
+            </button>
+          </div>
+        </>
+      )}
       <div className="fixed right-0 bottom-[52px] left-0 z-30 bg-black/65 backdrop-blur">
         <div className="mx-auto w-full max-w-[1140px] px-4 pb-4 pt-3 [font-family:var(--font-roboto-condensed)] md:px-6">
           {isBuffering && playing && src ? (
@@ -584,8 +744,8 @@ export function PlayerBar() {
                 type="button"
                 onClick={openCurrentShow}
                 className="h-[42px] w-[42px] shrink-0 overflow-hidden rounded-[8px] bg-[#d9d9d9] disabled:cursor-default"
-                disabled={!currentTrack?.showKey}
-                title={currentTrack?.showKey ? "Open current show" : "Show unavailable"}
+                disabled={!canOpenCurrentContext}
+                title={canOpenCurrentContext ? "Open current context" : "Show unavailable"}
               >
                 {artworkSrc ? (
                   <>
@@ -597,22 +757,24 @@ export function PlayerBar() {
               <button
                 type="button"
                 onClick={openCurrentShow}
-                disabled={!currentTrack?.showKey}
+                disabled={!canOpenCurrentContext}
                 className="min-w-0 text-left disabled:cursor-default"
-                title={currentTrack?.showKey ? "Open current show" : "Show unavailable"}
+                title={canOpenCurrentContext ? "Open current context" : "Show unavailable"}
               >
                 <div className="truncate text-[14px] text-white">{title}</div>
               </button>
             </div>
-            <button
-              type="button"
-              className="text-[22px] text-white/95 hover:text-white disabled:opacity-40"
-              onClick={() => setMinimized(true)}
-              disabled={!hasQueue}
-              title="Hide player"
-            >
-              <FontAwesomeIcon icon={faEyeSlash} />
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                className="text-[22px] text-white/95 hover:text-white disabled:opacity-40"
+                onClick={() => setQueueSheetOpen(true)}
+                disabled={!hasQueue}
+                title="Queue"
+              >
+                <FontAwesomeIcon icon={faListMusic} />
+              </button>
+            </div>
           </div>
 
           <div className="mb-3 flex items-center gap-3">
@@ -641,43 +803,57 @@ export function PlayerBar() {
             <div className="w-9 text-right text-[12px] text-white tabular-nums">{fmt(duration)}</div>
           </div>
 
-          <div className="flex items-center justify-center gap-12 text-[25px] text-white">
-            <button
-              className="leading-none disabled:opacity-40"
-              onClick={onPrevPress}
-              disabled={!hasQueue}
-              title="Previous"
-            >
-              <FontAwesomeIcon icon={faBackwardStep} />
-            </button>
-
-            {playing ? (
+          <div className="relative">
+            <div className="flex items-center justify-center gap-12 text-[25px] text-white">
               <button
                 className="leading-none disabled:opacity-40"
-                onClick={() => pause?.()}
+                onClick={onPrevPress}
                 disabled={!hasQueue}
-                title="Pause"
+                title="Previous"
               >
-                <FontAwesomeIcon icon={faPause} />
+                <FontAwesomeIcon icon={faBackwardStep} />
               </button>
-            ) : (
+
+              {playing ? (
+                <button
+                  className="leading-none disabled:opacity-40"
+                  onClick={() => pause?.()}
+                  disabled={!hasQueue}
+                  title="Pause"
+                >
+                  <FontAwesomeIcon icon={faPause} />
+                </button>
+              ) : (
+                <button
+                  className="leading-none disabled:opacity-40"
+                  onClick={() => play?.()}
+                  disabled={!hasQueue}
+                  title="Play"
+                >
+                  <FontAwesomeIcon icon={faPlay} className={loading ? "animate-pulse" : ""} />
+                </button>
+              )}
+
               <button
                 className="leading-none disabled:opacity-40"
-                onClick={() => play?.()}
+                onClick={() => next?.()}
                 disabled={!hasQueue}
-                title="Play"
+                title="Next"
               >
-                <FontAwesomeIcon icon={faPlay} className={loading ? "animate-pulse" : ""} />
+                <FontAwesomeIcon icon={faForwardStep} />
               </button>
-            )}
-
+            </div>
             <button
-              className="leading-none disabled:opacity-40"
-              onClick={() => next?.()}
+              type="button"
+              className="absolute right-0 top-1/2 -translate-y-1/2 text-[19px] text-white/95 hover:text-white disabled:opacity-40"
+              onClick={() => {
+                setQueueSheetOpen(false);
+                setMinimized(true);
+              }}
               disabled={!hasQueue}
-              title="Next"
+              title="Hide player"
             >
-              <FontAwesomeIcon icon={faForwardStep} />
+              <FontAwesomeIcon icon={faEyeSlash} />
             </button>
           </div>
         </div>

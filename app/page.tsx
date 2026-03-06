@@ -166,6 +166,15 @@ const PREBUILT_PLAYLIST_NAME_SET = new Set([
   "petrodragonic apocalypse",
   "the silver chord",
 ]);
+const JAM_SPAM_SONGS = [
+  "The Dripping Tap",
+  "Head On/Pill",
+  "Hypertension",
+  "The River",
+  "Magma",
+  "Iron Lung",
+  "Ice V",
+];
 const SORT_OPTIONS: { value: string; label: string }[] = [
   { value: "newest", label: "Newest" },
   { value: "oldest", label: "Oldest" },
@@ -688,7 +697,7 @@ function MultiSelectDropdown(props: {
   );
 }
 
-export default function HomePage() {
+export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean }) {
   const router = useRouter();
   const setQueue = usePlayer((s) => s.setQueue);
   const playerLoading = usePlayer((s) => s.loading);
@@ -746,6 +755,9 @@ export default function HomePage() {
   const [showSongPlaylistPicker, setShowSongPlaylistPicker] = useState(false);
   const [songSearchLoading, setSongSearchLoading] = useState(false);
   const [searchVenueShows, setSearchVenueShows] = useState<ShowItem[]>([]);
+  const [takingFlightShows, setTakingFlightShows] = useState<ShowItem[]>([]);
+  const [dripDripShows, setDripDripShows] = useState<ShowItem[]>([]);
+  const [jamSpamShows, setJamSpamShows] = useState<ShowItem[]>([]);
   const [songShareState, setSongShareState] = useState<"idle" | "copied" | "error">(
     "idle",
   );
@@ -768,10 +780,29 @@ export default function HomePage() {
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const sortMenuRef = useRef<HTMLDivElement | null>(null);
   const compCarouselRef = useRef<HTMLDivElement | null>(null);
+  const takingFlightCarouselRef = useRef<HTMLDivElement | null>(null);
+  const dripDripCarouselRef = useRef<HTMLDivElement | null>(null);
+  const jamSpamCarouselRef = useRef<HTMLDivElement | null>(null);
   const compDraggingRef = useRef(false);
   const compDragStartXRef = useRef(0);
   const compDragStartScrollLeftRef = useRef(0);
+  const takingFlightDraggingRef = useRef(false);
+  const takingFlightDragStartXRef = useRef(0);
+  const takingFlightDragStartScrollLeftRef = useRef(0);
+  const dripDripDraggingRef = useRef(false);
+  const dripDripDragStartXRef = useRef(0);
+  const dripDripDragStartScrollLeftRef = useRef(0);
+  const jamSpamDraggingRef = useRef(false);
+  const jamSpamDragStartXRef = useRef(0);
+  const jamSpamDragStartScrollLeftRef = useRef(0);
+  const [canScrollCompsPrev, setCanScrollCompsPrev] = useState(false);
   const [canScrollCompsNext, setCanScrollCompsNext] = useState(false);
+  const [canScrollTakingFlightPrev, setCanScrollTakingFlightPrev] = useState(false);
+  const [canScrollTakingFlightNext, setCanScrollTakingFlightNext] = useState(false);
+  const [canScrollDripDripPrev, setCanScrollDripDripPrev] = useState(false);
+  const [canScrollDripDripNext, setCanScrollDripDripNext] = useState(false);
+  const [canScrollJamSpamPrev, setCanScrollJamSpamPrev] = useState(false);
+  const [canScrollJamSpamNext, setCanScrollJamSpamNext] = useState(false);
   const didHydrateInitialShowsRef = useRef(false);
   const didRunFilterReloadRef = useRef(false);
 
@@ -1058,6 +1089,81 @@ export default function HomePage() {
   }, [sortMenuOpen]);
 
   useEffect(() => {
+    if (showOnlyShows) return;
+    let alive = true;
+    async function loadDiscoveryRows() {
+      try {
+        const takingFlightUrl =
+          "/api/ia/shows?page=1&sort=most_played&album=Flight+b741";
+        const dripDripUrl =
+          "/api/ia/shows?page=1&sort=most_played&query=The+Dripping+Tap";
+        const jamSpamUrls = JAM_SPAM_SONGS.map(
+          (song) =>
+            `/api/ia/shows?page=1&sort=most_played&query=${encodeURIComponent(song)}`,
+        );
+        const [takingFlightRes, dripDripRes, ...jamSpamRes] = await Promise.all([
+          fetchShowsWithRetry(takingFlightUrl),
+          fetchShowsWithRetry(dripDripUrl),
+          ...jamSpamUrls.map((url) => fetchShowsWithRetry(url)),
+        ]);
+        if (!alive) return;
+        const takingFlightData = takingFlightRes
+          ? ((await takingFlightRes.json()) as ShowsResponse)
+          : null;
+        const dripDripData = dripDripRes
+          ? ((await dripDripRes.json()) as ShowsResponse)
+          : null;
+        setTakingFlightShows(Array.isArray(takingFlightData?.items) ? takingFlightData.items.slice(0, 10) : []);
+        setDripDripShows(
+          Array.isArray(dripDripData?.song?.items)
+            ? dripDripData.song.items.slice(0, 10)
+            : Array.isArray(dripDripData?.items)
+              ? dripDripData.items.slice(0, 10)
+              : [],
+        );
+        const jamSpamData = await Promise.all(
+          jamSpamRes.map(async (res) =>
+            res ? ((await res.json()) as ShowsResponse) : null,
+          ),
+        );
+        const byShow = new Map<string, ShowItem>();
+        for (const payload of jamSpamData) {
+          const items = Array.isArray(payload?.song?.items)
+            ? payload.song.items
+            : Array.isArray(payload?.items)
+              ? payload.items
+              : [];
+          for (const item of items) {
+            const prev = byShow.get(item.showKey);
+            const currentSec =
+              typeof item.matchedSongSeconds === "number" ? item.matchedSongSeconds : -1;
+            const prevSec =
+              typeof prev?.matchedSongSeconds === "number" ? prev.matchedSongSeconds : -1;
+            if (!prev || currentSec > prevSec) byShow.set(item.showKey, item);
+          }
+        }
+        const ranked = Array.from(byShow.values())
+          .sort((a, b) => {
+            const aSec = typeof a.matchedSongSeconds === "number" ? a.matchedSongSeconds : -1;
+            const bSec = typeof b.matchedSongSeconds === "number" ? b.matchedSongSeconds : -1;
+            if (bSec !== aSec) return bSec - aSec;
+            return (Number(b.plays || 0) - Number(a.plays || 0));
+          })
+          .slice(0, 12);
+        setJamSpamShows(ranked);
+      } catch {
+        if (!alive) return;
+        setTakingFlightShows([]);
+        setDripDripShows([]);
+        setJamSpamShows([]);
+      }
+    }
+    void loadDiscoveryRows();
+    return () => {
+      alive = false;
+    };
+  }, [showOnlyShows]);
+  useEffect(() => {
     if (!didRunFilterReloadRef.current) {
       didRunFilterReloadRef.current = true;
       return;
@@ -1217,6 +1323,24 @@ export default function HomePage() {
     }
     return map;
   }, [albumShowKeysFacet]);
+  const takingFlightFallbackShows = useMemo(() => {
+    const keys = Array.isArray(albumShowKeysFacet["flight b741"])
+      ? albumShowKeysFacet["flight b741"]
+      : [];
+    if (keys.length === 0) return [] as ShowItem[];
+    const keySet = new Set(keys);
+    return shows
+      .filter((s) => keySet.has(s.showKey))
+      .slice()
+      .sort(
+        (a, b) =>
+          (Number(b.plays || 0) - Number(a.plays || 0)) ||
+          Date.parse(String(b.showDate || "")) - Date.parse(String(a.showDate || "")),
+      )
+      .slice(0, 10);
+  }, [albumShowKeysFacet, shows]);
+  const takingFlightCards =
+    takingFlightShows.length > 0 ? takingFlightShows : takingFlightFallbackShows;
   const hasComputedAlbumFacetData = useMemo(
     () => Object.keys(albumShowKeysFacet).length > 0,
     [albumShowKeysFacet],
@@ -1324,6 +1448,13 @@ export default function HomePage() {
       playlists.find(
         (p) => p.name.trim().toLowerCase() === LOVED_SONGS_PLAYLIST_NAME.toLowerCase(),
       ) || null,
+    [playlists],
+  );
+  const selectablePlaylists = useMemo(
+    () =>
+      playlists.filter(
+        (p) => p.name.trim().toLowerCase() !== LOVED_SONGS_PLAYLIST_NAME.toLowerCase(),
+      ),
     [playlists],
   );
   const isCurrentSongLoved = useMemo(() => {
@@ -1569,11 +1700,13 @@ export default function HomePage() {
   useEffect(() => {
     const el = compCarouselRef.current;
     if (!el) {
+      setCanScrollCompsPrev(false);
       setCanScrollCompsNext(false);
       return;
     }
     const update = () => {
       const maxLeft = Math.max(0, el.scrollWidth - el.clientWidth);
+      setCanScrollCompsPrev(el.scrollLeft > 2);
       setCanScrollCompsNext(el.scrollLeft < maxLeft - 2);
     };
     update();
@@ -1584,9 +1717,111 @@ export default function HomePage() {
       window.removeEventListener("resize", update);
     };
   }, [prebuiltPlaylists.length]);
+  useEffect(() => {
+    const el = takingFlightCarouselRef.current;
+    if (!el) {
+      setCanScrollTakingFlightPrev(false);
+      setCanScrollTakingFlightNext(false);
+      return;
+    }
+    const update = () => {
+      const maxLeft = Math.max(0, el.scrollWidth - el.clientWidth);
+      setCanScrollTakingFlightPrev(el.scrollLeft > 2);
+      setCanScrollTakingFlightNext(el.scrollLeft < maxLeft - 2);
+    };
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    return () => {
+      el.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+    };
+  }, [takingFlightCards.length]);
+  useEffect(() => {
+    const el = dripDripCarouselRef.current;
+    if (!el) {
+      setCanScrollDripDripPrev(false);
+      setCanScrollDripDripNext(false);
+      return;
+    }
+    const update = () => {
+      const maxLeft = Math.max(0, el.scrollWidth - el.clientWidth);
+      setCanScrollDripDripPrev(el.scrollLeft > 2);
+      setCanScrollDripDripNext(el.scrollLeft < maxLeft - 2);
+    };
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    return () => {
+      el.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+    };
+  }, [dripDripShows.length]);
+  useEffect(() => {
+    const el = jamSpamCarouselRef.current;
+    if (!el) {
+      setCanScrollJamSpamPrev(false);
+      setCanScrollJamSpamNext(false);
+      return;
+    }
+    const update = () => {
+      const maxLeft = Math.max(0, el.scrollWidth - el.clientWidth);
+      setCanScrollJamSpamPrev(el.scrollLeft > 2);
+      setCanScrollJamSpamNext(el.scrollLeft < maxLeft - 2);
+    };
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    return () => {
+      el.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+    };
+  }, [jamSpamShows.length]);
 
+  function scrollCompsPrevPage() {
+    const el = compCarouselRef.current;
+    if (!el) return;
+    const delta = Math.max(320, Math.floor(el.clientWidth * 0.88));
+    el.scrollBy({ left: -delta, behavior: "smooth" });
+  }
   function scrollCompsNextPage() {
     const el = compCarouselRef.current;
+    if (!el) return;
+    const delta = Math.max(320, Math.floor(el.clientWidth * 0.88));
+    el.scrollBy({ left: delta, behavior: "smooth" });
+  }
+  function scrollTakingFlightPrevPage() {
+    const el = takingFlightCarouselRef.current;
+    if (!el) return;
+    const delta = Math.max(320, Math.floor(el.clientWidth * 0.88));
+    el.scrollBy({ left: -delta, behavior: "smooth" });
+  }
+  function scrollTakingFlightNextPage() {
+    const el = takingFlightCarouselRef.current;
+    if (!el) return;
+    const delta = Math.max(320, Math.floor(el.clientWidth * 0.88));
+    el.scrollBy({ left: delta, behavior: "smooth" });
+  }
+  function scrollDripDripPrevPage() {
+    const el = dripDripCarouselRef.current;
+    if (!el) return;
+    const delta = Math.max(320, Math.floor(el.clientWidth * 0.88));
+    el.scrollBy({ left: -delta, behavior: "smooth" });
+  }
+  function scrollDripDripNextPage() {
+    const el = dripDripCarouselRef.current;
+    if (!el) return;
+    const delta = Math.max(320, Math.floor(el.clientWidth * 0.88));
+    el.scrollBy({ left: delta, behavior: "smooth" });
+  }
+  function scrollJamSpamPrevPage() {
+    const el = jamSpamCarouselRef.current;
+    if (!el) return;
+    const delta = Math.max(320, Math.floor(el.clientWidth * 0.88));
+    el.scrollBy({ left: -delta, behavior: "smooth" });
+  }
+  function scrollJamSpamNextPage() {
+    const el = jamSpamCarouselRef.current;
     if (!el) return;
     const delta = Math.max(320, Math.floor(el.clientWidth * 0.88));
     el.scrollBy({ left: delta, behavior: "smooth" });
@@ -1625,6 +1860,108 @@ export default function HomePage() {
   function onCompCarouselPointerEnd() {
     compDraggingRef.current = false;
     const el = compCarouselRef.current;
+    if (!el) return;
+    el.classList.remove("cursor-grabbing");
+  }
+  function onTakingFlightCarouselPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    const el = takingFlightCarouselRef.current;
+    if (!el) return;
+    const target = e.target as HTMLElement | null;
+    if (
+      target?.closest(
+        "button, a, input, select, textarea, [role='button'], [data-no-drag]",
+      )
+    ) {
+      return;
+    }
+    takingFlightDraggingRef.current = true;
+    takingFlightDragStartXRef.current = e.clientX;
+    takingFlightDragStartScrollLeftRef.current = el.scrollLeft;
+    el.classList.add("cursor-grabbing");
+    try {
+      el.setPointerCapture(e.pointerId);
+    } catch {
+      // Ignore if pointer capture is unavailable.
+    }
+  }
+  function onTakingFlightCarouselPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (!takingFlightDraggingRef.current) return;
+    const el = takingFlightCarouselRef.current;
+    if (!el) return;
+    const dx = e.clientX - takingFlightDragStartXRef.current;
+    el.scrollLeft = takingFlightDragStartScrollLeftRef.current - dx;
+  }
+  function onTakingFlightCarouselPointerEnd() {
+    takingFlightDraggingRef.current = false;
+    const el = takingFlightCarouselRef.current;
+    if (!el) return;
+    el.classList.remove("cursor-grabbing");
+  }
+  function onDripDripCarouselPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    const el = dripDripCarouselRef.current;
+    if (!el) return;
+    const target = e.target as HTMLElement | null;
+    if (
+      target?.closest(
+        "button, a, input, select, textarea, [role='button'], [data-no-drag]",
+      )
+    ) {
+      return;
+    }
+    dripDripDraggingRef.current = true;
+    dripDripDragStartXRef.current = e.clientX;
+    dripDripDragStartScrollLeftRef.current = el.scrollLeft;
+    el.classList.add("cursor-grabbing");
+    try {
+      el.setPointerCapture(e.pointerId);
+    } catch {
+      // Ignore if pointer capture is unavailable.
+    }
+  }
+  function onDripDripCarouselPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (!dripDripDraggingRef.current) return;
+    const el = dripDripCarouselRef.current;
+    if (!el) return;
+    const dx = e.clientX - dripDripDragStartXRef.current;
+    el.scrollLeft = dripDripDragStartScrollLeftRef.current - dx;
+  }
+  function onDripDripCarouselPointerEnd() {
+    dripDripDraggingRef.current = false;
+    const el = dripDripCarouselRef.current;
+    if (!el) return;
+    el.classList.remove("cursor-grabbing");
+  }
+  function onJamSpamCarouselPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    const el = jamSpamCarouselRef.current;
+    if (!el) return;
+    const target = e.target as HTMLElement | null;
+    if (
+      target?.closest(
+        "button, a, input, select, textarea, [role='button'], [data-no-drag]",
+      )
+    ) {
+      return;
+    }
+    jamSpamDraggingRef.current = true;
+    jamSpamDragStartXRef.current = e.clientX;
+    jamSpamDragStartScrollLeftRef.current = el.scrollLeft;
+    el.classList.add("cursor-grabbing");
+    try {
+      el.setPointerCapture(e.pointerId);
+    } catch {
+      // Ignore if pointer capture is unavailable.
+    }
+  }
+  function onJamSpamCarouselPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (!jamSpamDraggingRef.current) return;
+    const el = jamSpamCarouselRef.current;
+    if (!el) return;
+    const dx = e.clientX - jamSpamDragStartXRef.current;
+    el.scrollLeft = jamSpamDragStartScrollLeftRef.current - dx;
+  }
+  function onJamSpamCarouselPointerEnd() {
+    jamSpamDraggingRef.current = false;
+    const el = jamSpamCarouselRef.current;
     if (!el) return;
     el.classList.remove("cursor-grabbing");
   }
@@ -1859,9 +2196,17 @@ export default function HomePage() {
             .filter((_, idx) => idx !== primaryIndex)
             .map((t) => String(t.url || "").trim())
             .filter(Boolean);
+          const enrichedPrimary: Track = {
+            ...primary,
+            playlistId: pl.id,
+            playlistSource: isPrebuilt ? "prebuilt" : "user",
+          };
           return backupUrls.length > 0
-            ? { ...primary, backupUrls: Array.from(new Set(backupUrls)) }
-            : primary;
+            ? {
+                ...enrichedPrimary,
+                backupUrls: Array.from(new Set(backupUrls)),
+              }
+            : enrichedPrimary;
         })
         .filter((track): track is Track => Boolean(track?.url));
 
@@ -1891,7 +2236,7 @@ export default function HomePage() {
     <main className="min-h-screen bg-[#080017] text-white">
       <div className="mx-auto w-full max-w-[1140px] px-4 pb-28 pt-6 md:px-6">
         <div className="space-y-10">
-          {prebuiltPlaylists.length > 0 ? (
+          {!showOnlyShows && prebuiltPlaylists.length > 0 ? (
             <section>
               <div className="mb-4">
                 <h2 className="text-[24px] font-semibold [font-family:var(--font-roboto-condensed)]">
@@ -1900,17 +2245,17 @@ export default function HomePage() {
               </div>
 
               <div className="relative">
-              <div
-                ref={compCarouselRef}
-                className="cursor-grab overflow-x-auto pb-1 select-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-                onPointerDown={onCompCarouselPointerDown}
-                onPointerMove={onCompCarouselPointerMove}
-                onPointerUp={onCompCarouselPointerEnd}
-                onPointerCancel={onCompCarouselPointerEnd}
-                onPointerLeave={onCompCarouselPointerEnd}
-              >
-                <div className="grid w-max auto-cols-[minmax(300px,300px)] grid-flow-col grid-rows-2 gap-3 md:auto-cols-[minmax(340px,340px)]">
-                  {prebuiltPlaylists.map((p) => {
+                <div
+                  ref={compCarouselRef}
+                  className="cursor-grab overflow-x-auto pb-1 select-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                  onPointerDown={onCompCarouselPointerDown}
+                  onPointerMove={onCompCarouselPointerMove}
+                  onPointerUp={onCompCarouselPointerEnd}
+                  onPointerCancel={onCompCarouselPointerEnd}
+                  onPointerLeave={onCompCarouselPointerEnd}
+                >
+                  <div className="grid w-max auto-cols-[minmax(300px,300px)] grid-flow-col grid-rows-2 gap-3 md:auto-cols-[minmax(340px,340px)]">
+                    {prebuiltPlaylists.map((p) => {
                     const versions = p.slots.reduce((sum, slot) => sum + slot.variants.length, 0);
                     const previewThumbs = p.slots
                       .flatMap((slot) => slot.variants.map((v) => v.track))
@@ -2004,9 +2349,19 @@ export default function HomePage() {
                         </div>
                       </div>
                     );
-                  })}
+                    })}
+                  </div>
                 </div>
-              </div>
+                {canScrollCompsPrev ? (
+                  <button
+                    type="button"
+                    aria-label="Previous live comps"
+                    className="absolute top-1/2 left-0 hidden -translate-y-1/2 rounded-full border border-white/25 bg-black/55 px-3 py-2 text-sm text-white shadow-[0_8px_18px_rgba(0,0,0,0.35)] backdrop-blur md:flex"
+                    onClick={scrollCompsPrevPage}
+                  >
+                    ‹
+                  </button>
+                ) : null}
               {canScrollCompsNext ? (
                 <button
                   type="button"
@@ -2021,11 +2376,320 @@ export default function HomePage() {
             </section>
           ) : null}
 
+          {!showOnlyShows ? (
+            <section>
+              <div className="mb-4">
+                <h2 className="text-[24px] font-semibold [font-family:var(--font-roboto-condensed)]">
+                  Taking Flight
+                </h2>
+                <div className="mt-1 text-[13px] text-white/70 [font-family:var(--font-roboto-condensed)]">
+                  Shows with the most songs from Flight B741
+                </div>
+              </div>
+              <div className="relative">
+                <div
+                  ref={takingFlightCarouselRef}
+                  className="cursor-grab overflow-x-auto pb-1 select-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                  onPointerDown={onTakingFlightCarouselPointerDown}
+                  onPointerMove={onTakingFlightCarouselPointerMove}
+                  onPointerUp={onTakingFlightCarouselPointerEnd}
+                  onPointerCancel={onTakingFlightCarouselPointerEnd}
+                  onPointerLeave={onTakingFlightCarouselPointerEnd}
+                >
+                  <div className="grid w-max auto-cols-[minmax(300px,300px)] grid-flow-col grid-rows-1 gap-3 md:auto-cols-[minmax(340px,340px)]">
+                    {takingFlightCards.map((s) => {
+                    const imageSrc = shouldUseDefaultArtwork(s.defaultId)
+                      ? DEFAULT_ARTWORK_SRC
+                      : s.artwork;
+                    return (
+                      <div
+                        key={`taking-flight-${s.showKey}`}
+                        className="relative z-0 rounded-[16px] border border-[#7c50d8]/65 bg-linear-to-br from-[#1b0d33] via-[#180b2d] to-[#0f0820] p-3 backdrop-blur-[6px]"
+                      >
+                        <div className="flex items-center justify-between">
+                          <button
+                            type="button"
+                            className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                            onClick={() => {
+                              rememberRecentShow(s.showKey);
+                              router.push(`/show/${encodeURIComponent(s.showKey)}`);
+                            }}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={imageSrc}
+                              alt=""
+                              className="h-14 w-14 shrink-0 rounded-[8px] border border-white/15 object-cover"
+                              onError={(e) => {
+                                const img = e.currentTarget;
+                                if (img.src.endsWith(DEFAULT_ARTWORK_SRC)) return;
+                                img.src = DEFAULT_ARTWORK_SRC;
+                              }}
+                            />
+                            <div className="min-w-0">
+                              <div className="truncate text-[16px] font-medium text-white [font-family:var(--font-roboto-condensed)]">
+                                {toDisplayTitle(s.title)}
+                              </div>
+                              <div className="mt-1 text-[12px] text-white/70 [font-family:var(--font-roboto-condensed)]">
+                                {formatCardDate(s.showDate)}
+                              </div>
+                              <div className="mt-0.5 text-[12px] text-white/65 [font-family:var(--font-roboto-condensed)]">
+                                {Number(s.plays || 0).toLocaleString()} plays
+                              </div>
+                            </div>
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={`Play show ${s.title}`}
+                            className="ml-4 shrink-0 text-[24px] text-white"
+                            onClick={() => {
+                              void playShowFromCard(s);
+                            }}
+                          >
+                            <FontAwesomeIcon icon={faCirclePlay} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                    })}
+                  </div>
+                </div>
+                {canScrollTakingFlightPrev ? (
+                  <button
+                    type="button"
+                    aria-label="Previous Taking Flight shows"
+                    className="absolute top-1/2 left-0 hidden -translate-y-1/2 rounded-full border border-white/25 bg-black/55 px-3 py-2 text-sm text-white shadow-[0_8px_18px_rgba(0,0,0,0.35)] backdrop-blur md:flex"
+                    onClick={scrollTakingFlightPrevPage}
+                  >
+                    ‹
+                  </button>
+                ) : null}
+                {canScrollTakingFlightNext ? (
+                  <button
+                    type="button"
+                    aria-label="Next Taking Flight shows"
+                    className="absolute top-1/2 right-0 hidden -translate-y-1/2 rounded-full border border-white/25 bg-black/55 px-3 py-2 text-sm text-white shadow-[0_8px_18px_rgba(0,0,0,0.35)] backdrop-blur md:flex"
+                    onClick={scrollTakingFlightNextPage}
+                  >
+                    ›
+                  </button>
+                ) : null}
+              </div>
+            </section>
+          ) : null}
+
+          {!showOnlyShows ? (
+            <section>
+              <div className="mb-4">
+                <h2 className="text-[24px] font-semibold [font-family:var(--font-roboto-condensed)]">
+                  Drip Drip
+                </h2>
+                <div className="mt-1 text-[13px] text-white/70 [font-family:var(--font-roboto-condensed)]">
+                  Wish I learnt how to swim
+                </div>
+              </div>
+              <div className="relative">
+                <div
+                  ref={dripDripCarouselRef}
+                  className="cursor-grab overflow-x-auto pb-1 select-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                  onPointerDown={onDripDripCarouselPointerDown}
+                  onPointerMove={onDripDripCarouselPointerMove}
+                  onPointerUp={onDripDripCarouselPointerEnd}
+                  onPointerCancel={onDripDripCarouselPointerEnd}
+                  onPointerLeave={onDripDripCarouselPointerEnd}
+                >
+                  <div className="grid w-max auto-cols-[minmax(300px,300px)] grid-flow-col grid-rows-1 gap-3 md:auto-cols-[minmax(340px,340px)]">
+                    {dripDripShows.map((s) => {
+                    const imageSrc = shouldUseDefaultArtwork(s.defaultId)
+                      ? DEFAULT_ARTWORK_SRC
+                      : s.artwork;
+                    return (
+                      <div
+                        key={`drip-drip-${s.showKey}`}
+                        className="relative z-0 rounded-[16px] border border-[#7c50d8]/65 bg-linear-to-br from-[#1b0d33] via-[#180b2d] to-[#0f0820] p-3 backdrop-blur-[6px]"
+                      >
+                        <div className="flex items-center justify-between">
+                          <button
+                            type="button"
+                            className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                            onClick={() => {
+                              rememberRecentShow(s.showKey);
+                              router.push(`/show/${encodeURIComponent(s.showKey)}`);
+                            }}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={imageSrc}
+                              alt=""
+                              className="h-14 w-14 shrink-0 rounded-[8px] border border-white/15 object-cover"
+                              onError={(e) => {
+                                const img = e.currentTarget;
+                                if (img.src.endsWith(DEFAULT_ARTWORK_SRC)) return;
+                                img.src = DEFAULT_ARTWORK_SRC;
+                              }}
+                            />
+                            <div className="min-w-0">
+                              <div className="truncate text-[16px] font-medium text-white [font-family:var(--font-roboto-condensed)]">
+                                {toDisplayTitle(s.title)}
+                              </div>
+                              <div className="mt-1 text-[12px] text-white/70 [font-family:var(--font-roboto-condensed)]">
+                                {formatCardDate(s.showDate)}
+                              </div>
+                              <div className="mt-0.5 text-[12px] text-white/65 [font-family:var(--font-roboto-condensed)]">
+                                {Number(s.plays || 0).toLocaleString()} plays
+                              </div>
+                            </div>
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={`Play show ${s.title}`}
+                            className="ml-4 shrink-0 text-[24px] text-white"
+                            onClick={() => {
+                              void playShowFromCard(s);
+                            }}
+                          >
+                            <FontAwesomeIcon icon={faCirclePlay} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                    })}
+                  </div>
+                </div>
+                {canScrollDripDripPrev ? (
+                  <button
+                    type="button"
+                    aria-label="Previous Drip Drip shows"
+                    className="absolute top-1/2 left-0 hidden -translate-y-1/2 rounded-full border border-white/25 bg-black/55 px-3 py-2 text-sm text-white shadow-[0_8px_18px_rgba(0,0,0,0.35)] backdrop-blur md:flex"
+                    onClick={scrollDripDripPrevPage}
+                  >
+                    ‹
+                  </button>
+                ) : null}
+                {canScrollDripDripNext ? (
+                  <button
+                    type="button"
+                    aria-label="Next Drip Drip shows"
+                    className="absolute top-1/2 right-0 hidden -translate-y-1/2 rounded-full border border-white/25 bg-black/55 px-3 py-2 text-sm text-white shadow-[0_8px_18px_rgba(0,0,0,0.35)] backdrop-blur md:flex"
+                    onClick={scrollDripDripNextPage}
+                  >
+                    ›
+                  </button>
+                ) : null}
+              </div>
+            </section>
+          ) : null}
+
+          {!showOnlyShows ? (
+            <section>
+              <div className="mb-4">
+                <h2 className="text-[24px] font-semibold [font-family:var(--font-roboto-condensed)]">
+                  Jam Spam
+                </h2>
+                <div className="mt-1 text-[13px] text-white/70 [font-family:var(--font-roboto-condensed)]">
+                  Featured playlists with Head on/Pill, Dripping Tap, Hypertension, and more
+                </div>
+              </div>
+              <div className="relative">
+                <div
+                  ref={jamSpamCarouselRef}
+                  className="cursor-grab overflow-x-auto pb-1 select-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                  onPointerDown={onJamSpamCarouselPointerDown}
+                  onPointerMove={onJamSpamCarouselPointerMove}
+                  onPointerUp={onJamSpamCarouselPointerEnd}
+                  onPointerCancel={onJamSpamCarouselPointerEnd}
+                  onPointerLeave={onJamSpamCarouselPointerEnd}
+                >
+                  <div className="grid w-max auto-cols-[minmax(300px,300px)] grid-flow-col grid-rows-1 gap-3 md:auto-cols-[minmax(340px,340px)]">
+                    {jamSpamShows.map((s) => {
+                      const imageSrc = shouldUseDefaultArtwork(s.defaultId)
+                        ? DEFAULT_ARTWORK_SRC
+                        : s.artwork;
+                      const jamLength = displaySongLength(s.matchedSongLength, s.matchedSongSeconds);
+                      const jamTitle = toDisplayTrackTitle(s.matchedSongTitle || "");
+                      return (
+                        <div
+                          key={`jam-spam-${s.showKey}`}
+                          className="relative z-0 rounded-[16px] border border-[#7c50d8]/65 bg-linear-to-br from-[#1b0d33] via-[#180b2d] to-[#0f0820] p-3 backdrop-blur-[6px]"
+                        >
+                          <div className="flex items-center justify-between">
+                            <button
+                              type="button"
+                              className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                              onClick={() => {
+                                rememberRecentShow(s.showKey);
+                                router.push(`/show/${encodeURIComponent(s.showKey)}`);
+                              }}
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={imageSrc}
+                                alt=""
+                                className="h-14 w-14 shrink-0 rounded-[8px] border border-white/15 object-cover"
+                                onError={(e) => {
+                                  const img = e.currentTarget;
+                                  if (img.src.endsWith(DEFAULT_ARTWORK_SRC)) return;
+                                  img.src = DEFAULT_ARTWORK_SRC;
+                                }}
+                              />
+                              <div className="min-w-0">
+                                <div className="truncate text-[16px] font-medium text-white [font-family:var(--font-roboto-condensed)]">
+                                  {toDisplayTitle(s.title)}
+                                </div>
+                                <div className="mt-1 text-[12px] text-white/70 [font-family:var(--font-roboto-condensed)]">
+                                  {jamTitle ? `${jamTitle} ${jamLength ? `• ${jamLength}` : ""}` : "Longest jam"}
+                                </div>
+                                <div className="mt-0.5 text-[12px] text-white/65 [font-family:var(--font-roboto-condensed)]">
+                                  {Number(s.plays || 0).toLocaleString()} plays
+                                </div>
+                              </div>
+                            </button>
+                            <button
+                              type="button"
+                              aria-label={`Play show ${s.title}`}
+                              className="ml-4 shrink-0 text-[24px] text-white"
+                              onClick={() => {
+                                void playShowFromCard(s);
+                              }}
+                            >
+                              <FontAwesomeIcon icon={faCirclePlay} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+                {canScrollJamSpamPrev ? (
+                  <button
+                    type="button"
+                    aria-label="Previous Jam Spam shows"
+                    className="absolute top-1/2 left-0 hidden -translate-y-1/2 rounded-full border border-white/25 bg-black/55 px-3 py-2 text-sm text-white shadow-[0_8px_18px_rgba(0,0,0,0.35)] backdrop-blur md:flex"
+                    onClick={scrollJamSpamPrevPage}
+                  >
+                    ‹
+                  </button>
+                ) : null}
+                {canScrollJamSpamNext ? (
+                  <button
+                    type="button"
+                    aria-label="Next Jam Spam shows"
+                    className="absolute top-1/2 right-0 hidden -translate-y-1/2 rounded-full border border-white/25 bg-black/55 px-3 py-2 text-sm text-white shadow-[0_8px_18px_rgba(0,0,0,0.35)] backdrop-blur md:flex"
+                    onClick={scrollJamSpamNextPage}
+                  >
+                    ›
+                  </button>
+                ) : null}
+              </div>
+            </section>
+          ) : null}
+
+          {showOnlyShows ? (
           <section>
             <div className="mb-3">
-              <h2 className="text-[24px] leading-none font-semibold [font-family:var(--font-roboto-condensed)]">
+              <h1 className="text-[24px] font-semibold [font-family:var(--font-roboto-condensed)]">
                 Shows
-              </h2>
+              </h1>
             </div>
 
             <div className="relative mb-3">
@@ -2526,6 +3190,7 @@ export default function HomePage() {
               <div ref={sentinelRef} />
             </div>
           </section>
+          ) : null}
         </div>
       </div>
 
@@ -2754,9 +3419,9 @@ export default function HomePage() {
                 </div>
 
                 <div className="rounded-xl border border-white/10 bg-black/20 p-2">
-                  {playlists.length > 0 ? (
+                  {selectablePlaylists.length > 0 ? (
                     <div className="mb-2 max-h-56 space-y-2 overflow-auto">
-                      {playlists.map((p) => {
+                      {selectablePlaylists.map((p) => {
                         const canonical = toDisplayTrackTitle(songSheetTrack.title).toLowerCase();
                         const slot = p.slots.find((s) => s.canonicalTitle === canonical);
                         const alreadyExact = Boolean(
@@ -2844,4 +3509,8 @@ export default function HomePage() {
 
     </main>
   );
+}
+
+export default function HomePageRoute() {
+  return <HomePage />;
 }

@@ -26,6 +26,7 @@ type PlaylistsState = {
   addTrack: (playlistId: string, track: Track) => "added" | "fused" | "exists";
   fuseTrack: (playlistId: string, track: Track) => "added" | "fused" | "exists";
   removeTrack: (playlistId: string, playlistSlotId: string) => void;
+  removeTrackVariantByUrl: (playlistId: string, trackUrl: string) => boolean;
   moveTrack: (playlistId: string, fromIndex: number, toIndex: number) => void;
   linkWithNext: (playlistId: string, slotId: string) => void;
   unlinkSlot: (playlistId: string, slotId: string) => void;
@@ -1595,6 +1596,44 @@ export const usePlaylists = create<PlaylistsState>()(
               : p,
           ),
         });
+      },
+      removeTrackVariantByUrl: (playlistId, trackUrl) => {
+        const targetUrl = String(trackUrl || "").trim();
+        if (!targetUrl) return false;
+        let removed = false;
+        set({
+          playlists: get().playlists.map((p) => {
+            if (p.id !== playlistId) return p;
+            const now = Date.now();
+            let touched = false;
+            const nextSlots = p.slots
+              .map((slot) => {
+                const nextVariants = slot.variants.filter((v) => {
+                  const keep = String(v.track.url || "").trim() !== targetUrl;
+                  if (!keep) {
+                    removed = true;
+                    touched = true;
+                  }
+                  return keep;
+                });
+                if (nextVariants.length === slot.variants.length) return slot;
+                if (nextVariants.length === 0) return null;
+                return {
+                  ...slot,
+                  updatedAt: now,
+                  variants: nextVariants,
+                };
+              })
+              .filter((slot): slot is PlaylistSlot => Boolean(slot));
+            if (!touched) return p;
+            return {
+              ...p,
+              updatedAt: now,
+              slots: nextSlots,
+            };
+          }),
+        });
+        return removed;
       },
 
       moveTrack: (playlistId, fromIndex, toIndex) => {

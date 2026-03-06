@@ -5,24 +5,26 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
+  faAlbum,
   faBookmark,
   faCirclePlus,
   faChain,
   faChevronLeft,
   faEllipsisVertical,
   faGripLines,
+  faHeart,
   faMapPin,
   faPen,
   faPaperPlane,
   faMagnifyingGlass,
   faCirclePlay,
-  faPlay,
   faSpinner,
   faShuffle,
   faTrash,
   faXmark,
   faXmarkCircle,
 } from "@fortawesome/pro-solid-svg-icons";
+import { faHeart as faHeartRegular } from "@fortawesome/free-regular-svg-icons";
 
 import type { Track } from "@/components/player/store";
 import { usePlayer } from "@/components/player/store";
@@ -189,6 +191,16 @@ function splitShowLabelAndIsoDate(showLabel: string): { venueLabel: string; isoD
   return { venueLabel: raw, isoDate: "" };
 }
 
+function getTrackShowJumpTarget(track: Track | null): { showKey: string; song: string } | null {
+  if (!track) return null;
+  const directShowKey = String(track.showKey || "").trim();
+  const fallbackArchiveId = getArchiveIdentifier(track.url);
+  const showKey = directShowKey || fallbackArchiveId;
+  if (!showKey) return null;
+  const song = toDisplayTrackTitle(track.title || "").trim();
+  return { showKey, song };
+}
+
 type PlayableSlot = { slot: PlaylistSlot; track: Track };
 type LinkedTrackItem = PlayableSlot & { idx: number };
 type PlaylistRenderItem =
@@ -196,6 +208,7 @@ type PlaylistRenderItem =
   | { type: "linked-group"; startIdx: number; groupId: string; items: LinkedTrackItem[] };
 type ForcedVariantBySlotId = Record<string, string>;
 const CHAIN_HINT_DISMISSED_KEY = "kglw.playlists.chainHintDismissed.v1";
+const LOVED_SONGS_PLAYLIST_NAME = "Loved Songs";
 
 type AddTracksShowItem = {
   showKey: string;
@@ -397,8 +410,11 @@ export default function PlaylistDetailPage() {
   const playlist = usePlaylists((s) =>
     s.playlists.find((p) => p.id === playlistId),
   );
+  const playlists = usePlaylists((s) => s.playlists);
   const addTrack = usePlaylists((s) => s.addTrack);
+  const createPlaylist = usePlaylists((s) => s.createPlaylist);
   const removeTrack = usePlaylists((s) => s.removeTrack);
+  const removeTrackVariantByUrl = usePlaylists((s) => s.removeTrackVariantByUrl);
   const deletePlaylist = usePlaylists((s) => s.deletePlaylist);
   const renamePlaylist = usePlaylists((s) => s.renamePlaylist);
   const setChain = usePlaylists((s) => s.setChain);
@@ -465,7 +481,11 @@ export default function PlaylistDetailPage() {
     [playlist],
   );
   const isPrebuiltPlaylist = playlist?.source === "prebuilt";
-  const showAddTracksCta = !isPrebuiltPlaylist && playableSlots.length === 0;
+  const isLovedSongsPlaylist =
+    String(playlist?.name || "").trim().toLowerCase() === LOVED_SONGS_PLAYLIST_NAME.toLowerCase();
+  const isLockedPlaylist = isPrebuiltPlaylist || isLovedSongsPlaylist;
+  const showAddTracksCta = !isLockedPlaylist && playableSlots.length === 0;
+  const showLovedSongsEmptyState = isLovedSongsPlaylist && playableSlots.length === 0;
   const totalDurationLabel = useMemo(() => {
     const totalSeconds = orderedSlots.reduce((sum, slot) => {
       const variants = Array.isArray(slot.variants) ? slot.variants : [];
@@ -540,10 +560,66 @@ export default function PlaylistDetailPage() {
     () => playableSlots.find((x) => x.slot.id === actionSlotId) || null,
     [actionSlotId, playableSlots],
   );
-  const activeActionIdx = useMemo(
-    () => playableSlots.findIndex((x) => x.slot.id === actionSlotId),
-    [actionSlotId, playableSlots],
+  const activeTrackUrl = playerPlaying ? playerQueue[playerIndex]?.url || "" : "";
+  const activeActionTrack = useMemo(() => {
+    if (!activeActionItem) return null;
+    const activeVariant =
+      activeTrackUrl
+        ? activeActionItem.slot.variants.find((v) => v.track.url === activeTrackUrl)?.track
+        : null;
+    return activeVariant || activeActionItem.track;
+  }, [activeActionItem, activeTrackUrl]);
+  const activeActionShowJumpTarget = useMemo(
+    () => getTrackShowJumpTarget(activeActionTrack),
+    [activeActionTrack],
   );
+  const lovedSongsPlaylist = useMemo(
+    () =>
+      (playlists.find(
+        (p) => p.name.trim().toLowerCase() === LOVED_SONGS_PLAYLIST_NAME.toLowerCase(),
+      ) || null),
+    [playlists],
+  );
+  const isActiveActionSongLoved = useMemo(() => {
+    if (!activeActionTrack?.url || !lovedSongsPlaylist) return false;
+    const canonical = toDisplayTrackTitle(activeActionTrack.title || "").toLowerCase();
+    const slot = lovedSongsPlaylist.slots.find((s) => s.canonicalTitle === canonical);
+    if (!slot) return false;
+    return slot.variants.some((v) => v.track.url === activeActionTrack.url);
+  }, [activeActionTrack, lovedSongsPlaylist]);
+
+  function getOrCreateLovedSongsPlaylistId(): string {
+    const existing = playlists.find(
+        (p) => p.name.trim().toLowerCase() === LOVED_SONGS_PLAYLIST_NAME.toLowerCase(),
+      );
+    if (existing) return existing.id;
+    return createPlaylist(LOVED_SONGS_PLAYLIST_NAME);
+  }
+
+  function addSongToLovedSongsPlaylist(track: Track | null) {
+    if (!track?.url) return;
+    const id = getOrCreateLovedSongsPlaylistId();
+    const jumpTarget = getTrackShowJumpTarget(track);
+    const showLabel = getTrackShowLabel(track.url, showTitleByIdentifier);
+    const { venueLabel, isoDate } = splitShowLabelAndIsoDate(showLabel);
+    addTrack(id, {
+      title: toDisplayTrackTitle(track.title || ""),
+      url: track.url,
+      length: track.length,
+      track: track.track,
+      showKey: String(track.showKey || "").trim() || jumpTarget?.showKey || undefined,
+      showDate: String(track.showDate || "").trim() || isoDate || undefined,
+      venueText: String(track.venueText || "").trim() || venueLabel || undefined,
+      artwork: track.artwork,
+    });
+  }
+  function toggleSongLoveFromAction(track: Track | null) {
+    if (!track?.url) return;
+    const lovedId = lovedSongsPlaylist?.id || getOrCreateLovedSongsPlaylistId();
+    if (!lovedId) return;
+    const removed = removeTrackVariantByUrl(lovedId, track.url);
+    if (!removed) addSongToLovedSongsPlaylist(track);
+  }
   function playFromIndex(
     startIdx: number,
     forcedBySlotId: ForcedVariantBySlotId = {},
@@ -557,7 +633,12 @@ export default function PlaylistDetailPage() {
     );
     const playbackQueue = playbackOrder
       .map((idx) => resolvedByIdx[idx])
-      .filter(Boolean) as Track[];
+      .filter(Boolean)
+      .map((track) => ({
+        ...(track as Track),
+        playlistId,
+        playlistSource: isPrebuiltPlaylist ? "prebuilt" : "user",
+      })) as Track[];
     if (playbackQueue.length === 0) return;
 
     const startInQueue = playbackOrder.indexOf(startIdx);
@@ -605,8 +686,6 @@ export default function PlaylistDetailPage() {
       return null;
     }
   }
-
-  const activeTrackUrl = playerPlaying ? playerQueue[playerIndex]?.url || "" : "";
 
   function closeChainEditor() {
     setChainPickerOpen(false);
@@ -880,29 +959,33 @@ export default function PlaylistDetailPage() {
                         <FontAwesomeIcon icon={faPaperPlane} className="text-[12px]" />
                         <span>Share playlist</span>
                       </button>
-                      <button
-                        type="button"
-                        className="mt-1 flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-left text-[14px] text-white/90 hover:bg-white/10 [font-family:var(--font-roboto-condensed)]"
-                        onClick={() => {
-                          setPlaylistRenameValue(playlist.name);
-                          setPlaylistRenameOpen(true);
-                          setPlaylistMenuOpen(false);
-                        }}
-                      >
-                        <FontAwesomeIcon icon={faPen} className="text-[11px]" />
-                        <span>Rename playlist</span>
-                      </button>
-                      <button
-                        type="button"
-                        className="mt-1 flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-left text-[14px] text-rose-200 hover:bg-rose-500/20 [font-family:var(--font-roboto-condensed)]"
-                        onClick={() => {
-                          setPlaylistDeleteOpen(true);
-                          setPlaylistMenuOpen(false);
-                        }}
-                      >
-                        <FontAwesomeIcon icon={faTrash} className="text-[12px]" />
-                        <span>Delete playlist</span>
-                      </button>
+                      {!isLockedPlaylist && (
+                        <button
+                          type="button"
+                          className="mt-1 flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-left text-[14px] text-white/90 hover:bg-white/10 [font-family:var(--font-roboto-condensed)]"
+                          onClick={() => {
+                            setPlaylistRenameValue(playlist.name);
+                            setPlaylistRenameOpen(true);
+                            setPlaylistMenuOpen(false);
+                          }}
+                        >
+                          <FontAwesomeIcon icon={faPen} className="text-[11px]" />
+                          <span>Rename playlist</span>
+                        </button>
+                      )}
+                      {!isLockedPlaylist && (
+                        <button
+                          type="button"
+                          className="mt-1 flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-left text-[14px] text-rose-200 hover:bg-rose-500/20 [font-family:var(--font-roboto-condensed)]"
+                          onClick={() => {
+                            setPlaylistDeleteOpen(true);
+                            setPlaylistMenuOpen(false);
+                          }}
+                        >
+                          <FontAwesomeIcon icon={faTrash} className="text-[12px]" />
+                          <span>Delete playlist</span>
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -965,9 +1048,11 @@ export default function PlaylistDetailPage() {
               <FontAwesomeIcon icon={faMagnifyingGlass} className="text-[18px] text-white/90" />
             </div>
           )}
-          {showAddTracksCta && (
+          {(showAddTracksCta || showLovedSongsEmptyState) && (
             <div className="mt-4 rounded-xl border border-dashed border-white/15 bg-black/20 p-4 text-sm text-white/70">
-              Empty playlist. Tap &quot;Add tracks&quot; to search and add songs.
+              {showLovedSongsEmptyState
+                ? "Use the vertical ellipses to Love songs from shows to fill up this playlist."
+                : "Empty playlist. Tap \"Add tracks\" to search and add songs."}
             </div>
           )}
         </div>
@@ -1126,11 +1211,7 @@ export default function PlaylistDetailPage() {
                       </button>
 
                       <div className="flex shrink-0 items-center gap-2.5 pt-1">
-                        {slot.variants.length === 1 && track.length ? (
-                          <span className="text-[14px] leading-none font-light tracking-[0.04em] text-white">
-                            {track.length}
-                          </span>
-                        ) : (
+                        {slot.variants.length > 1 ? (
                           <button
                             type="button"
                             className="flex items-center gap-1.5 rounded-[6px] bg-linear-to-r from-fuchsia-500/35 to-orange-400/30 px-2 py-[3px] text-[12px] leading-none text-white hover:from-fuchsia-500/45 hover:to-orange-400/45"
@@ -1144,7 +1225,11 @@ export default function PlaylistDetailPage() {
                             <FontAwesomeIcon icon={faShuffle} className="text-[10px] text-white/95" />
                             {slot.variants.length} Versions
                           </button>
-                        )}
+                        ) : track.length ? (
+                          <span className="text-[14px] leading-none font-light tracking-[0.04em] text-white">
+                            {track.length}
+                          </span>
+                        ) : null}
                         <button
                           type="button"
                           className="rounded-md px-1 text-[18px] leading-none text-white/55 hover:text-white/90"
@@ -1226,11 +1311,7 @@ export default function PlaylistDetailPage() {
                                 </button>
 
                                 <div className="flex shrink-0 items-start gap-2">
-                                  {slot.variants.length === 1 && track.length ? (
-                                    <span className="text-[14px] leading-none font-light tracking-[0.04em] text-white">
-                                      {track.length}
-                                    </span>
-                                  ) : (
+                                  {slot.variants.length > 1 ? (
                                     <button
                                       type="button"
                                       className="flex items-center gap-1.5 rounded-[6px] bg-linear-to-r from-fuchsia-500/35 to-orange-400/30 px-2 py-[3px] text-[12px] leading-none text-white hover:from-fuchsia-500/45 hover:to-orange-400/45"
@@ -1247,7 +1328,11 @@ export default function PlaylistDetailPage() {
                                       />
                                       {slot.variants.length} Versions
                                     </button>
-                                  )}
+                                  ) : track.length ? (
+                                    <span className="text-[14px] leading-none font-light tracking-[0.04em] text-white">
+                                      {track.length}
+                                    </span>
+                                  ) : null}
                                   <button
                                     type="button"
                                     className="rounded-md px-1 text-[18px] leading-none text-white/55 hover:text-white/90"
@@ -1610,7 +1695,7 @@ export default function PlaylistDetailPage() {
             <div>
               {(() => {
                 const showLabel = getTrackShowLabel(
-                  activeActionItem.track.url,
+                  activeActionTrack?.url,
                   showTitleByIdentifier,
                 );
                 const { venueLabel, isoDate } = splitShowLabelAndIsoDate(showLabel);
@@ -1618,10 +1703,10 @@ export default function PlaylistDetailPage() {
                   <div className="mb-6 space-y-2">
                     <div className="mb-1 flex items-center justify-between gap-3">
                       <div className="min-w-0 truncate text-[16px] leading-none [font-family:var(--font-roboto-condensed)]">
-                        {toDisplayTrackTitle(activeActionItem.track.title)}
+                        {toDisplayTrackTitle(activeActionTrack?.title || "")}
                       </div>
                       <div className="shrink-0 text-[14px] text-white/85 [font-family:var(--font-roboto-condensed)]">
-                        {activeActionItem.track.length || "—"}
+                        {activeActionTrack?.length || "—"}
                       </div>
                     </div>
                     <div className="flex items-center justify-between gap-3 text-[14px] text-white/40 [font-family:var(--font-roboto-condensed)]">
@@ -1636,18 +1721,7 @@ export default function PlaylistDetailPage() {
               })()}
 
               <div className="space-y-2">
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    className="flex items-center justify-center gap-2 rounded-[12px] bg-[rgba(48,26,89,0.25)] px-2 py-4 text-[16px] [font-family:var(--font-roboto-condensed)] hover:bg-[rgba(72,36,124,0.35)] transition"
-                    onClick={() => {
-                      if (activeActionIdx >= 0) playFromIndex(activeActionIdx);
-                      setActionSlotId(null);
-                    }}
-                  >
-                    <FontAwesomeIcon icon={faPlay} className="text-[13px]" />
-                    Play
-                  </button>
+                <div className={`grid gap-2 ${isLockedPlaylist ? "grid-cols-2" : "grid-cols-3"}`}>
                   <button
                     type="button"
                     className="flex items-center justify-center gap-2 rounded-[12px] bg-[rgba(48,26,89,0.25)] px-2 py-4 text-[16px] [font-family:var(--font-roboto-condensed)] hover:bg-[rgba(72,36,124,0.35)] transition"
@@ -1688,35 +1762,73 @@ export default function PlaylistDetailPage() {
                     type="button"
                     className="flex items-center justify-center gap-2 rounded-[12px] bg-[rgba(48,26,89,0.25)] px-2 py-4 text-[16px] [font-family:var(--font-roboto-condensed)] hover:bg-[rgba(72,36,124,0.35)] transition"
                     onClick={() => {
-                      const groupId = activeActionItem.slot.linkGroupId;
-                      const selected = groupId
-                        ? playableSlots
-                            .filter((x) => x.slot.linkGroupId === groupId)
-                            .map((x) => x.slot.id)
-                        : [activeActionItem.slot.id];
-                      setChainSeedSlotId(selected[0] || activeActionItem.slot.id);
-                      setChainEditGroupId(groupId || null);
-                      setChainDraftIds(selected);
-                      setActionSlotId(null);
-                      setChainPickerOpen(true);
+                      toggleSongLoveFromAction(activeActionTrack);
                     }}
+                    disabled={!activeActionTrack?.url}
+                    title={isActiveActionSongLoved ? "Loved" : "Love"}
                   >
-                    <FontAwesomeIcon icon={faChain} className="text-[13px]" />
-                    {activeActionItem.slot.linkGroupId ? "Edit Chain" : "Chain"}
+                    <FontAwesomeIcon
+                      icon={isActiveActionSongLoved ? faHeart : faHeartRegular}
+                      className={`text-[13px] ${isActiveActionSongLoved ? "text-rose-300" : ""}`}
+                    />
+                    {isActiveActionSongLoved ? "Loved" : "Love"}
                   </button>
+                  {!isLockedPlaylist && (
+                    <button
+                      type="button"
+                      className="flex items-center justify-center gap-2 rounded-[12px] bg-[rgba(48,26,89,0.25)] px-2 py-4 text-[16px] [font-family:var(--font-roboto-condensed)] hover:bg-[rgba(72,36,124,0.35)] transition"
+                      onClick={() => {
+                        const groupId = activeActionItem.slot.linkGroupId;
+                        const selected = groupId
+                          ? playableSlots
+                              .filter((x) => x.slot.linkGroupId === groupId)
+                              .map((x) => x.slot.id)
+                          : [activeActionItem.slot.id];
+                        setChainSeedSlotId(selected[0] || activeActionItem.slot.id);
+                        setChainEditGroupId(groupId || null);
+                        setChainDraftIds(selected);
+                        setActionSlotId(null);
+                        setChainPickerOpen(true);
+                      }}
+                    >
+                      <FontAwesomeIcon icon={faChain} className="text-[13px]" />
+                      {activeActionItem.slot.linkGroupId ? "Edit Chain" : "Chain"}
+                    </button>
+                  )}
                 </div>
 
-                <button
-                  type="button"
-                  className="w-full rounded-[12px] bg-[rgba(48,26,89,0.25)] px-4 py-4 text-[16px] [font-family:var(--font-roboto-condensed)] hover:bg-[rgba(72,36,124,0.35)] transition flex items-center justify-center gap-2"
-                  onClick={() => {
-                    removeTrack(playlist.id, activeActionItem.slot.id);
-                    setActionSlotId(null);
-                  }}
-                >
-                  <FontAwesomeIcon icon={faTrash} className="text-[13px]" />
-                  Remove
-                </button>
+                {activeActionShowJumpTarget && (
+                  <button
+                    type="button"
+                    className="w-full rounded-[12px] bg-[rgba(48,26,89,0.25)] px-4 py-4 text-[16px] [font-family:var(--font-roboto-condensed)] hover:bg-[rgba(72,36,124,0.35)] transition flex items-center justify-center gap-2"
+                    onClick={() => {
+                      const songQuery = activeActionShowJumpTarget.song
+                        ? `?song=${encodeURIComponent(activeActionShowJumpTarget.song)}`
+                        : "";
+                      router.push(
+                        `/show/${encodeURIComponent(activeActionShowJumpTarget.showKey)}${songQuery}`,
+                      );
+                      setActionSlotId(null);
+                    }}
+                  >
+                    <FontAwesomeIcon icon={faAlbum} className="text-[13px]" />
+                    Go to show
+                  </button>
+                )}
+
+                {!isLockedPlaylist && (
+                  <button
+                    type="button"
+                    className="w-full rounded-[12px] bg-[rgba(48,26,89,0.25)] px-4 py-4 text-[16px] [font-family:var(--font-roboto-condensed)] hover:bg-[rgba(72,36,124,0.35)] transition flex items-center justify-center gap-2"
+                    onClick={() => {
+                      removeTrack(playlist.id, activeActionItem.slot.id);
+                      setActionSlotId(null);
+                    }}
+                  >
+                    <FontAwesomeIcon icon={faTrash} className="text-[13px]" />
+                    Remove
+                  </button>
+                )}
               </div>
 
               <button

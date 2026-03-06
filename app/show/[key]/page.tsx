@@ -48,6 +48,7 @@ type IaMetadataResponse = {
 };
 
 const FAVORITE_SHOWS_KEY = "kglw.favoriteShows.v1";
+const LOVED_SONGS_PLAYLIST_NAME = "Loved Songs";
 const DEFAULT_ARTWORK_SRC = "/api/default-artwork";
 const SHOW_DETAILS_CACHE_PREFIX = "kglw.showDetails.v1:";
 const SHOW_META_CACHE_PREFIX = "kglw.showMeta.v1:";
@@ -297,11 +298,15 @@ export default function ShowPage() {
   } = usePlayer();
   const playlists = usePlaylists((s) => s.playlists);
   const addTrackToPlaylist = usePlaylists((s) => s.addTrack);
+  const removeTrackVariantByUrl = usePlaylists((s) => s.removeTrackVariantByUrl);
   const createPlaylist = usePlaylists((s) => s.createPlaylist);
   const userPlaylists = useMemo(
     () =>
       playlists.filter(
-        (p) => p.source !== "prebuilt" && p.prebuiltKind !== "album-live-comp",
+        (p) =>
+          p.source !== "prebuilt" &&
+          p.prebuiltKind !== "album-live-comp" &&
+          p.name.trim().toLowerCase() !== LOVED_SONGS_PLAYLIST_NAME.toLowerCase(),
       ),
     [playlists],
   );
@@ -550,6 +555,20 @@ export default function ShowPage() {
     ?.trim();
   const sourceLine = selectedSource?.hint || "UNKNOWN";
   const isFavoriteShow = favoriteShows.includes(showKey);
+  const lovedSongsPlaylist = useMemo(
+    () =>
+      playlists.find(
+        (p) => p.name.trim().toLowerCase() === LOVED_SONGS_PLAYLIST_NAME.toLowerCase(),
+      ) || null,
+    [playlists],
+  );
+  const isSheetSongLoved = useMemo(() => {
+    if (!sheetTrack?.url || !lovedSongsPlaylist) return false;
+    const canonical = toDisplayTrackTitle(sheetTrack.title).toLowerCase();
+    const slot = lovedSongsPlaylist.slots.find((s) => s.canonicalTitle === canonical);
+    if (!slot) return false;
+    return slot.variants.some((v) => v.track.url === sheetTrack.url);
+  }, [sheetTrack, lovedSongsPlaylist]);
 
   function closeSheet() {
     setSheetTrack(null);
@@ -575,6 +594,39 @@ export default function ShowPage() {
       localStorage.setItem(FAVORITE_SHOWS_KEY, JSON.stringify(next));
     } catch {
       // ignore storage failures
+    }
+  }
+
+  function getOrCreateLovedSongsPlaylistId(): string {
+    const existing = playlists.find(
+      (p) => p.name.trim().toLowerCase() === LOVED_SONGS_PLAYLIST_NAME.toLowerCase(),
+    );
+    if (existing) return existing.id;
+    return createPlaylist(LOVED_SONGS_PLAYLIST_NAME);
+  }
+
+  function addSheetSongToLovedSongsPlaylist() {
+    if (!sheetTrack?.url) return;
+    const id = getOrCreateLovedSongsPlaylistId();
+    addTrackToPlaylist(id, {
+      title: toDisplayTrackTitle(sheetTrack.title),
+      url: sheetTrack.url,
+      length: sheetTrack.length,
+      track: sheetTrack.track,
+      showKey: sheetTrack.showKey,
+      showDate: sheetTrack.showDate,
+      venueText: sheetTrack.venueText,
+      artwork: sheetTrack.artwork,
+    });
+    showSongAddedToast();
+  }
+  function toggleSheetSongLove() {
+    if (!sheetTrack?.url) return;
+    const lovedId = lovedSongsPlaylist?.id || getOrCreateLovedSongsPlaylistId();
+    if (!lovedId) return;
+    const removed = removeTrackVariantByUrl(lovedId, sheetTrack.url);
+    if (!removed) {
+      addSheetSongToLovedSongsPlaylist();
     }
   }
 
@@ -831,15 +883,12 @@ export default function ShowPage() {
                       type="button"
                       className="flex items-center justify-center gap-2 rounded-xl bg-[rgba(48,26,89,0.25)] px-4 py-4 text-base hover:bg-[rgba(72,36,124,0.35)] transition"
                       onClick={() => {
-                        if (isFavoriteShow) {
-                          persistFavoriteShows(favoriteShows.filter((k) => k !== showKey));
-                        } else {
-                          persistFavoriteShows([showKey, ...favoriteShows].slice(0, 400));
-                        }
+                        toggleSheetSongLove();
                       }}
+                      title={isSheetSongLoved ? "Loved song" : "Love song"}
                     >
-                      <span>{isFavoriteShow ? "★" : "♡"}</span>
-                      <span>{isFavoriteShow ? "Loved" : "Love"}</span>
+                      <span>{isSheetSongLoved ? "♥" : "♡"}</span>
+                      <span>{isSheetSongLoved ? "Loved" : "Love"}</span>
                     </button>
 
                     <button

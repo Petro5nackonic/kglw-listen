@@ -7,6 +7,7 @@ import {
   faAlbumCollectionCircleUser,
   faClockRotateLeft,
   faHouse,
+  faMusicMagnifyingGlass,
 } from "@fortawesome/pro-solid-svg-icons";
 import { usePlaylists } from "@/components/playlists/store";
 
@@ -29,8 +30,10 @@ export function BottomNav() {
     (pathname === "/playlists" || pathname.startsWith("/playlists/")) &&
     !isPrebuiltPlaylistDetail;
   const isYou = pathname === "/you";
+  const isExplore = pathname === "/explore";
   const items = [
     { href: "/", active: isHome, icon: faHouse, label: "Home" },
+    { href: "/explore", active: isExplore, icon: faMusicMagnifyingGlass, label: "Explore" },
     {
       href: "/playlists",
       active: isPlaylists,
