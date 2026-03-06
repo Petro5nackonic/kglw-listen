@@ -151,6 +151,7 @@ export function PlayerBar() {
   const currentTrackRef = useRef<{
     title: string;
     url: string;
+    length?: string;
     backupUrls?: string[];
     playlistId?: string;
     playlistSource?: "user" | "prebuilt";
@@ -165,6 +166,7 @@ export function PlayerBar() {
     queue: Array<{
       title: string;
       url: string;
+      length?: string;
       backupUrls?: string[];
       playlistId?: string;
       playlistSource?: "user" | "prebuilt";
@@ -181,6 +183,7 @@ export function PlayerBar() {
       queue: Array<{
         title: string;
         url: string;
+        length?: string;
         backupUrls?: string[];
         playlistId?: string;
         playlistSource?: "user" | "prebuilt";
