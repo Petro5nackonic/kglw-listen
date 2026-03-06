@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faCirclePlay,
+  faCirclePause,
   faCircleCheck,
   faSpinner,
   faBookmark,
@@ -166,7 +167,7 @@ const LOVED_SONGS_PLAYLIST_NAME = "Loved Songs";
 const SHOW_STATS_CACHE_KEY = "kglw.showStats.v3";
 const HOME_SHOWS_CACHE_KEY = "kglw.homeShows.v3";
 const HOME_SHOWS_CACHE_MAX_AGE_MS = 1000 * 60 * 10;
-const DISCOVERY_ROWS_CACHE_KEY = "kglw.discoveryRows.v1";
+const DISCOVERY_ROWS_CACHE_KEY = "kglw.discoveryRows.v4";
 const DISCOVERY_ROWS_CACHE_MAX_AGE_MS = 1000 * 60 * 10;
 const DEFAULT_ARTWORK_SRC = "/api/default-artwork";
 const PREBUILT_PLAYLIST_NAME_SET = new Set([
@@ -179,47 +180,15 @@ const PREBUILT_PLAYLIST_NAME_SET = new Set([
   "the silver chord",
 ]);
 const JAM_SPAM_SONGS = [
-  "The Dripping Tap",
   "Head On/Pill",
   "Hypertension",
   "The River",
   "Magma",
   "Iron Lung",
   "Ice V",
+  "The Dripping Tap",
 ];
-const MICROTONALITY_SONGS = [
-  "If Not Now, Then When?",
-  "O.N.E.",
-  "Pleura",
-  "Supreme Ascendancy",
-  "Static Electricity",
-  "East West Link",
-  "Ataraxia",
-  "See Me",
-  "K.G.L.W.",
-  "Automation",
-  "Minimum Brain Size",
-  "Straws In The Wind",
-  "Some Of Us",
-  "Ontology",
-  "Intrasport",
-  "Oddlife",
-  "Honey",
-  "The Hungry Wolf Of Fate",
-  "Greenhouse Heat Death",
-  "All Is Known",
-  "D-Day",
-  "The Book",
-  "Rattlesnake",
-  "Melting",
-  "Open Water",
-  "Sleep Drifter",
-  "Billabong Valley",
-  "Anoxia",
-  "Doom City",
-  "Nuclear Fusion",
-  "Flying Microtonal Banana",
-];
+const MICROTONALITY_ALBUMS = ["K.G.", "L.W.", "Flying Microtonal Banana"];
 const SORT_OPTIONS: { value: string; label: string }[] = [
   { value: "newest", label: "Newest" },
   { value: "oldest", label: "Oldest" },
@@ -342,6 +311,23 @@ function truncateWithEllipsis(input: string, maxChars = 34): string {
   const text = input.trim();
   if (text.length <= maxChars) return text;
   return `${text.slice(0, Math.max(0, maxChars - 3)).trimEnd()}...`;
+}
+
+function shuffleArray<T>(arr: T[], seed?: number): T[] {
+  const out = arr.slice();
+  const rng = seed != null ? seededRandom(seed) : Math.random;
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+function seededRandom(seed: number): () => number {
+  return () => {
+    seed = (seed * 9301 + 49297) % 233280;
+    return seed / 233280;
+  };
 }
 
 function showCardVariant(tag?: "ORCHESTRA" | "RAVE" | "ACOUSTIC") {
@@ -746,6 +732,10 @@ function MultiSelectDropdown(props: {
 export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean }) {
   const router = useRouter();
   const setQueue = usePlayer((s) => s.setQueue);
+  const queue = usePlayer((s) => s.queue);
+  const playingIndex = usePlayer((s) => s.index);
+  const playing = usePlayer((s) => s.playing);
+  const pause = usePlayer((s) => s.pause);
   const playerLoading = usePlayer((s) => s.loading);
   const playlists = usePlaylists((s) => s.playlists);
   const syncPrebuiltPlaylistsFromServer = usePlaylists((s) => s.syncPrebuiltPlaylistsFromServer);
@@ -1255,20 +1245,19 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
             ? takingFlightData.items
             : [];
           const withPlays = takingFlightItems.filter((s) => Number(s.plays || 0) > 0);
-          const selected = (withPlays.length > 0 ? withPlays : takingFlightItems).slice(0, 10);
+          const pool = withPlays.length > 0 ? withPlays : takingFlightItems;
+          const selected = shuffleArray(pool).slice(0, 10);
           if (selected.length > 0) {
             nextTakingFlightShows = selected;
             setTakingFlightShows(selected);
             return;
           }
-          const fallbackItems = (await getPopularFallback()).slice(0, 10);
+          const fallbackItems = shuffleArray(await getPopularFallback()).slice(0, 10);
           nextTakingFlightShows = fallbackItems;
-          setTakingFlightShows(
-            fallbackItems,
-          );
+          setTakingFlightShows(fallbackItems);
         } catch {
           if (!alive) return;
-          const fallbackItems = (await getPopularFallback()).slice(0, 10);
+          const fallbackItems = shuffleArray(await getPopularFallback()).slice(0, 10);
           nextTakingFlightShows = fallbackItems;
           setTakingFlightShows(fallbackItems);
         } finally {
@@ -1289,17 +1278,18 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
               ? dripDripData.items
               : [];
           if (dripItems.length > 0) {
-            const selected = dripItems.slice(0, 10);
+            const shuffled = shuffleArray(dripItems);
+            const selected = shuffled.slice(0, 10);
             nextDripDripShows = selected;
             setDripDripShows(selected);
             return;
           }
-          const fallbackItems = (await getPopularFallback()).slice(8, 18);
+          const fallbackItems = shuffleArray(await getPopularFallback()).slice(0, 10);
           nextDripDripShows = fallbackItems;
           setDripDripShows(fallbackItems);
         } catch {
           if (!alive) return;
-          const fallbackItems = (await getPopularFallback()).slice(8, 18);
+          const fallbackItems = shuffleArray(await getPopularFallback()).slice(0, 10);
           nextDripDripShows = fallbackItems;
           setDripDripShows(fallbackItems);
         } finally {
@@ -1308,7 +1298,7 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
         }
       })();
 
-      const jamSpamTask = (async () => {
+      const jamSpamTask = async (excludeShowKeys: Set<string>) => {
         try {
           const jamSpamData = await Promise.all(
             JAM_SPAM_SONGS.map((song) =>
@@ -1337,107 +1327,113 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
               const bSec = typeof b.matchedSongSeconds === "number" ? b.matchedSongSeconds : -1;
               if (bSec !== aSec) return bSec - aSec;
               return Number(b.plays || 0) - Number(a.plays || 0);
-            })
-            .slice(0, 12);
+            });
+          const filtered = ranked.filter((s) => !excludeShowKeys.has(s.showKey));
+          const shuffled = shuffleArray(filtered);
+          const selected = shuffled.slice(0, 12);
           if (!alive) return;
-          if (ranked.length > 0) {
-            nextJamSpamShows = ranked;
-            setJamSpamShows(ranked);
+          if (selected.length > 0) {
+            nextJamSpamShows = selected;
+            setJamSpamShows(selected);
             return;
           }
-          const fallbackItems = (await getPopularFallback()).slice(16, 28);
-          nextJamSpamShows = fallbackItems;
-          setJamSpamShows(fallbackItems);
+          const fallbackItems = (await getPopularFallback())
+            .filter((s) => !excludeShowKeys.has(s.showKey))
+            .slice(0, 12);
+          const fallbackShuffled = shuffleArray(fallbackItems);
+          nextJamSpamShows = fallbackShuffled.length > 0 ? fallbackShuffled : ranked.slice(0, 12);
+          setJamSpamShows(nextJamSpamShows);
         } catch {
           if (!alive) return;
-          const fallbackItems = (await getPopularFallback()).slice(16, 28);
-          nextJamSpamShows = fallbackItems;
-          setJamSpamShows(fallbackItems);
+          const fallbackItems = (await getPopularFallback())
+            .filter((s) => !excludeShowKeys.has(s.showKey))
+            .slice(0, 12);
+          nextJamSpamShows = fallbackItems.length > 0 ? fallbackItems : [];
+          setJamSpamShows(nextJamSpamShows);
         } finally {
           if (!alive) return;
           setJamSpamLoading(false);
         }
-      })();
+      };
 
-      const microtonalityTask = (async () => {
+      const microtonalityTask = async (excludeShowKeys: Set<string>) => {
         try {
-          const microtonalitySeedSongs = MICROTONALITY_SONGS.slice(0, 12);
-          const payloads: Array<ShowsResponse | null> = [];
-          for (let i = 0; i < microtonalitySeedSongs.length; i += 4) {
-            const chunk = microtonalitySeedSongs.slice(i, i + 4);
-            const chunkPayloads = await Promise.all(
-              chunk.map((song) => fetchDiscoveryResponse({ query: song })),
-            );
-            payloads.push(...chunkPayloads);
-          }
+          const payloads = await Promise.all(
+            MICROTONALITY_ALBUMS.map((album) =>
+              fetchDiscoveryResponse({ album }),
+            ),
+          );
 
-          const byShow = new Map<string, { item: ShowItem; songs: Set<string> }>();
-          for (let i = 0; i < payloads.length; i += 1) {
-            const songTitle = microtonalitySeedSongs[i];
-            const songKey = songTitle.toLowerCase();
-            const payload = payloads[i];
-            const items = Array.isArray(payload?.song?.items)
-              ? payload.song.items
-              : Array.isArray(payload?.items)
-                ? payload.items
-                : [];
+          const byShow = new Map<string, { item: ShowItem; albumCount: number }>();
+          for (const payload of payloads) {
+            const items = Array.isArray(payload?.items) ? payload.items : [];
             for (const item of items) {
               const existing = byShow.get(item.showKey);
               if (!existing) {
-                byShow.set(item.showKey, { item, songs: new Set([songKey]) });
+                byShow.set(item.showKey, { item, albumCount: 1 });
                 continue;
               }
-              existing.songs.add(songKey);
-              const currentSec =
-                typeof item.matchedSongSeconds === "number" ? item.matchedSongSeconds : -1;
-              const existingSec =
-                typeof existing.item.matchedSongSeconds === "number"
-                  ? existing.item.matchedSongSeconds
-                  : -1;
-              if (currentSec > existingSec) {
+              existing.albumCount += 1;
+              if (
+                (item.plays || 0) > (existing.item.plays || 0) ||
+                (String(item.defaultId || "").trim() && !String(existing.item.defaultId || "").trim())
+              ) {
                 existing.item = item;
               }
             }
           }
 
           const ranked = Array.from(byShow.values())
-            .map(({ item, songs }) => ({
+            .map(({ item, albumCount }) => ({
               ...item,
-              microtonalMatchCount: songs.size,
+              microtonalMatchCount: albumCount,
             }))
             .sort((a, b) => {
               if (b.microtonalMatchCount !== a.microtonalMatchCount) {
                 return b.microtonalMatchCount - a.microtonalMatchCount;
               }
               return Number(b.plays || 0) - Number(a.plays || 0);
-            })
-            .slice(0, 12);
+            });
+          const withId = ranked.filter((s) => Boolean(String(s.defaultId || "").trim()));
+          const filtered = withId.filter((s) => !excludeShowKeys.has(s.showKey));
+          const shuffled = shuffleArray(filtered);
+          const selected = shuffled.slice(0, 12);
 
           if (!alive) return;
-          if (ranked.length > 0) {
-            nextMicrotonalityShows = ranked;
-            setMicrotonalityShows(ranked);
+          if (selected.length > 0) {
+            nextMicrotonalityShows = selected;
+            setMicrotonalityShows(selected);
             return;
           }
           const fallbackItems = (await getPopularFallback())
-            .slice(22, 34)
+            .filter((s) => Boolean(String(s.defaultId || "").trim()) && !excludeShowKeys.has(s.showKey))
+            .slice(0, 12)
             .map((item) => ({ ...item, microtonalMatchCount: 0 }));
-          nextMicrotonalityShows = fallbackItems;
-          setMicrotonalityShows(fallbackItems);
+          const fallbackShuffled = shuffleArray(fallbackItems);
+          const withIdRanked = ranked.filter((s) => Boolean(String(s.defaultId || "").trim()));
+          nextMicrotonalityShows = fallbackShuffled.length > 0 ? fallbackShuffled : withIdRanked.slice(0, 12);
+          setMicrotonalityShows(nextMicrotonalityShows);
         } catch {
           if (!alive) return;
-          const fallbackItems = (await getPopularFallback())
-            .slice(22, 34)
-            .map((item) => ({ ...item, microtonalMatchCount: 0 }));
+          const fallbackItems = shuffleArray(
+            (await getPopularFallback())
+              .filter((s) => Boolean(String(s.defaultId || "").trim()) && !excludeShowKeys.has(s.showKey))
+              .slice(0, 12)
+              .map((item) => ({ ...item, microtonalMatchCount: 0 })),
+          );
           nextMicrotonalityShows = fallbackItems;
           setMicrotonalityShows(fallbackItems);
         } finally {
           if (!alive) return;
           setMicrotonalityLoading(false);
         }
-      })();
+      };
 
-      await Promise.allSettled([takingFlightTask, dripDripTask, jamSpamTask, microtonalityTask]);
+      await dripDripTask;
+      const dripDripKeys = new Set(nextDripDripShows.map((s) => s.showKey));
+      await jamSpamTask(dripDripKeys);
+      await microtonalityTask(new Set());
+      await takingFlightTask;
       if (!alive) return;
       try {
         const payload: DiscoveryRowsCachePayload = {
@@ -1660,19 +1656,15 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
     Array.from({ length: 3 }, (_, idx) => (
       <div
         key={`${prefix}-${idx}`}
-        className="relative z-0 rounded-[16px] border border-[#7c50d8]/65 bg-linear-to-br from-[#1b0d33] via-[#180b2d] to-[#0f0820] p-3 backdrop-blur-[6px]"
+        className="relative flex h-full flex-col rounded-2xl p-3 bg-linear-to-br from-[rgba(83,113,157,0.2)] to-[rgba(70,70,70,0.2)]"
       >
-        <div className="flex items-center justify-between">
-          <div className="flex min-w-0 flex-1 items-center gap-3">
-            <div className="h-14 w-14 shrink-0 animate-pulse rounded-[8px] border border-white/15 bg-white/10" />
-            <div className="min-w-0 flex-1 space-y-2">
-              <div className="h-4 w-3/4 animate-pulse rounded bg-white/15" />
-              <div className="h-3 w-1/2 animate-pulse rounded bg-white/10" />
-              <div className="h-3 w-1/3 animate-pulse rounded bg-white/10" />
-            </div>
-          </div>
-          <div className="ml-4 h-6 w-6 shrink-0 animate-pulse rounded-full bg-white/15" />
+        <div className="relative h-[144px] w-full overflow-hidden rounded-lg bg-white/10">
+          <div className="h-full w-full animate-pulse bg-white/10" />
         </div>
+        <div className="mt-2 h-4 w-16 animate-pulse rounded bg-white/15" />
+        <div className="mt-2 h-4 w-3/4 animate-pulse rounded bg-white/15" />
+        <div className="mt-2 h-3 w-1/2 animate-pulse rounded bg-white/10" />
+        <div className="mt-3 h-9 w-24 animate-pulse rounded-lg bg-white/10" />
       </div>
     ));
   const renderDiscoveryEmptyCard = (key: string, message: string) => (
@@ -1991,9 +1983,15 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
 
   useEffect(() => {
     let cancelled = false;
+    const showsToFetchStats = [
+      ...venueShows,
+      ...dripDripShows,
+      ...jamSpamShows,
+      ...microtonalityShows,
+    ];
     const unresolvedIds = Array.from(
       new Set(
-        venueShows
+        showsToFetchStats
           .filter(
             (s) =>
               !Number.isFinite(s.showTrackCount ?? NaN) ||
@@ -2043,7 +2041,7 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
     return () => {
       cancelled = true;
     };
-  }, [venueShows, statsById]);
+  }, [venueShows, dripDripShows, jamSpamShows, microtonalityShows, statsById]);
 
   useEffect(() => {
     const targets = venueShows.slice(0, 16);
@@ -2586,6 +2584,164 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
     }
   }
 
+  function renderDiscoveryShowCard(
+    s: ShowItem,
+    key: string,
+    opts?: { subtitle?: string },
+  ) {
+    const isFav = favoriteSet.has(s.showKey);
+    const isHeard = heardSet.has(s.showKey);
+    const currentTrack = queue[playingIndex];
+    const isPlayingThisShow =
+      playing &&
+      Boolean(currentTrack?.showKey && currentTrack.showKey === s.showKey);
+    const specialTag = s.specialTag || null;
+    const variant = showCardVariant(specialTag || undefined);
+    const clientStats = statsById[s.defaultId];
+    const showLengthSeconds =
+      s.showLengthSeconds ?? clientStats?.showLengthSeconds ?? null;
+    const showTrackCount =
+      s.showTrackCount ?? clientStats?.showTrackCount ?? null;
+    const isStatsLoading =
+      !Number.isFinite(showTrackCount ?? NaN) &&
+      !Number.isFinite(showLengthSeconds ?? NaN) &&
+      Boolean(String(s.defaultId || "").trim()) &&
+      !Object.prototype.hasOwnProperty.call(statsById, s.defaultId);
+    const lengthText = formatShowLength(showLengthSeconds);
+    const trackCount = Number.isFinite(showTrackCount ?? NaN)
+      ? Math.max(0, Number(showTrackCount))
+      : null;
+    const displayTitle = truncateWithEllipsis(toDisplayTitle(s.title), 38);
+    const imageSrc = shouldUseDefaultArtwork(s.defaultId)
+      ? DEFAULT_ARTWORK_SRC
+      : s.artwork;
+    return (
+      <div
+        key={key}
+        className={`relative flex h-full flex-col rounded-2xl p-3 ${variant.cardClass}`}
+      >
+        <Link
+          href={buildShowHref(s)}
+          data-no-drag
+          className="flex w-full flex-1 flex-col text-center"
+          onClick={() => rememberRecentShow(s.showKey)}
+        >
+          <div className="relative h-[144px] w-full overflow-hidden rounded-lg bg-black/30">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={imageSrc}
+              alt=""
+              className="h-full w-full object-cover"
+              onError={(e) => {
+                const img = e.currentTarget;
+                if (img.src.endsWith(DEFAULT_ARTWORK_SRC)) return;
+                img.src = DEFAULT_ARTWORK_SRC;
+              }}
+            />
+            {specialTag ? (
+              <span
+                className={`absolute bottom-2 left-1/2 -translate-x-1/2 rounded-[6px] px-3 py-[3px] text-[12px] leading-none font-medium tracking-[0.2px] ${variant.badgeClass}`}
+              >
+                {variant.badgeText}
+              </span>
+            ) : null}
+          </div>
+          <div className="mt-2 text-[13px] text-white [font-family:var(--font-roboto-condensed)]">
+            {formatCardDate(s.showDate)}
+          </div>
+          <div className="line-clamp-2 text-[14px] leading-[1.15] font-semibold tracking-[0.3px] [font-family:var(--font-roboto-condensed)]">
+            {displayTitle}
+          </div>
+          {opts?.subtitle ? (
+            <div className="mt-1 text-[12px] leading-[1.1] text-white/80 [font-family:var(--font-roboto-condensed)]">
+              {opts.subtitle}
+            </div>
+          ) : null}
+          {s.city ? (
+            <div className="mt-1 text-[12px] leading-[1.1] font-light text-white/80 [font-family:var(--font-roboto-condensed)]">
+              {s.city}
+            </div>
+          ) : null}
+          <div className="mt-1 flex items-center justify-center gap-[6px] text-[12px] text-white/90 [font-family:var(--font-roboto-condensed)]">
+            {isStatsLoading ? (
+              <span className="animate-pulse text-white/70">
+                Loading stats...
+              </span>
+            ) : (
+              <>
+                <span>{trackCount ?? "—"} Tracks</span>
+                {lengthText ? (
+                  <>
+                    <span className="inline-block size-[3px] rounded-full bg-white/90" />
+                    <span>{lengthText}</span>
+                  </>
+                ) : null}
+              </>
+            )}
+          </div>
+        </Link>
+        <div className="mt-auto flex justify-center pt-3">
+          <div className="inline-flex min-h-[39px] items-center justify-center gap-[10px] rounded-[8px] border border-black/20 bg-black/20 px-4 py-1">
+            <button
+              type="button"
+              data-no-drag
+              aria-label={isFav ? "Remove favorite show" : "Favorite show"}
+              className={`inline-flex h-[15px] w-[16px] items-center justify-center ${isFav ? "text-fuchsia-300" : "text-white"}`}
+              onClick={() => toggleFavoriteShow(s.showKey)}
+              title={isFav ? "Unfavorite show" : "Favorite show"}
+            >
+              {isFav ? (
+                <FontAwesomeIcon icon={faBookmark} className="h-4 w-4" />
+              ) : (
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                  <path d="M7 3.5h10a1.5 1.5 0 0 1 1.5 1.5v16.5l-6.5-4-6.5 4V5A1.5 1.5 0 0 1 7 3.5Z" />
+                </svg>
+              )}
+            </button>
+            <span className="h-[29px] w-px bg-black/30" />
+            <span
+              className={`inline-flex min-w-[72px] items-center justify-center gap-1 ${
+                isPlayingThisShow
+                  ? "rounded-[6px] bg-[#7c50d8]/40 px-2 py-1"
+                  : ""
+              }`}
+            >
+              <button
+                type="button"
+                data-no-drag
+                className="inline-flex min-w-[72px] items-center justify-center gap-1 text-[14px] text-white [font-family:var(--font-roboto-condensed)]"
+                onClick={() =>
+                  isPlayingThisShow ? pause() : void playShowFromCard(s)
+                }
+              >
+                <FontAwesomeIcon
+                  icon={isPlayingThisShow ? faCirclePause : faCirclePlay}
+                  className="h-4 w-4"
+                />
+                <span>{isPlayingThisShow ? "Pause" : "Play"}</span>
+              </button>
+            </span>
+            <span className="h-[29px] w-px bg-black/30" />
+            <button
+              type="button"
+              data-no-drag
+              aria-label={isHeard ? "Mark unplayed" : "Mark as heard"}
+              className={`inline-flex h-[15px] w-[16px] items-center justify-center ${isHeard ? "text-emerald-300" : "text-white"}`}
+              onClick={() => toggleHeardShow(s.showKey)}
+              title={isHeard ? "Mark unplayed" : "Mark as heard"}
+            >
+              {isHeard ? (
+                <FontAwesomeIcon icon={faCircleCheck} className="h-4 w-4" />
+              ) : (
+                <FontAwesomeIcon icon={faCircleCheckRegular} className="h-4 w-4" />
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   async function prewarmShowQueue(show: ShowItem): Promise<void> {
     const seededIdentifier = String(show.defaultId || "").trim();
     const identifier = seededIdentifier || (await resolveIdentifierForShow(show));
@@ -2735,7 +2891,7 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
                   onPointerCancel={onCompCarouselPointerEnd}
                   onPointerLeave={onCompCarouselPointerEnd}
                 >
-                  <div className="grid w-max auto-cols-[minmax(300px,300px)] grid-flow-col grid-rows-2 gap-3 md:auto-cols-[minmax(340px,340px)]">
+                  <div className="grid w-max auto-cols-[minmax(300px,300px)] grid-flow-col grid-rows-2 gap-3 md:auto-cols-[minmax(343px,343px)]">
                     {showPrebuiltSkeleton ? renderPrebuiltSkeletonCards() : readyPrebuiltPlaylists.map((p) => {
                     const versions = p.slots.reduce((sum, slot) => sum + slot.variants.length, 0);
                     const previewThumbs = p.slots
@@ -2877,65 +3033,14 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
                   onPointerCancel={onDripDripCarouselPointerEnd}
                   onPointerLeave={onDripDripCarouselPointerEnd}
                 >
-                  <div className="grid w-max auto-cols-[minmax(300px,300px)] grid-flow-col grid-rows-1 gap-3 md:auto-cols-[minmax(340px,340px)]">
+                  <div className="grid w-max auto-cols-[minmax(300px,300px)] grid-flow-col grid-rows-1 gap-3 md:auto-cols-[minmax(264px,264px)]">
                     {showDripDripSkeleton
                       ? renderDiscoverySkeletonCards("drip-drip")
                       : dripDripShows.length === 0
                         ? [renderDiscoveryEmptyCard("drip-drip-empty", "Drip Drip shows are unavailable right now.")]
-                        : dripDripShows.map((s) => {
-                    const imageSrc = shouldUseDefaultArtwork(s.defaultId)
-                      ? DEFAULT_ARTWORK_SRC
-                      : s.artwork;
-                    return (
-                      <div
-                        key={`drip-drip-${s.showKey}`}
-                        className="relative z-0 rounded-[16px] border border-[#7c50d8]/65 bg-linear-to-br from-[#1b0d33] via-[#180b2d] to-[#0f0820] p-3 backdrop-blur-[6px]"
-                      >
-                        <div className="flex items-center justify-between">
-                          <button
-                            type="button"
-                            data-no-drag
-                            className="flex min-w-0 flex-1 items-center gap-3 text-left"
-                            onClick={() => {
-                              rememberRecentShow(s.showKey);
-                              router.push(buildShowHref(s));
-                            }}
-                          >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={imageSrc}
-                              alt=""
-                              className="h-14 w-14 shrink-0 rounded-[8px] border border-white/15 object-cover"
-                              onError={(e) => {
-                                const img = e.currentTarget;
-                                if (img.src.endsWith(DEFAULT_ARTWORK_SRC)) return;
-                                img.src = DEFAULT_ARTWORK_SRC;
-                              }}
-                            />
-                            <div className="min-w-0">
-                              <div className="truncate text-[16px] font-medium text-white [font-family:var(--font-roboto-condensed)]">
-                                {toDisplayTitle(s.title)}
-                              </div>
-                              <div className="mt-1 text-[12px] text-white/70 [font-family:var(--font-roboto-condensed)]">
-                                {formatCardDate(s.showDate)}
-                              </div>
-                            </div>
-                          </button>
-                          <button
-                            type="button"
-                            data-no-drag
-                            aria-label={`Play show ${s.title}`}
-                            className="ml-4 shrink-0 text-[24px] text-white"
-                            onClick={() => {
-                              void playShowFromCard(s);
-                            }}
-                          >
-                            <FontAwesomeIcon icon={faCirclePlay} />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                        })}
+                        : dripDripShows.map((s) =>
+                            renderDiscoveryShowCard(s, `drip-drip-${s.showKey}`),
+                          )}
                   </div>
                 </div>
                 {canScrollDripDripPrev ? (
@@ -2982,69 +3087,21 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
                   onPointerCancel={onJamSpamCarouselPointerEnd}
                   onPointerLeave={onJamSpamCarouselPointerEnd}
                 >
-                  <div className="grid w-max auto-cols-[minmax(300px,300px)] grid-flow-col grid-rows-1 gap-3 md:auto-cols-[minmax(340px,340px)]">
+                  <div className="grid w-max auto-cols-[minmax(300px,300px)] grid-flow-col grid-rows-1 gap-3 md:auto-cols-[minmax(264px,264px)]">
                     {showJamSpamSkeleton
                       ? renderDiscoverySkeletonCards("jam-spam")
                       : jamSpamShows.length === 0
                         ? [renderDiscoveryEmptyCard("jam-spam-empty", "Jams are unavailable right now.")]
                         : jamSpamShows.map((s) => {
-                      const imageSrc = shouldUseDefaultArtwork(s.defaultId)
-                        ? DEFAULT_ARTWORK_SRC
-                        : s.artwork;
-                      const jamLength = displaySongLength(s.matchedSongLength, s.matchedSongSeconds);
-                      const jamTitle = toDisplayTrackTitle(s.matchedSongTitle || "");
-                      return (
-                        <div
-                          key={`jam-spam-${s.showKey}`}
-                          className="relative z-0 rounded-[16px] border border-[#7c50d8]/65 bg-linear-to-br from-[#1b0d33] via-[#180b2d] to-[#0f0820] p-3 backdrop-blur-[6px]"
-                        >
-                          <div className="flex items-center justify-between">
-                            <button
-                              type="button"
-                              data-no-drag
-                              className="flex min-w-0 flex-1 items-center gap-3 text-left"
-                              onClick={() => {
-                                rememberRecentShow(s.showKey);
-                                router.push(buildShowHref(s));
-                              }}
-                            >
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={imageSrc}
-                                alt=""
-                                className="h-14 w-14 shrink-0 rounded-[8px] border border-white/15 object-cover"
-                                onError={(e) => {
-                                  const img = e.currentTarget;
-                                  if (img.src.endsWith(DEFAULT_ARTWORK_SRC)) return;
-                                  img.src = DEFAULT_ARTWORK_SRC;
-                                }}
-                              />
-                              <div className="min-w-0">
-                                <div className="truncate text-[16px] font-medium text-white [font-family:var(--font-roboto-condensed)]">
-                                  {toDisplayTitle(s.title)}
-                                </div>
-                                <div className="mt-1 text-[12px] text-white/70 [font-family:var(--font-roboto-condensed)]">
-                                  {jamTitle
-                                    ? `Longest ${jamTitle}${jamLength ? ` • ${jamLength}` : ""}`
-                                    : formatCardDate(s.showDate)}
-                                </div>
-                              </div>
-                            </button>
-                            <button
-                              type="button"
-                              data-no-drag
-                              aria-label={`Play show ${s.title}`}
-                              className="ml-4 shrink-0 text-[24px] text-white"
-                              onClick={() => {
-                                void playShowFromCard(s);
-                              }}
-                            >
-                              <FontAwesomeIcon icon={faCirclePlay} />
-                            </button>
-                          </div>
-                        </div>
-                      );
-                        })}
+                            const jamLength = displaySongLength(s.matchedSongLength, s.matchedSongSeconds);
+                            const jamTitle = toDisplayTrackTitle(s.matchedSongTitle || "");
+                            const subtitle = jamTitle
+                              ? `Longest ${jamTitle}${jamLength ? ` • ${jamLength}` : ""}`
+                              : undefined;
+                            return renderDiscoveryShowCard(s, `jam-spam-${s.showKey}`, {
+                              subtitle,
+                            });
+                          })}
                   </div>
                 </div>
                 {canScrollJamSpamPrev ? (
@@ -3082,70 +3139,14 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
                 </div>
               </div>
               <div className="cursor-grab overflow-x-auto pb-1 select-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                <div className="grid w-max auto-cols-[minmax(300px,300px)] grid-flow-col grid-rows-1 gap-3 md:auto-cols-[minmax(340px,340px)]">
+                <div className="grid w-max auto-cols-[minmax(300px,300px)] grid-flow-col grid-rows-1 gap-3 md:auto-cols-[minmax(264px,264px)]">
                   {showMicrotonalitySkeleton
                     ? renderDiscoverySkeletonCards("microtonality")
                     : microtonalityShows.length === 0
                       ? [renderDiscoveryEmptyCard("microtonality-empty", "Microtonality shows are unavailable right now.")]
-                      : microtonalityShows.map((s) => {
-                    const imageSrc = shouldUseDefaultArtwork(s.defaultId)
-                      ? DEFAULT_ARTWORK_SRC
-                      : s.artwork;
-                    return (
-                      <div
-                        key={`microtonality-${s.showKey}`}
-                        className="relative z-0 rounded-[16px] border border-[#7c50d8]/65 bg-linear-to-br from-[#1b0d33] via-[#180b2d] to-[#0f0820] p-3 backdrop-blur-[6px]"
-                      >
-                        <div className="flex items-center justify-between">
-                          <button
-                            type="button"
-                            data-no-drag
-                            className="flex min-w-0 flex-1 items-center gap-3 text-left"
-                            onClick={() => {
-                              rememberRecentShow(s.showKey);
-                              router.push(buildShowHref(s));
-                            }}
-                          >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={imageSrc}
-                              alt=""
-                              className="h-14 w-14 shrink-0 rounded-[8px] border border-white/15 object-cover"
-                              onError={(e) => {
-                                const img = e.currentTarget;
-                                if (img.src.endsWith(DEFAULT_ARTWORK_SRC)) return;
-                                img.src = DEFAULT_ARTWORK_SRC;
-                              }}
-                            />
-                            <div className="min-w-0">
-                              <div className="truncate text-[16px] font-medium text-white [font-family:var(--font-roboto-condensed)]">
-                                {toDisplayTitle(s.title)}
-                              </div>
-                              <div className="mt-1 text-[12px] text-white/70 [font-family:var(--font-roboto-condensed)]">
-                                {formatCardDate(s.showDate)}
-                              </div>
-                              <div className="mt-0.5 text-[12px] text-white/65 [font-family:var(--font-roboto-condensed)]">
-                                {s.microtonalMatchCount > 0
-                                  ? `${s.microtonalMatchCount} matching songs`
-                                  : "Microtonal match"}
-                              </div>
-                            </div>
-                          </button>
-                          <button
-                            type="button"
-                            data-no-drag
-                            aria-label={`Play show ${s.title}`}
-                            className="ml-4 shrink-0 text-[24px] text-white"
-                            onClick={() => {
-                              void playShowFromCard(s);
-                            }}
-                          >
-                            <FontAwesomeIcon icon={faCirclePlay} />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                      })}
+                      : microtonalityShows.map((s) =>
+                          renderDiscoveryShowCard(s, `microtonality-${s.showKey}`),
+                        )}
                 </div>
               </div>
             </section>
@@ -3601,16 +3602,41 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
                               )}
                             </button>
                             <span className="h-[29px] w-px bg-black/30" />
-                            <button
-                              type="button"
-                              className="inline-flex items-center gap-1 text-[14px] text-white [font-family:var(--font-roboto-condensed)]"
-                              onClick={() => {
-                                void playShowFromCard(s);
-                              }}
+                            <span
+                              className={`inline-flex min-w-[72px] items-center justify-center gap-1 ${
+                                playing &&
+                                queue[playingIndex]?.showKey === s.showKey
+                                  ? "rounded-[6px] bg-[#7c50d8]/40 px-2 py-1"
+                                  : ""
+                              }`}
                             >
-                              <FontAwesomeIcon icon={faCirclePlay} className="h-4 w-4" />
-                              <span>Play</span>
-                            </button>
+                              <button
+                                type="button"
+                                className="inline-flex min-w-[72px] items-center justify-center gap-1 text-[14px] text-white [font-family:var(--font-roboto-condensed)]"
+                                onClick={() =>
+                                  playing &&
+                                  queue[playingIndex]?.showKey === s.showKey
+                                    ? pause()
+                                    : void playShowFromCard(s)
+                                }
+                              >
+                                <FontAwesomeIcon
+                                  icon={
+                                    playing &&
+                                    queue[playingIndex]?.showKey === s.showKey
+                                      ? faCirclePause
+                                      : faCirclePlay
+                                  }
+                                  className="h-4 w-4"
+                                />
+                                <span>
+                                  {playing &&
+                                  queue[playingIndex]?.showKey === s.showKey
+                                    ? "Pause"
+                                    : "Play"}
+                                </span>
+                              </button>
+                            </span>
                             <span className="h-[29px] w-px bg-black/30" />
                             <button
                               type="button"
