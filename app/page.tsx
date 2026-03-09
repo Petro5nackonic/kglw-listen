@@ -3348,7 +3348,7 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
 
           {!showOnlyShows ? (
             <section>
-              <div className="mb-4 rounded-[16px] border border-white/12 bg-gradient-to-br from-[#ff8a00]/45 via-[#ff2d55]/35 to-[#7a2cff]/45 p-4 backdrop-blur-[6px]">
+              <div className="random-picker-gradient-animated mb-4 rounded-[16px] border border-white/12 bg-gradient-to-br from-[#ff8a00]/45 via-[#ff2d55]/35 to-[#7a2cff]/45 p-4 backdrop-blur-[6px]">
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div>
                     <h2 className="text-[24px] font-semibold [font-family:var(--font-roboto-condensed)]">
