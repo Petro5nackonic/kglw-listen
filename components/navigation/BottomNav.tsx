@@ -52,7 +52,7 @@ export function BottomNav() {
               key={item.href}
               href={item.href}
               aria-label={item.label}
-              className={`flex h-[36px] flex-1 flex-col items-center justify-center gap-[1px] rounded-[24px] px-2 text-white transition-colors md:min-w-[72px] md:flex-none md:px-4 ${
+              className={`flex h-[36px] flex-1 flex-col items-center justify-center gap-1 rounded-[24px] px-2 text-white transition-colors md:min-w-[72px] md:flex-none md:px-4 ${
                 item.active
                   ? "bg-[#351574] shadow-[1px_2px_8px_0px_rgba(0,0,0,0.22)]"
                   : "hover:bg-white/10"
