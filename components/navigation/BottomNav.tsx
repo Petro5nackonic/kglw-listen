@@ -33,14 +33,14 @@ export function BottomNav() {
   const isExplore = pathname === "/explore";
   const items = [
     { href: "/", active: isHome, icon: faHouse, label: "Home" },
-    { href: "/explore", active: isExplore, icon: faMusicMagnifyingGlass, label: "Explore" },
+    { href: "/explore", active: isExplore, icon: faMusicMagnifyingGlass, label: "Shows" },
     {
       href: "/playlists",
       active: isPlaylists,
       icon: faAlbumCollectionCircleUser,
       label: "Playlists",
     },
-    { href: "/you", active: isYou, icon: faClockRotateLeft, label: "You" },
+    { href: "/you", active: isYou, icon: faClockRotateLeft, label: "Activity" },
   ];
 
   return (
@@ -52,13 +52,14 @@ export function BottomNav() {
               key={item.href}
               href={item.href}
               aria-label={item.label}
-              className={`flex h-[36px] flex-1 items-center justify-center rounded-[24px] px-3 text-white transition-colors md:min-w-[68px] md:flex-none md:px-6 ${
+              className={`flex h-[36px] flex-1 flex-col items-center justify-center gap-[1px] rounded-[24px] px-2 text-white transition-colors md:min-w-[72px] md:flex-none md:px-4 ${
                 item.active
                   ? "bg-[#351574] shadow-[1px_2px_8px_0px_rgba(0,0,0,0.22)]"
                   : "hover:bg-white/10"
               }`}
             >
-              <FontAwesomeIcon icon={item.icon} className="text-[16px]" />
+              <FontAwesomeIcon icon={item.icon} className="text-[13px]" />
+              <span className="text-[10px] leading-none text-white/90">{item.label}</span>
             </Link>
           ))}
         </div>
