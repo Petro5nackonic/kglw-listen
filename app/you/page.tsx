@@ -11,20 +11,27 @@ import {
 } from "@fortawesome/pro-solid-svg-icons";
 import { clearActivityFeed, readActivityFeed, type ActivityItem } from "@/utils/activityFeed";
 
-function chartColorAt(index: number): string {
-  const palette = [
-    "#7F58F4",
-    "#6332E4",
-    "#9D7BFF",
-    "#4E24C7",
-    "#B79FFF",
-    "#5A22C9",
-    "#8A6BFF",
-    "#3B179A",
-    "#A88EF9",
-    "#6A47E8",
-  ];
-  return palette[index % palette.length];
+function extractYearFromShowKey(showKey?: string): number | null {
+  const raw = String(showKey || "").trim();
+  if (!raw) return null;
+  const m = raw.match(/^(\d{4})-\d{2}-\d{2}\|/);
+  if (!m) return null;
+  const year = Number(m[1]);
+  if (!Number.isInteger(year) || year < 1900 || year > 2100) return null;
+  return year;
+}
+
+function baseHueForYear(year: number): number {
+  const hueStops = [8, 26, 44, 66, 92, 126, 156, 188, 210, 242, 274, 318, 346];
+  return hueStops[Math.abs(year) % hueStops.length];
+}
+
+function yearShadeColor(year: number, indexInYear: number, totalInYear: number): string {
+  const hue = baseHueForYear(year);
+  const saturation = 74;
+  const t = totalInYear <= 1 ? 0.5 : indexInYear / Math.max(1, totalInYear - 1);
+  const lightness = Math.round(40 + t * 24);
+  return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
 }
 
 function dayLabel(ts: number): string {
@@ -96,11 +103,12 @@ export default function YouPage() {
   }, [items]);
   const showChart = useMemo(() => {
     const showEvents = items.filter((item) => item.type === "played_show" || item.type === "played_song");
-    const counts = new Map<string, { label: string; count: number }>();
+    const counts = new Map<string, { label: string; count: number; year: number | null }>();
     let unknown = 0;
     for (const item of showEvents) {
       const key = String(item.showKey || "").trim();
       const label = String(item.showTitle || "").trim();
+      const year = extractYearFromShowKey(item.showKey);
       if (!key && !label) {
         unknown += 1;
         continue;
@@ -112,20 +120,38 @@ export default function YouPage() {
         if (!current.label && label) current.label = label;
         continue;
       }
-      counts.set(mapKey, { label: label || "Unknown show", count: 1 });
+      counts.set(mapKey, { label: label || "Unknown show", count: 1, year });
     }
     const entries = Array.from(counts.values())
-      .map((entry) => ({ show: entry.label, count: entry.count }))
+      .map((entry) => ({ show: entry.label, count: entry.count, year: entry.year }))
       .sort((a, b) => b.count - a.count);
-    if (unknown > 0) entries.push({ show: "Unknown show", count: unknown });
+    if (unknown > 0) entries.push({ show: "Unknown show", count: unknown, year: null });
     const total = entries.reduce((sum, row) => sum + row.count, 0);
+    const totalsByYear = new Map<number, number>();
+    for (const row of entries) {
+      if (row.year == null) continue;
+      totalsByYear.set(row.year, (totalsByYear.get(row.year) || 0) + 1);
+    }
+    const seenByYear = new Map<number, number>();
     return {
       total,
-      entries: entries.map((row, index) => ({
-        ...row,
-        percent: total > 0 ? (row.count / total) * 100 : 0,
-        color: row.show === "Unknown show" ? "#534B65" : chartColorAt(index),
-      })),
+      entries: entries.map((row) => {
+        if (row.year == null || row.show === "Unknown show") {
+          return {
+            ...row,
+            percent: total > 0 ? (row.count / total) * 100 : 0,
+            color: "#534B65",
+          };
+        }
+        const indexInYear = seenByYear.get(row.year) || 0;
+        seenByYear.set(row.year, indexInYear + 1);
+        const totalInYear = totalsByYear.get(row.year) || 1;
+        return {
+          ...row,
+          percent: total > 0 ? (row.count / total) * 100 : 0,
+          color: yearShadeColor(row.year, indexInYear, totalInYear),
+        };
+      }),
     };
   }, [items]);
   const donutBackground = useMemo(() => {

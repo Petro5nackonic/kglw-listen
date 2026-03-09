@@ -71,6 +71,11 @@ type ShowPlaybackStats = {
   showLengthSeconds: number | null;
   showTrackCount: number | null;
 };
+type ShowBoundaryMatchResponse = ShowPlaybackStats & {
+  firstTrackTitle?: string | null;
+  lastTrackTitle?: string | null;
+  boundarySongMatch?: boolean;
+};
 type IaMetadataFile = {
   name?: string;
   title?: string;
@@ -180,40 +185,13 @@ const PREBUILT_PLAYLIST_NAME_SET = new Set([
   "petrodragonic apocalypse",
   "the silver chord",
 ]);
-const JAM_SPAM_SONGS = [
-  "Head On/Pill",
-  "Hypertension",
-  "The River",
-  "Magma",
-  "Iron Lung",
-  "Ice V",
-  "The Dripping Tap",
-];
+const DRIPPING_TAP_SONG_TITLE = "The Dripping Tap";
+const MARATHON_MIN_SECONDS = 2.5 * 60 * 60;
 const MICROTONALITY_ALBUMS = ["K.G.", "L.W.", "Flying Microtonal Banana"];
-// Song-based queries for metal (PetroDragonic, Infest the Rats' Nest, Murder of the Universe)
-const METAL_SONGS = [
-  "Planet B",
-  "Mars for the Rich",
-  "Organ Farmer",
-  "Superbug",
-  "Venusian 1",
-  "Perihelion",
-  "Venusian 2",
-  "Self-Immolate",
-  "Hell",
-  "Motor Spirit",
-  "Supercell",
-  "Converge",
-  "Witchcraft",
-  "Gila Monster",
-  "Dragon",
-  "Flamethrower",
-  "K.G.L.W.",
-  "Vomit Coffin",
-  "Digital Black",
-  "The Lord of Lightning",
-  "The Balrog",
-];
+const METAL_ALBUMS = ["PetroDragonic Apocalypse", "Infest the Rats' Nest"];
+const SHOW_MICROTONALITY_SECTION = false;
+const SHOW_METAL_SECTION = false;
+const SHOWS_PAGE_SIZE = 25;
 const SORT_OPTIONS: { value: string; label: string }[] = [
   { value: "newest", label: "Newest" },
   { value: "oldest", label: "Oldest" },
@@ -323,6 +301,43 @@ async function fetchShowPlaybackStatsClient(identifier: string): Promise<ShowPla
   }
 }
 
+async function fetchShowBoundaryMatchClient(
+  identifier: string,
+  boundarySong: string,
+): Promise<ShowBoundaryMatchResponse> {
+  try {
+    const params = new URLSearchParams();
+    params.set("identifier", identifier);
+    params.set("boundarySong", boundarySong);
+    const res = await fetch(`/api/ia/show-stats?${params.toString()}`, {
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      return {
+        showLengthSeconds: null,
+        showTrackCount: null,
+        boundarySongMatch: false,
+      };
+    }
+    const data = (await res.json()) as ShowBoundaryMatchResponse;
+    return {
+      showLengthSeconds:
+        typeof data?.showLengthSeconds === "number" ? data.showLengthSeconds : null,
+      showTrackCount: typeof data?.showTrackCount === "number" ? data.showTrackCount : null,
+      firstTrackTitle:
+        typeof data?.firstTrackTitle === "string" ? data.firstTrackTitle : null,
+      lastTrackTitle: typeof data?.lastTrackTitle === "string" ? data.lastTrackTitle : null,
+      boundarySongMatch: Boolean(data?.boundarySongMatch),
+    };
+  } catch {
+    return {
+      showLengthSeconds: null,
+      showTrackCount: null,
+      boundarySongMatch: false,
+    };
+  }
+}
+
 function formatCardDate(input: string): string {
   const m = input.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!m) return input;
@@ -418,6 +433,10 @@ function summarizeSelection(values: string[], emptyLabel = "All") {
   return `${values[0]}, ${values[1]} +${values.length - 2}`;
 }
 
+function formatShowTypeLabel(value: string): string {
+  return value === "Standard" ? "Rock" : value;
+}
+
 function countIntersection(sets: Set<string>[]): number {
   if (sets.length === 0) return 0;
   const ordered = sets.slice().sort((a, b) => a.size - b.size);
@@ -498,6 +517,7 @@ function MultiSelectDropdown(props: {
   emptyLabel?: string;
   getOptionCount?: (optionValue: string, draft: string[]) => number | undefined;
   getApplyCount?: (draft: string[]) => number | undefined;
+  formatOptionLabel?: (value: string) => string;
 }) {
   const {
     id,
@@ -509,6 +529,7 @@ function MultiSelectDropdown(props: {
     emptyLabel,
     getOptionCount,
     getApplyCount,
+    formatOptionLabel,
   } = props;
 
   const [open, setOpen] = useState(false);
@@ -541,8 +562,9 @@ function MultiSelectDropdown(props: {
     };
   }, [open, value]);
 
-  const summary = summarizeSelection(value, emptyLabel || "All");
-  const full = value.join(", ") || (emptyLabel || "All");
+  const displayValue = (raw: string) => (formatOptionLabel ? formatOptionLabel(raw) : raw);
+  const summary = summarizeSelection(value.map(displayValue), emptyLabel || "All");
+  const full = value.map(displayValue).join(", ") || (emptyLabel || "All");
   const panelTitle = emptyLabel || label || "Filter";
   const totalCount = options.reduce(
     (sum, opt) => sum + (typeof opt.count === "number" ? opt.count : 0),
@@ -663,7 +685,7 @@ function MultiSelectDropdown(props: {
                       setDraft((prev) => prev.filter((v) => v !== selected));
                     }}
                   >
-                    <span>{selected}</span>
+                    <span>{displayValue(selected)}</span>
                     <FontAwesomeIcon icon={faXmark} className="text-[12px]" />
                   </button>
                 ))}
@@ -709,7 +731,7 @@ function MultiSelectDropdown(props: {
                         className={`text-[18px] ${checked ? "text-white" : "text-white/40"}`}
                       />
                       <span className="truncate text-[16px] text-white [font-family:var(--font-roboto-condensed)]">
-                        {opt.value}
+                        {displayValue(opt.value)}
                       </span>
                     </span>
                     <span className="text-[16px] text-white [font-family:var(--font-roboto-condensed)]">
@@ -819,6 +841,13 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
   const [showSongPlaylistPicker, setShowSongPlaylistPicker] = useState(false);
   const [songSearchLoading, setSongSearchLoading] = useState(false);
   const [searchVenueShows, setSearchVenueShows] = useState<ShowItem[]>([]);
+  const [randomPickerAdvancedOpen, setRandomPickerAdvancedOpen] = useState(false);
+  const [randomPickerLoading, setRandomPickerLoading] = useState(false);
+  const [randomPickerError, setRandomPickerError] = useState<string | null>(null);
+  const [randomPickerMatchCount, setRandomPickerMatchCount] = useState<number | null>(null);
+  const [randomPickerCountLoading, setRandomPickerCountLoading] = useState(false);
+  const [randomPickerYearMin, setRandomPickerYearMin] = useState<number | null>(null);
+  const [randomPickerYearMax, setRandomPickerYearMax] = useState<number | null>(null);
   const [takingFlightShows, setTakingFlightShows] = useState<ShowItem[]>([]);
   const [dripDripShows, setDripDripShows] = useState<ShowItem[]>([]);
   const [jamSpamShows, setJamSpamShows] = useState<ShowItem[]>([]);
@@ -882,6 +911,7 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
   const [canScrollMetalNext, setCanScrollMetalNext] = useState(false);
   const didHydrateInitialShowsRef = useRef(false);
   const didRunFilterReloadRef = useRef(false);
+  const randomPickerInitializedRef = useRef(false);
 
   function buildUrl(p: number) {
     const params = new URLSearchParams();
@@ -916,6 +946,27 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
     if (debouncedQuery) params.set("query", debouncedQuery);
     params.set("sort", sort);
     params.set("includeAlbumFacets", "1");
+    return `/api/ia/shows?${params.toString()}`;
+  }
+
+  function buildRandomPickerUrl(p: number) {
+    const params = new URLSearchParams();
+    params.set("page", String(p));
+    params.set("sort", "newest");
+    params.set("fast", "1");
+
+    const hasYearBounds =
+      randomPickerMinBound != null &&
+      randomPickerMaxBound != null &&
+      randomPickerYearMin != null &&
+      randomPickerYearMax != null;
+    const fullYearRangeSelected =
+      hasYearBounds &&
+      randomPickerYearMin === randomPickerMinBound &&
+      randomPickerYearMax === randomPickerMaxBound;
+    if (!fullYearRangeSelected) {
+      for (const y of randomPickerYearValues) params.append("year", y);
+    }
     return `/api/ia/shows?${params.toString()}`;
   }
 
@@ -1274,269 +1325,209 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
         return popularFallbackPromise;
       };
 
-      const takingFlightTask = (async () => {
-        try {
-          const takingFlightData = await fetchDiscoveryResponse({
-            album: "Flight b741",
-          });
-          if (!alive) return;
-          const takingFlightItems = Array.isArray(takingFlightData?.items)
-            ? takingFlightData.items
+      const pickBoundarySongShows = async (
+        songTitle: string,
+        limit: number,
+      ): Promise<ShowItem[]> => {
+        const payload = await fetchDiscoveryResponse({ query: songTitle });
+        const items = Array.isArray(payload?.song?.items)
+          ? payload.song.items
+          : Array.isArray(payload?.items)
+            ? payload.items
             : [];
-          const withPlays = takingFlightItems.filter((s) => Number(s.plays || 0) > 0);
-          const pool = withPlays.length > 0 ? withPlays : takingFlightItems;
-          const selected = shuffleArray(pool).slice(0, 10);
-          if (selected.length > 0) {
-            nextTakingFlightShows = selected;
-            setTakingFlightShows(selected);
-            return;
-          }
-          const fallbackItems = shuffleArray(await getPopularFallback()).slice(0, 10);
-          nextTakingFlightShows = fallbackItems;
-          setTakingFlightShows(fallbackItems);
-        } catch {
-          if (!alive) return;
-          const fallbackItems = shuffleArray(await getPopularFallback()).slice(0, 10);
-          nextTakingFlightShows = fallbackItems;
-          setTakingFlightShows(fallbackItems);
-        } finally {
-          if (!alive) return;
-          setTakingFlightLoading(false);
-        }
-      })();
-
-      const dripDripTask = (async () => {
-        try {
-          const dripDripData = await fetchDiscoveryResponse({
-            query: "The Dripping Tap",
-          });
-          if (!alive) return;
-          const dripItems = Array.isArray(dripDripData?.song?.items)
-            ? dripDripData.song.items
-            : Array.isArray(dripDripData?.items)
-              ? dripDripData.items
-              : [];
-          if (dripItems.length > 0) {
-            const shuffled = shuffleArray(dripItems);
-            const selected = shuffled.slice(0, 10);
-            nextDripDripShows = selected;
-            setDripDripShows(selected);
-            return;
-          }
-          const fallbackItems = shuffleArray(await getPopularFallback()).slice(0, 10);
-          nextDripDripShows = fallbackItems;
-          setDripDripShows(fallbackItems);
-        } catch {
-          if (!alive) return;
-          const fallbackItems = shuffleArray(await getPopularFallback()).slice(0, 10);
-          nextDripDripShows = fallbackItems;
-          setDripDripShows(fallbackItems);
-        } finally {
-          if (!alive) return;
-          setDripDripLoading(false);
-        }
-      })();
-
-      const jamSpamTask = async (excludeShowKeys: Set<string>) => {
-        try {
-          const jamSpamData = await Promise.all(
-            JAM_SPAM_SONGS.map((song) =>
-              fetchDiscoveryResponse({ query: song }),
-            ),
+        const unique = shuffleArray(
+          Array.from(
+            new Map(
+              items
+                .filter((item) => Boolean(String(item.defaultId || "").trim()))
+                .map((item) => [item.showKey, item]),
+            ).values(),
+          ),
+        );
+        const matches: ShowItem[] = [];
+        const maxChecks = Math.min(unique.length, 28);
+        const candidateSlice = unique.slice(0, maxChecks);
+        for (let i = 0; i < candidateSlice.length; i += 6) {
+          const batch = candidateSlice.slice(i, i + 6);
+          const checked = await Promise.all(
+            batch.map(async (item) => {
+              const id = String(item.defaultId || "").trim();
+              if (!id) return null;
+              const info = await fetchShowBoundaryMatchClient(id, songTitle);
+              return info.boundarySongMatch ? item : null;
+            }),
           );
-          const byShow = new Map<string, ShowItem>();
-          for (const payload of jamSpamData) {
-            const items = Array.isArray(payload?.song?.items)
-              ? payload.song.items
-              : Array.isArray(payload?.items)
-                ? payload.items
-                : [];
-            for (const item of items) {
-              const prev = byShow.get(item.showKey);
-              const currentSec =
-                typeof item.matchedSongSeconds === "number" ? item.matchedSongSeconds : -1;
-              const prevSec =
-                typeof prev?.matchedSongSeconds === "number" ? prev.matchedSongSeconds : -1;
-              if (!prev || currentSec > prevSec) byShow.set(item.showKey, item);
-            }
+          for (const result of checked) {
+            if (!result) continue;
+            matches.push(result);
           }
-          const ranked = Array.from(byShow.values())
-            .sort((a, b) => {
-              const aSec = typeof a.matchedSongSeconds === "number" ? a.matchedSongSeconds : -1;
-              const bSec = typeof b.matchedSongSeconds === "number" ? b.matchedSongSeconds : -1;
-              if (bSec !== aSec) return bSec - aSec;
-              return Number(b.plays || 0) - Number(a.plays || 0);
-            });
-          const filtered = ranked.filter((s) => !excludeShowKeys.has(s.showKey));
-          const shuffled = shuffleArray(filtered);
-          const selected = shuffled.slice(0, 12);
-          if (!alive) return;
-          if (selected.length > 0) {
-            nextJamSpamShows = selected;
-            setJamSpamShows(selected);
-            return;
-          }
-          const fallbackItems = (await getPopularFallback())
-            .filter((s) => !excludeShowKeys.has(s.showKey))
-            .slice(0, 12);
-          const fallbackShuffled = shuffleArray(fallbackItems);
-          nextJamSpamShows = fallbackShuffled.length > 0 ? fallbackShuffled : ranked.slice(0, 12);
-          setJamSpamShows(nextJamSpamShows);
-        } catch {
-          if (!alive) return;
-          const fallbackItems = (await getPopularFallback())
-            .filter((s) => !excludeShowKeys.has(s.showKey))
-            .slice(0, 12);
-          nextJamSpamShows = fallbackItems.length > 0 ? fallbackItems : [];
-          setJamSpamShows(nextJamSpamShows);
-        } finally {
-          if (!alive) return;
-          setJamSpamLoading(false);
+          if (matches.length >= limit) break;
         }
+        return shuffleArray(matches).slice(0, limit);
       };
 
-      const microtonalityTask = async (excludeShowKeys: Set<string>) => {
-        try {
-          const payloads = await Promise.all(
-            MICROTONALITY_ALBUMS.map((album) =>
-              fetchDiscoveryResponse({ album }),
-            ),
+      const pickMarathonShows = async (
+        limit: number,
+        excludeShowKeys: Set<string>,
+      ): Promise<ShowItem[]> => {
+        const pool = shuffleArray(
+          (await getPopularFallback()).filter(
+            (item) =>
+              Boolean(String(item.defaultId || "").trim()) &&
+              !excludeShowKeys.has(item.showKey),
+          ),
+        );
+        const marathonMatches: ShowItem[] = [];
+        const maxChecks = Math.min(pool.length, 64);
+        const candidateSlice = pool.slice(0, maxChecks);
+        for (let i = 0; i < candidateSlice.length; i += 8) {
+          const batch = candidateSlice.slice(i, i + 8);
+          const checked = await Promise.all(
+            batch.map(async (item) => {
+              const id = String(item.defaultId || "").trim();
+              if (!id) return null;
+              const stats = await fetchShowPlaybackStatsClient(id);
+              if ((stats.showLengthSeconds || 0) < MARATHON_MIN_SECONDS) return null;
+              return {
+                ...item,
+                showLengthSeconds: stats.showLengthSeconds,
+                showTrackCount: stats.showTrackCount,
+              };
+            }),
           );
+          for (const result of checked) {
+            if (!result) continue;
+            marathonMatches.push(result);
+          }
+          if (marathonMatches.length >= limit) break;
+        }
+        return shuffleArray(marathonMatches).slice(0, limit);
+      };
 
-          const byShow = new Map<string, { item: ShowItem; albumCount: number }>();
-          for (const payload of payloads) {
-            const items = Array.isArray(payload?.items) ? payload.items : [];
-            for (const item of items) {
-              const existing = byShow.get(item.showKey);
-              if (!existing) {
-                byShow.set(item.showKey, { item, albumCount: 1 });
-                continue;
-              }
-              existing.albumCount += 1;
-              if (
-                (item.plays || 0) > (existing.item.plays || 0) ||
-                (String(item.defaultId || "").trim() && !String(existing.item.defaultId || "").trim())
-              ) {
-                existing.item = item;
-              }
+      const pickAlbumHeavyShows = async <T extends ShowItem>(
+        albumsToQuery: string[],
+        limit: number,
+        excludeShowKeys: Set<string>,
+        minAlbumMatches: number,
+        mapItem: (item: ShowItem, albumMatchCount: number) => T,
+      ): Promise<T[]> => {
+        const payloads = await Promise.all(
+          albumsToQuery.map((album) => fetchDiscoveryResponse({ album })),
+        );
+        const byShow = new Map<string, { item: ShowItem; albumMatchCount: number }>();
+        for (const payload of payloads) {
+          const items = Array.isArray(payload?.items) ? payload.items : [];
+          for (const item of items) {
+            if (!String(item.defaultId || "").trim()) continue;
+            if (excludeShowKeys.has(item.showKey)) continue;
+            const existing = byShow.get(item.showKey);
+            if (!existing) {
+              byShow.set(item.showKey, { item, albumMatchCount: 1 });
+              continue;
+            }
+            existing.albumMatchCount += 1;
+            if (Number(item.plays || 0) > Number(existing.item.plays || 0)) {
+              existing.item = item;
             }
           }
+        }
+        const ranked = Array.from(byShow.values())
+          .filter((entry) => entry.albumMatchCount >= minAlbumMatches)
+          .sort((a, b) => {
+            if (b.albumMatchCount !== a.albumMatchCount) {
+              return b.albumMatchCount - a.albumMatchCount;
+            }
+            return Number(b.item.plays || 0) - Number(a.item.plays || 0);
+          });
+        const topCount = Math.max(limit, Math.ceil(ranked.length * 0.2));
+        return shuffleArray(ranked.slice(0, topCount))
+          .slice(0, limit)
+          .map(({ item, albumMatchCount }) => mapItem(item, albumMatchCount));
+      };
 
-          const ranked = Array.from(byShow.values())
-            .map(({ item, albumCount }) => ({
+      // Hidden row right now, keep it empty and skip unnecessary discovery fetches.
+      nextTakingFlightShows = [];
+      setTakingFlightShows([]);
+      setTakingFlightLoading(false);
+
+      try {
+        const selected = await pickBoundarySongShows(DRIPPING_TAP_SONG_TITLE, 10);
+        if (!alive) return;
+        nextDripDripShows = selected;
+        setDripDripShows(selected);
+      } finally {
+        if (!alive) return;
+        setDripDripLoading(false);
+      }
+      const dripDripKeys = new Set(nextDripDripShows.map((s) => s.showKey));
+
+      try {
+        const selected = await pickMarathonShows(12, dripDripKeys);
+        if (!alive) return;
+        nextJamSpamShows = selected;
+        setJamSpamShows(selected);
+      } finally {
+        if (!alive) return;
+        setJamSpamLoading(false);
+      }
+      const jamSpamKeys = new Set(nextJamSpamShows.map((s) => s.showKey));
+
+      if (SHOW_MICROTONALITY_SECTION) {
+        try {
+          const selected = await pickAlbumHeavyShows<MicrotonalityShowItem>(
+            MICROTONALITY_ALBUMS,
+            12,
+            new Set([...dripDripKeys, ...jamSpamKeys]),
+            2,
+            (item, albumMatchCount) => ({
               ...item,
-              microtonalMatchCount: albumCount,
-            }))
-            .sort((a, b) => {
-              if (b.microtonalMatchCount !== a.microtonalMatchCount) {
-                return b.microtonalMatchCount - a.microtonalMatchCount;
-              }
-              return Number(b.plays || 0) - Number(a.plays || 0);
-            });
-          const withId = ranked.filter((s) => Boolean(String(s.defaultId || "").trim()));
-          const filtered = withId.filter((s) => !excludeShowKeys.has(s.showKey));
-          const shuffled = shuffleArray(filtered);
-          const selected = shuffled.slice(0, 12);
-
-          if (!alive) return;
-          if (selected.length > 0) {
-            nextMicrotonalityShows = selected;
-            setMicrotonalityShows(selected);
-            return;
-          }
-          const fallbackItems = (await getPopularFallback())
-            .filter((s) => Boolean(String(s.defaultId || "").trim()) && !excludeShowKeys.has(s.showKey))
-            .slice(0, 12)
-            .map((item) => ({ ...item, microtonalMatchCount: 0 }));
-          const fallbackShuffled = shuffleArray(fallbackItems);
-          const withIdRanked = ranked.filter((s) => Boolean(String(s.defaultId || "").trim()));
-          nextMicrotonalityShows = fallbackShuffled.length > 0 ? fallbackShuffled : withIdRanked.slice(0, 12);
-          setMicrotonalityShows(nextMicrotonalityShows);
-        } catch {
-          if (!alive) return;
-          const fallbackItems = shuffleArray(
-            (await getPopularFallback())
-              .filter((s) => Boolean(String(s.defaultId || "").trim()) && !excludeShowKeys.has(s.showKey))
-              .slice(0, 12)
-              .map((item) => ({ ...item, microtonalMatchCount: 0 })),
+              microtonalMatchCount: albumMatchCount,
+            }),
           );
-          nextMicrotonalityShows = fallbackItems;
-          setMicrotonalityShows(fallbackItems);
+          if (!alive) return;
+          nextMicrotonalityShows = selected;
+          setMicrotonalityShows(selected);
         } finally {
           if (!alive) return;
           setMicrotonalityLoading(false);
         }
-      };
+      } else {
+        nextMicrotonalityShows = [];
+        setMicrotonalityShows([]);
+        setMicrotonalityLoading(false);
+      }
+      const microtonalityKeys = new Set(nextMicrotonalityShows.map((s) => s.showKey));
 
-      const metalTask = async (excludeShowKeys: Set<string>) => {
+      if (SHOW_METAL_SECTION) {
         try {
-          const metalData = await Promise.all(
-            METAL_SONGS.map((song) => fetchDiscoveryResponse({ query: song })),
+          let selected = await pickAlbumHeavyShows<ShowItem>(
+            METAL_ALBUMS,
+            12,
+            new Set([...dripDripKeys, ...jamSpamKeys, ...microtonalityKeys]),
+            2,
+            (item) => item,
           );
-
-          const byShow = new Map<string, ShowItem>();
-          for (const payload of metalData) {
-            const items = Array.isArray(payload?.song?.items)
-              ? payload.song.items
-              : Array.isArray(payload?.items)
-                ? payload.items
-                : [];
-            for (const item of items) {
-              const prev = byShow.get(item.showKey);
-              const currentSec =
-                typeof item.matchedSongSeconds === "number" ? item.matchedSongSeconds : -1;
-              const prevSec =
-                typeof prev?.matchedSongSeconds === "number" ? prev.matchedSongSeconds : -1;
-              if (!prev || currentSec > prevSec) byShow.set(item.showKey, item);
-            }
+          if (selected.length === 0) {
+            selected = await pickAlbumHeavyShows<ShowItem>(
+              METAL_ALBUMS,
+              12,
+              new Set([...dripDripKeys, ...jamSpamKeys, ...microtonalityKeys]),
+              1,
+              (item) => item,
+            );
           }
-
-          const ranked = Array.from(byShow.values()).sort((a, b) => {
-            const aSec = typeof a.matchedSongSeconds === "number" ? a.matchedSongSeconds : -1;
-            const bSec = typeof b.matchedSongSeconds === "number" ? b.matchedSongSeconds : -1;
-            if (bSec !== aSec) return bSec - aSec;
-            return Number(b.plays || 0) - Number(a.plays || 0);
-          });
-          const withId = ranked.filter((s) => Boolean(String(s.defaultId || "").trim()));
-          const filtered = withId.filter((s) => !excludeShowKeys.has(s.showKey));
-          const shuffled = shuffleArray(filtered);
-          const selected = shuffled.slice(0, 12);
-
           if (!alive) return;
-          if (selected.length > 0) {
-            nextMetalShows = selected;
-            setMetalShows(selected);
-            return;
-          }
-          const fallbackItems = (await getPopularFallback())
-            .filter((s) => Boolean(String(s.defaultId || "").trim()) && !excludeShowKeys.has(s.showKey))
-            .slice(0, 12);
-          const fallbackShuffled = shuffleArray(fallbackItems);
-          nextMetalShows = fallbackShuffled.length > 0 ? fallbackShuffled : withId.slice(0, 12);
-          setMetalShows(nextMetalShows);
-        } catch {
-          if (!alive) return;
-          const fallbackItems = shuffleArray(
-            (await getPopularFallback())
-              .filter((s) => Boolean(String(s.defaultId || "").trim()) && !excludeShowKeys.has(s.showKey))
-              .slice(0, 12),
-          );
-          nextMetalShows = fallbackItems;
-          setMetalShows(fallbackItems);
+          nextMetalShows = selected;
+          setMetalShows(selected);
         } finally {
           if (!alive) return;
           setMetalLoading(false);
         }
-      };
-
-      await dripDripTask;
-      const dripDripKeys = new Set(nextDripDripShows.map((s) => s.showKey));
-      await jamSpamTask(dripDripKeys);
-      const jamSpamKeys = new Set(nextJamSpamShows.map((s) => s.showKey));
-      await microtonalityTask(new Set([...dripDripKeys, ...jamSpamKeys]));
-      const microtonalityKeys = new Set(nextMicrotonalityShows.map((s) => s.showKey));
-      await metalTask(new Set([...dripDripKeys, ...jamSpamKeys, ...microtonalityKeys]));
-      await takingFlightTask;
+      } else {
+        nextMetalShows = [];
+        setMetalShows([]);
+        setMetalLoading(false);
+      }
       if (!alive) return;
       try {
         const payload: DiscoveryRowsCachePayload = {
@@ -1703,6 +1694,49 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
     for (const s of showTypes) if (!map.has(s)) map.set(s, 0);
     return SHOW_TYPE_OPTIONS.map((o) => ({ value: o.value, count: map.get(o.value) || 0 }));
   }, [showTypeFacet, showTypes]);
+  const randomPickerYears = useMemo(() => {
+    const fromFacet = yearFacet
+      .map((entry) => Number(entry.value))
+      .filter((year) => Number.isInteger(year) && year >= 1960 && year <= 2100);
+    const source = fromFacet.length > 0
+      ? fromFacet
+      : Array.from(
+          new Set(
+            shows
+              .map((s) => Number(String(s.showDate || "").slice(0, 4)))
+              .filter((year) => Number.isInteger(year) && year >= 1960 && year <= 2100),
+          ),
+        );
+    return source.sort((a, b) => a - b);
+  }, [yearFacet, shows]);
+  const randomPickerCountsByYear = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const entry of yearFacet) {
+      const year = Number(entry.value);
+      if (!Number.isInteger(year)) continue;
+      map.set(year, Number(entry.count || 0));
+    }
+    if (map.size > 0) return map;
+    for (const s of shows) {
+      const year = Number(String(s.showDate || "").slice(0, 4));
+      if (!Number.isInteger(year)) continue;
+      map.set(year, (map.get(year) || 0) + 1);
+    }
+    return map;
+  }, [yearFacet, shows]);
+  const randomPickerMinBound =
+    randomPickerYears.length > 0 ? randomPickerYears[0] : null;
+  const randomPickerMaxBound =
+    randomPickerYears.length > 0 ? randomPickerYears[randomPickerYears.length - 1] : null;
+  const randomPickerYearValues = useMemo(() => {
+    if (randomPickerYearMin == null || randomPickerYearMax == null) return [] as string[];
+    return randomPickerYears
+      .filter((year) => year >= randomPickerYearMin && year <= randomPickerYearMax)
+      .map((year) => String(year));
+  }, [randomPickerYearMax, randomPickerYearMin, randomPickerYears]);
+  const randomPickerHistogramMax = useMemo(() => {
+    return Math.max(1, ...Array.from(randomPickerCountsByYear.values()), 1);
+  }, [randomPickerCountsByYear]);
   const availableAlbums = useMemo(() => {
     const hasFacetCounts = albumFacet.some((o) => typeof o.count === "number" && o.count > 0);
     const map = new Map<string, number | undefined>();
@@ -1728,10 +1762,10 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
   }, [albumShowKeysFacet]);
   const takingFlightCards = takingFlightShows;
   const showTakingFlightSkeleton = takingFlightLoading;
-  const showDripDripSkeleton = dripDripLoading && dripDripShows.length === 0;
-  const showJamSpamSkeleton = jamSpamLoading && jamSpamShows.length === 0;
-  const showMicrotonalitySkeleton = microtonalityLoading && microtonalityShows.length === 0;
-  const showMetalSkeleton = metalLoading && metalShows.length === 0;
+  const showDripDripSkeleton = dripDripLoading;
+  const showJamSpamSkeleton = jamSpamLoading;
+  const showMicrotonalitySkeleton = microtonalityLoading;
+  const showMetalSkeleton = metalLoading;
   const renderPrebuiltSkeletonCards = () =>
     Array.from({ length: 4 }, (_, idx) => (
       <div
@@ -1822,6 +1856,56 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
     },
     [albumShowKeySets, albumUniverseCount, hasComputedAlbumFacetData, venueTotal],
   );
+  useEffect(() => {
+    if (randomPickerMinBound == null || randomPickerMaxBound == null) return;
+    if (!randomPickerInitializedRef.current) {
+      randomPickerInitializedRef.current = true;
+      setRandomPickerYearMin(randomPickerMinBound);
+      setRandomPickerYearMax(randomPickerMaxBound);
+      return;
+    }
+    setRandomPickerYearMin((prev) => {
+      if (prev == null) return randomPickerMinBound;
+      return Math.min(randomPickerMaxBound, Math.max(randomPickerMinBound, prev));
+    });
+    setRandomPickerYearMax((prev) => {
+      if (prev == null) return randomPickerMaxBound;
+      return Math.min(randomPickerMaxBound, Math.max(randomPickerMinBound, prev));
+    });
+  }, [randomPickerMaxBound, randomPickerMinBound]);
+  useEffect(() => {
+    if (showOnlyShows) return;
+    let cancelled = false;
+    const timeout = setTimeout(async () => {
+      setRandomPickerCountLoading(true);
+      try {
+        const res = await fetchShowsWithRetry(buildRandomPickerUrl(1), 10000);
+        if (!res || cancelled) return;
+        const data = (await res.json()) as ShowsResponse;
+        const total = Math.max(
+          0,
+          Number(data?.venueTotal || 0) ||
+            (Array.isArray(data?.items) ? data.items.length : 0),
+        );
+        if (!cancelled) setRandomPickerMatchCount(total);
+      } catch {
+        if (!cancelled) setRandomPickerMatchCount(null);
+      } finally {
+        if (!cancelled) setRandomPickerCountLoading(false);
+      }
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+    };
+  }, [
+    randomPickerYearValues,
+    randomPickerYearMin,
+    randomPickerYearMax,
+    randomPickerMinBound,
+    randomPickerMaxBound,
+    showOnlyShows,
+  ]);
 
   const sortedSongShows = useMemo(() => {
     const arr = songShows.slice();
@@ -3051,6 +3135,59 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
     router.push(`/songs/${encodeURIComponent(next)}`);
   }
 
+  async function playRandomShowFromFilters() {
+    if (randomPickerLoading) return;
+    setRandomPickerError(null);
+    setRandomPickerLoading(true);
+    try {
+      const firstRes = await fetchShowsWithRetry(buildRandomPickerUrl(1), 12000);
+      if (!firstRes) {
+        setRandomPickerError("Couldn't load shows for the random picker.");
+        return;
+      }
+      const firstData = (await firstRes.json()) as ShowsResponse;
+      const firstItems = Array.isArray(firstData?.items) ? firstData.items : [];
+      const totalMatches = Math.max(
+        0,
+        Number(firstData?.venueTotal || 0) || firstItems.length,
+      );
+      if (totalMatches <= 0) {
+        setRandomPickerError("No shows match those filters.");
+        return;
+      }
+
+      const randomIndex = Math.floor(Math.random() * totalMatches);
+      const targetPage = Math.floor(randomIndex / SHOWS_PAGE_SIZE) + 1;
+      let pageItems = firstItems;
+      if (targetPage !== 1) {
+        const targetRes = await fetchShowsWithRetry(buildRandomPickerUrl(targetPage), 12000);
+        if (!targetRes) {
+          setRandomPickerError("Couldn't load the selected random page.");
+          return;
+        }
+        const targetData = (await targetRes.json()) as ShowsResponse;
+        pageItems = Array.isArray(targetData?.items) ? targetData.items : [];
+      }
+      if (pageItems.length === 0) {
+        setRandomPickerError("No playable shows found for those filters.");
+        return;
+      }
+      const indexInPage = randomIndex - (targetPage - 1) * SHOWS_PAGE_SIZE;
+      const chosen =
+        pageItems[indexInPage] ||
+        pageItems[Math.floor(Math.random() * pageItems.length)];
+      if (!chosen) {
+        setRandomPickerError("Couldn't pick a random show.");
+        return;
+      }
+      await playShowFromCard(chosen);
+    } catch {
+      setRandomPickerError("Random picker is unavailable right now.");
+    } finally {
+      setRandomPickerLoading(false);
+    }
+  }
+
   return (
     <main className="min-h-screen bg-[#080017] text-white">
       <div className="mx-auto w-full max-w-[1140px] px-4 pb-28 pt-6 md:px-6">
@@ -3059,8 +3196,11 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
             <section>
               <div className="mb-4">
                 <h2 className="text-[24px] font-semibold [font-family:var(--font-roboto-condensed)]">
-                  KGLW Live Compilations
+                  Live Compilations
                 </h2>
+                <div className="mt-1 text-[13px] text-white/70 [font-family:var(--font-roboto-condensed)]">
+                  Full Gizz albums recreated with live songs
+                </div>
               </div>
 
               <div className="relative">
@@ -3197,12 +3337,187 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
 
           {!showOnlyShows ? (
             <section>
+              <div className="mb-4 rounded-[16px] border border-white/12 bg-white/[0.03] p-4 backdrop-blur-[6px]">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <h2 className="text-[24px] font-semibold [font-family:var(--font-roboto-condensed)]">
+                      Random show picker
+                    </h2>
+                    <button
+                      type="button"
+                      className="mt-1 text-[13px] text-[#b67bff] [font-family:var(--font-roboto-condensed)] hover:text-[#c79aff]"
+                      onClick={() => setRandomPickerAdvancedOpen(true)}
+                    >
+                      Advanced filters
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-[#6a2fd1] bg-[#5a22c9] px-4 py-2 text-[14px] font-medium text-white transition hover:bg-[#6a2fd1] md:w-auto disabled:cursor-not-allowed disabled:opacity-60"
+                    onClick={playRandomShowFromFilters}
+                    disabled={randomPickerLoading || (randomPickerMatchCount ?? 0) <= 0}
+                  >
+                    <FontAwesomeIcon
+                      icon={randomPickerLoading ? faSpinner : faCirclePlay}
+                      className={randomPickerLoading ? "animate-spin" : ""}
+                    />
+                    <span>Play</span>
+                  </button>
+                </div>
+
+                {randomPickerError ? (
+                  <div className="mt-3 text-[12px] text-[#ff9fb3] [font-family:var(--font-roboto-condensed)]">
+                    {randomPickerError}
+                  </div>
+                ) : null}
+              </div>
+            </section>
+          ) : null}
+
+          {randomPickerAdvancedOpen ? (
+            <>
+              <button
+                type="button"
+                aria-label="Close random show filters"
+                className="fixed inset-0 z-[110] bg-black/60"
+                onClick={() => setRandomPickerAdvancedOpen(false)}
+              />
+              <div
+                role="dialog"
+                aria-label="Random show advanced filters"
+                className="fixed bottom-0 left-0 right-0 z-[120] mx-auto w-full max-w-[393px] rounded-t-[16px] border border-white/15 bg-[#080017] px-6 pb-8 pt-4 shadow-[0_-4px_4px_rgba(0,0,0,0.25)]"
+              >
+                <div className="mx-auto h-[4px] w-[53px] rounded-[16px] bg-white/30" />
+                <div className="mt-6 text-[24px] font-medium text-white [font-family:var(--font-roboto-condensed)]">
+                  Advanced filters
+                </div>
+
+                <div className="mt-4 space-y-5">
+                  <div>
+                    <div className="mb-2 text-[13px] text-white/85 [font-family:var(--font-roboto-condensed)]">
+                      Years
+                    </div>
+                    {randomPickerYears.length > 0 ? (
+                      <>
+                        <div className="flex h-[64px] items-end gap-[3px] rounded-[10px] border border-white/10 bg-[#0b0320]/70 px-2 py-2">
+                          {randomPickerYears.map((year) => {
+                            const count = randomPickerCountsByYear.get(year) || 0;
+                            const inRange =
+                              randomPickerYearMin != null &&
+                              randomPickerYearMax != null &&
+                              year >= randomPickerYearMin &&
+                              year <= randomPickerYearMax;
+                            const height = Math.max(
+                              4,
+                              Math.round((count / randomPickerHistogramMax) * 46),
+                            );
+                            return (
+                              <div
+                                key={`random-year-bar-${year}`}
+                                title={`${year}: ${count}`}
+                                  className={`min-w-0 flex-1 rounded-[2px] ${inRange ? "bg-[#7a45e5]" : "bg-white/20"}`}
+                                style={{ height }}
+                              />
+                            );
+                          })}
+                        </div>
+                        <div className="mt-2 flex items-center justify-between text-[12px] text-white/75 [font-family:var(--font-roboto-condensed)]">
+                          <span>{randomPickerYearMin ?? randomPickerMinBound ?? "—"}</span>
+                          <span>{randomPickerYearMax ?? randomPickerMaxBound ?? "—"}</span>
+                        </div>
+                        {randomPickerMinBound != null && randomPickerMaxBound != null ? (
+                          <div className="mt-2">
+                            <div className="relative h-7">
+                              <div className="absolute top-1/2 h-[4px] w-full -translate-y-1/2 rounded-full bg-white/20" />
+                              <div
+                                className="absolute top-1/2 h-[4px] -translate-y-1/2 rounded-full bg-[#7a45e5]"
+                                style={{
+                                  left: `${(
+                                    ((randomPickerYearMin ?? randomPickerMinBound) - randomPickerMinBound) /
+                                    Math.max(1, randomPickerMaxBound - randomPickerMinBound)
+                                  ) * 100}%`,
+                                  width: `${(
+                                    ((randomPickerYearMax ?? randomPickerMaxBound) -
+                                      (randomPickerYearMin ?? randomPickerMinBound)) /
+                                    Math.max(1, randomPickerMaxBound - randomPickerMinBound)
+                                  ) * 100}%`,
+                                }}
+                              />
+                              <input
+                                type="range"
+                                min={randomPickerMinBound}
+                                max={randomPickerMaxBound}
+                                value={randomPickerYearMin ?? randomPickerMinBound}
+                                className="pointer-events-none absolute inset-0 w-full appearance-none bg-transparent [&::-webkit-slider-runnable-track]:h-[4px] [&::-webkit-slider-runnable-track]:bg-transparent [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:mt-[-8px] [&::-webkit-slider-thumb]:size-5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-white/20 [&::-webkit-slider-thumb]:bg-[#f2f5ff] [&::-moz-range-track]:h-[4px] [&::-moz-range-track]:bg-transparent [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:size-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-white/20 [&::-moz-range-thumb]:bg-[#f2f5ff]"
+                                onChange={(e) => {
+                                  const next = Number(e.target.value);
+                                  setRandomPickerYearMin(
+                                    Math.min(next, randomPickerYearMax ?? randomPickerMaxBound),
+                                  );
+                                }}
+                              />
+                              <input
+                                type="range"
+                                min={randomPickerMinBound}
+                                max={randomPickerMaxBound}
+                                value={randomPickerYearMax ?? randomPickerMaxBound}
+                                className="pointer-events-none absolute inset-0 w-full appearance-none bg-transparent [&::-webkit-slider-runnable-track]:h-[4px] [&::-webkit-slider-runnable-track]:bg-transparent [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:mt-[-8px] [&::-webkit-slider-thumb]:size-5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-white/20 [&::-webkit-slider-thumb]:bg-[#f2f5ff] [&::-moz-range-track]:h-[4px] [&::-moz-range-track]:bg-transparent [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:size-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-white/20 [&::-moz-range-thumb]:bg-[#f2f5ff]"
+                                onChange={(e) => {
+                                  const next = Number(e.target.value);
+                                  setRandomPickerYearMax(
+                                    Math.max(next, randomPickerYearMin ?? randomPickerMinBound),
+                                  );
+                                }}
+                              />
+                            </div>
+                          </div>
+                        ) : null}
+                      </>
+                    ) : (
+                      <div className="text-[12px] text-white/65 [font-family:var(--font-roboto-condensed)]">
+                        Year data is still loading.
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="text-center text-[13px] text-white/70 [font-family:var(--font-roboto-condensed)]">
+                    {randomPickerCountLoading
+                      ? "Updating..."
+                      : `${randomPickerMatchCount ?? 0} show${
+                          randomPickerMatchCount === 1 ? "" : "s"
+                        }`}
+                  </div>
+                  <button
+                    type="button"
+                    className="flex h-[48px] w-full items-center justify-center rounded-[12px] bg-[#5a22c9] px-4 text-[16px] font-semibold text-white [font-family:var(--font-roboto-condensed)]"
+                    onClick={() => setRandomPickerAdvancedOpen(false)}
+                  >
+                    Done
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full text-center text-[13px] text-[#b67bff] [font-family:var(--font-roboto-condensed)] hover:text-[#c79aff]"
+                    onClick={() => {
+                      if (randomPickerMinBound != null) setRandomPickerYearMin(randomPickerMinBound);
+                      if (randomPickerMaxBound != null) setRandomPickerYearMax(randomPickerMaxBound);
+                      setRandomPickerError(null);
+                    }}
+                  >
+                    Reset filters
+                  </button>
+                </div>
+              </div>
+            </>
+          ) : null}
+
+          {!showOnlyShows ? (
+            <section>
               <div className="mb-4">
                 <h2 className="text-[24px] font-semibold [font-family:var(--font-roboto-condensed)]">
                   Wish I learnt how to swim
                 </h2>
                 <div className="mt-1 text-[13px] text-white/70 [font-family:var(--font-roboto-condensed)]">
-                  Shows featuring the drippingest taps
+                  Show&apos;s beginning or ending with The Dripping Tap
                 </div>
               </div>
               <div className="relative">
@@ -3253,10 +3568,10 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
             <section>
               <div className="mb-4">
                 <h2 className="text-[24px] font-semibold [font-family:var(--font-roboto-condensed)]">
-                  Jams
+                  Marathons
                 </h2>
                 <div className="mt-1 text-[13px] text-white/70 [font-family:var(--font-roboto-condensed)]">
-                  Featured playlists with Head on/Pill, Dripping Tap, Hypertension, and more
+                  The long ones
                 </div>
               </div>
               <div className="relative">
@@ -3273,23 +3588,16 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
                     {showJamSpamSkeleton
                       ? renderDiscoverySkeletonCards("jam-spam")
                       : jamSpamShows.length === 0
-                        ? [renderDiscoveryEmptyCard("jam-spam-empty", "Jams are unavailable right now.")]
-                        : jamSpamShows.map((s) => {
-                            const jamLength = displaySongLength(s.matchedSongLength, s.matchedSongSeconds);
-                            const jamTitle = toDisplayTrackTitle(s.matchedSongTitle || "");
-                            const subtitle = jamTitle
-                              ? `Longest ${jamTitle}${jamLength ? ` • ${jamLength}` : ""}`
-                              : undefined;
-                            return renderDiscoveryShowCard(s, `jam-spam-${s.showKey}`, {
-                              subtitle,
-                            });
-                          })}
+                        ? [renderDiscoveryEmptyCard("jam-spam-empty", "Marathons are unavailable right now.")]
+                        : jamSpamShows.map((s) =>
+                            renderDiscoveryShowCard(s, `jam-spam-${s.showKey}`),
+                          )}
                   </div>
                 </div>
                 {canScrollJamSpamPrev ? (
                   <button
                     type="button"
-                    aria-label="Previous Jam Spam shows"
+                    aria-label="Previous Marathon shows"
                     className="absolute top-1/2 left-0 hidden -translate-y-1/2 rounded-full border border-white/25 bg-black/55 px-3 py-2 text-sm text-white shadow-[0_8px_18px_rgba(0,0,0,0.35)] backdrop-blur md:flex"
                     onClick={scrollJamSpamPrevPage}
                   >
@@ -3299,7 +3607,7 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
                 {canScrollJamSpamNext ? (
                   <button
                     type="button"
-                    aria-label="Next Jam Spam shows"
+                    aria-label="Next Marathon shows"
                     className="absolute top-1/2 right-0 hidden -translate-y-1/2 rounded-full border border-white/25 bg-black/55 px-3 py-2 text-sm text-white shadow-[0_8px_18px_rgba(0,0,0,0.35)] backdrop-blur md:flex"
                     onClick={scrollJamSpamNextPage}
                   >
@@ -3310,7 +3618,7 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
             </section>
           ) : null}
 
-          {!showOnlyShows ? (
+          {!showOnlyShows && SHOW_MICROTONALITY_SECTION ? (
             <section>
               <div className="mb-4">
                 <h2 className="text-[24px] font-semibold [font-family:var(--font-roboto-condensed)]">
@@ -3334,7 +3642,7 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
             </section>
           ) : null}
 
-          {!showOnlyShows ? (
+          {!showOnlyShows && SHOW_METAL_SECTION ? (
             <section>
               <div className="mb-4">
                 <h2 className="text-[24px] font-semibold [font-family:var(--font-roboto-condensed)]">
@@ -3596,6 +3904,7 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
                     onChange={setShowTypes}
                     minWidthClass="min-w-[102px]"
                     emptyLabel="Show Type"
+                    formatOptionLabel={formatShowTypeLabel}
                   />
                   <MultiSelectDropdown
                     id="albums"

@@ -228,7 +228,9 @@ export function PlayerBar() {
     if (!currentTrack) return "";
     const venue = String(currentTrack.venueText || "").trim();
     const date = formatCardDate(currentTrack.showDate);
-    return [venue, date].filter(Boolean).join(" ");
+    if (venue && date) return `Live at ${venue} - ${date}`;
+    if (venue) return `Live at ${venue}`;
+    return date;
   }, [currentTrack]);
   const artworkSrc = useMemo(() => {
     if (!currentTrack) return "";
@@ -248,8 +250,13 @@ export function PlayerBar() {
       return;
     }
     if (!currentTrack?.showKey) return;
-    const song = encodeURIComponent(toDisplayTrackTitle(currentTrack.title));
-    router.push(`/show/${encodeURIComponent(currentTrack.showKey)}?song=${song}`);
+    const params = new URLSearchParams();
+    params.set("song", toDisplayTrackTitle(currentTrack.title));
+    const identifier = getArchiveIdentifier(currentTrack.url);
+    if (identifier) params.set("id", identifier);
+    router.push(
+      `/show/${encodeURIComponent(currentTrack.showKey)}?${params.toString()}`,
+    );
   }
 
   function restorePlayer() {
@@ -521,10 +528,7 @@ export function PlayerBar() {
 
   const title = useMemo(() => {
     if (!currentTrack) return "—";
-    const baseTitle = toDisplayTrackTitle(currentTrack.title);
-    return currentTrack.track
-      ? `${currentTrack.track}. ${baseTitle}`
-      : baseTitle;
+    return toDisplayTrackTitle(currentTrack.title);
   }, [currentTrack]);
   const activePlaylist = useMemo(() => {
     const id = String(currentTrack?.playlistId || "").trim();
@@ -832,6 +836,9 @@ export function PlayerBar() {
                 title={canOpenCurrentContext ? "Open current context" : "Show unavailable"}
               >
                 <div className="truncate text-[14px] text-white">{title}</div>
+                {subtitle ? (
+                  <div className="truncate text-[12px] text-white/60">{subtitle}</div>
+                ) : null}
               </button>
             </div>
             <div className="flex items-center gap-3">

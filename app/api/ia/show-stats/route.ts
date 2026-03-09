@@ -9,6 +9,14 @@ type IaMetadataFile = {
   length?: string | number;
 };
 
+function normalizeSongText(v: string): string {
+  return String(v || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function isAudioName(name: string): boolean {
   const n = name.toLowerCase();
   return (
@@ -84,6 +92,8 @@ async function fetchMetadataWithTimeout(identifier: string, timeoutMs: number) {
 
 export async function GET(req: NextRequest) {
   const identifier = (req.nextUrl.searchParams.get("identifier") || "").trim();
+  const boundarySong = (req.nextUrl.searchParams.get("boundarySong") || "").trim();
+  const normalizedBoundarySong = normalizeSongText(boundarySong);
   if (!identifier) {
     return Response.json(
       { showLengthSeconds: null, showTrackCount: null, error: "Missing identifier" },
@@ -120,6 +130,7 @@ export async function GET(req: NextRequest) {
   });
 
   const seen = new Set<string>();
+  const orderedTrackTitles: string[] = [];
   let total = 0;
   for (const f of picked) {
     const title = String(f?.title || f?.name || "");
@@ -127,12 +138,28 @@ export async function GET(req: NextRequest) {
     const key = `${title.toLowerCase()}|${lenRaw}`;
     if (seen.has(key)) continue;
     seen.add(key);
+    orderedTrackTitles.push(title);
     const sec = parseLengthToSeconds(f?.length);
     if (sec != null) total += sec;
   }
 
+  const firstTrackTitle = orderedTrackTitles[0] || null;
+  const lastTrackTitle =
+    orderedTrackTitles.length > 0 ? orderedTrackTitles[orderedTrackTitles.length - 1] : null;
+  const firstNorm = normalizeSongText(firstTrackTitle || "");
+  const lastNorm = normalizeSongText(lastTrackTitle || "");
+  const boundarySongMatch =
+    normalizedBoundarySong.length > 0 &&
+    ((firstNorm.includes(normalizedBoundarySong) ||
+      normalizedBoundarySong.includes(firstNorm)) ||
+      (lastNorm.includes(normalizedBoundarySong) ||
+        normalizedBoundarySong.includes(lastNorm)));
+
   return Response.json({
     showLengthSeconds: total > 0 ? total : null,
     showTrackCount: seen.size > 0 ? seen.size : null,
+    firstTrackTitle,
+    lastTrackTitle,
+    boundarySongMatch,
   });
 }
