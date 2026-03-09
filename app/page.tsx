@@ -3393,17 +3393,17 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
           ) : null}
 
           {randomPickerAdvancedOpen ? (
-            <>
+            <div className="fixed inset-0 z-[130]">
               <button
                 type="button"
                 aria-label="Close random show filters"
-                className="fixed inset-0 z-[110] bg-black/60"
+                className="absolute inset-0 bg-black/60"
                 onClick={() => setRandomPickerAdvancedOpen(false)}
               />
               <div
                 role="dialog"
                 aria-label="Random show advanced filters"
-                className="fixed bottom-0 left-0 right-0 z-[120] mx-auto w-full max-w-[393px] rounded-t-[16px] border border-white/15 bg-[#080017] px-6 pb-8 pt-4 shadow-[0_-4px_4px_rgba(0,0,0,0.25)]"
+                className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-[393px] rounded-t-[16px] border border-white/15 bg-[#080017] px-6 pb-8 pt-4 shadow-[0_-4px_4px_rgba(0,0,0,0.25)]"
               >
                 <div className="mx-auto h-[4px] w-[53px] rounded-[16px] bg-white/30" />
                 <div className="mt-6 text-[24px] font-medium text-white [font-family:var(--font-roboto-condensed)]">
@@ -3525,7 +3525,7 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
                   </button>
                 </div>
               </div>
-            </>
+            </div>
           ) : null}
 
           {!showOnlyShows ? (
