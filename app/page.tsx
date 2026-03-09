@@ -844,6 +844,7 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
   const [randomPickerAdvancedOpen, setRandomPickerAdvancedOpen] = useState(false);
   const [randomPickerLoading, setRandomPickerLoading] = useState(false);
   const [randomPickerError, setRandomPickerError] = useState<string | null>(null);
+  const [randomPickerActiveShowKey, setRandomPickerActiveShowKey] = useState<string | null>(null);
   const [randomPickerMatchCount, setRandomPickerMatchCount] = useState<number | null>(null);
   const [randomPickerCountLoading, setRandomPickerCountLoading] = useState(false);
   const [randomPickerYearMin, setRandomPickerYearMin] = useState<number | null>(null);
@@ -1737,6 +1738,11 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
   const randomPickerHistogramMax = useMemo(() => {
     return Math.max(1, ...Array.from(randomPickerCountsByYear.values()), 1);
   }, [randomPickerCountsByYear]);
+  const randomPickerHasActiveShow = useMemo(() => {
+    const current = queue[playingIndex];
+    if (!current?.showKey) return false;
+    return current.showKey === randomPickerActiveShowKey;
+  }, [playingIndex, queue, randomPickerActiveShowKey]);
   const availableAlbums = useMemo(() => {
     const hasFacetCounts = albumFacet.some((o) => typeof o.count === "number" && o.count > 0);
     const map = new Map<string, number | undefined>();
@@ -3161,12 +3167,15 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
       let pageItems = firstItems;
       if (targetPage !== 1) {
         const targetRes = await fetchShowsWithRetry(buildRandomPickerUrl(targetPage), 12000);
-        if (!targetRes) {
-          setRandomPickerError("Couldn't load the selected random page.");
-          return;
+        if (targetRes) {
+          const targetData = (await targetRes.json()) as ShowsResponse;
+          pageItems = Array.isArray(targetData?.items) ? targetData.items : [];
         }
-        const targetData = (await targetRes.json()) as ShowsResponse;
-        pageItems = Array.isArray(targetData?.items) ? targetData.items : [];
+      }
+      if (pageItems.length === 0) {
+        // Some random pages can be sparse/empty in fast mode.
+        // Fall back to page-1 candidates instead of failing.
+        pageItems = firstItems;
       }
       if (pageItems.length === 0) {
         setRandomPickerError("No playable shows found for those filters.");
@@ -3181,6 +3190,8 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
         return;
       }
       await playShowFromCard(chosen);
+      setRandomPickerActiveShowKey(chosen.showKey);
+      setRandomPickerError(null);
     } catch {
       setRandomPickerError("Random picker is unavailable right now.");
     } finally {
@@ -3345,7 +3356,7 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
                     </h2>
                     <button
                       type="button"
-                      className="mt-1 text-[13px] text-[#b67bff] [font-family:var(--font-roboto-condensed)] hover:text-[#c79aff]"
+                      className="mt-1 hidden text-[13px] text-[#b67bff] [font-family:var(--font-roboto-condensed)] hover:text-[#c79aff] md:inline-block"
                       onClick={() => setRandomPickerAdvancedOpen(true)}
                     >
                       Advanced filters
@@ -3361,7 +3372,14 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
                       icon={randomPickerLoading ? faSpinner : faCirclePlay}
                       className={randomPickerLoading ? "animate-spin" : ""}
                     />
-                    <span>Play</span>
+                    <span>{randomPickerHasActiveShow ? "Randomize" : "Play"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full text-center text-[13px] text-[#b67bff] [font-family:var(--font-roboto-condensed)] hover:text-[#c79aff] md:hidden"
+                    onClick={() => setRandomPickerAdvancedOpen(true)}
+                  >
+                    Advanced filters
                   </button>
                 </div>
 

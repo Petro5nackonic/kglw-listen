@@ -1,21 +1,27 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faBackwardStep,
+  faEllipsisVertical,
   faEyeSlash,
   faForwardStep,
+  faHeart,
   faListMusic,
+  faMapPin,
   faMerge,
   faPause,
   faPlay,
   faStop,
 } from "@fortawesome/pro-solid-svg-icons";
+import { faHeart as faHeartRegular } from "@fortawesome/free-regular-svg-icons";
 import { usePlayer } from "@/components/player/store";
 import { usePlaylists } from "@/components/playlists/store";
 import { toDisplayTrackTitle } from "@/utils/displayTitle";
+
+const LOVED_SONGS_PLAYLIST_NAME = "Loved Songs";
 
 function fmt(sec: number) {
   if (!Number.isFinite(sec) || sec < 0) return "0:00";
@@ -140,7 +146,10 @@ function pickBestArchiveTrackUrl(
 
 export function PlayerBar() {
   const router = useRouter();
+  const pathname = usePathname();
   const playlists = usePlaylists((s) => s.playlists);
+  const addTrackToPlaylist = usePlaylists((s) => s.addTrack);
+  const createPlaylist = usePlaylists((s) => s.createPlaylist);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const preloadAudioRef = useRef<HTMLAudioElement | null>(null);
   const fallbackTriedRef = useRef<Set<string>>(new Set());
@@ -379,6 +388,9 @@ export function PlayerBar() {
   const [duration, setDuration] = useState(0);
   const [minimized, setMinimized] = useState(false);
   const [queueSheetOpen, setQueueSheetOpen] = useState(false);
+  const [songSheetOpen, setSongSheetOpen] = useState(false);
+  const [showSongPlaylistPicker, setShowSongPlaylistPicker] = useState(false);
+  const [songShareState, setSongShareState] = useState<"idle" | "copied" | "error">("idle");
   const [isBuffering, setIsBuffering] = useState(false);
   const [bufferProgress, setBufferProgress] = useState(0);
   const progress = useMemo(() => {
@@ -555,6 +567,39 @@ export function PlayerBar() {
     }
     return formatCardDate(currentTrack?.showDate);
   }, [activePlaylist, isPrebuiltContext, currentTrack?.showDate]);
+  const lovedSongsPlaylist = useMemo(
+    () =>
+      playlists.find(
+        (p) => p.name.trim().toLowerCase() === LOVED_SONGS_PLAYLIST_NAME.toLowerCase(),
+      ) || null,
+    [playlists],
+  );
+  const selectablePlaylists = useMemo(
+    () =>
+      playlists.filter(
+        (p) => p.name.trim().toLowerCase() !== LOVED_SONGS_PLAYLIST_NAME.toLowerCase(),
+      ),
+    [playlists],
+  );
+  const isCurrentSongLoved = useMemo(() => {
+    if (!currentTrack?.url || !lovedSongsPlaylist) return false;
+    const canonical = toDisplayTrackTitle(currentTrack.title).toLowerCase();
+    const slot = lovedSongsPlaylist.slots.find((s) => s.canonicalTitle === canonical);
+    if (!slot) return false;
+    return slot.variants.some((v) => v.track.url === currentTrack.url);
+  }, [currentTrack, lovedSongsPlaylist]);
+  const isOnCurrentShowPage = useMemo(() => {
+    const showKey = String(currentTrack?.showKey || "").trim();
+    if (!showKey) return false;
+    const path = String(pathname || "");
+    if (!path.startsWith("/show/")) return false;
+    const segment = path.split("/").filter(Boolean).pop() || "";
+    try {
+      return decodeURIComponent(segment) === showKey;
+    } catch {
+      return segment === showKey;
+    }
+  }, [currentTrack?.showKey, pathname]);
   const queueItems = useMemo(
     () =>
       queue
@@ -623,6 +668,35 @@ export function PlayerBar() {
     if (!playing) {
       pause?.();
     }
+  }
+
+  function closeSongSheet() {
+    setSongSheetOpen(false);
+    setShowSongPlaylistPicker(false);
+    setSongShareState("idle");
+  }
+
+  function getOrCreateLovedSongsPlaylistId(): string {
+    const existing = playlists.find(
+      (p) => p.name.trim().toLowerCase() === LOVED_SONGS_PLAYLIST_NAME.toLowerCase(),
+    );
+    if (existing) return existing.id;
+    return createPlaylist(LOVED_SONGS_PLAYLIST_NAME);
+  }
+
+  function addCurrentSongToLovedSongsPlaylist() {
+    if (!currentTrack?.url) return;
+    const id = getOrCreateLovedSongsPlaylistId();
+    addTrackToPlaylist(id, {
+      title: toDisplayTrackTitle(currentTrack.title),
+      url: currentTrack.url,
+      length: currentTrack.length,
+      track: currentTrack.track,
+      showKey: currentTrack.showKey,
+      showDate: currentTrack.showDate,
+      venueText: currentTrack.venueText,
+      artwork: currentTrack.artwork,
+    });
   }
 
   useEffect(() => {
@@ -795,6 +869,200 @@ export function PlayerBar() {
           </div>
         </>
       )}
+      {songSheetOpen && currentTrack ? (
+        <div
+          className="fixed inset-0 z-50 bg-black/50"
+          onClick={() => closeSongSheet()}
+        >
+          <div
+            className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-[393px] rounded-t-2xl border border-white/15 bg-[#080017] px-6 pb-10 pt-6 shadow-[0_-4px_16px_rgba(0,0,0,0.4)] [font-family:var(--font-roboto-condensed)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {!showSongPlaylistPicker ? (
+              <>
+                <div className="mb-6 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="truncate text-[22px] leading-none">
+                      {toDisplayTrackTitle(currentTrack.title)}
+                    </div>
+                    <div className="text-sm text-white/85">
+                      {currentTrack.length || "—"}
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between text-sm text-white/45">
+                    <div className="min-w-0 truncate">
+                      <FontAwesomeIcon icon={faMapPin} className="mr-1 text-[11px]" />
+                      {String(currentTrack.venueText || "").trim() || "Unknown venue"}
+                    </div>
+                    <div className="shrink-0">{formatCardDate(currentTrack.showDate)}</div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      className="flex items-center justify-center gap-2 rounded-xl bg-[rgba(48,26,89,0.25)] px-4 py-4 text-base hover:bg-[rgba(72,36,124,0.35)] transition"
+                      onClick={() => {
+                        if (isCurrentSongLoved) return;
+                        addCurrentSongToLovedSongsPlaylist();
+                      }}
+                    >
+                      <FontAwesomeIcon
+                        icon={isCurrentSongLoved ? faHeart : faHeartRegular}
+                        className={isCurrentSongLoved ? "text-rose-300" : "text-white"}
+                      />
+                      <span>{isCurrentSongLoved ? "Loved song" : "Love song"}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={!currentTrack.showKey}
+                      className="flex items-center justify-center gap-2 rounded-xl bg-[rgba(48,26,89,0.25)] px-4 py-4 text-base hover:bg-[rgba(72,36,124,0.35)] transition disabled:cursor-not-allowed disabled:opacity-50"
+                      onClick={async () => {
+                        if (!currentTrack.showKey) return;
+                        try {
+                          const songUrl = `${window.location.origin}/show/${encodeURIComponent(currentTrack.showKey)}?song=${encodeURIComponent(toDisplayTrackTitle(currentTrack.title))}`;
+                          await navigator.clipboard.writeText(songUrl);
+                          setSongShareState("copied");
+                          setTimeout(() => setSongShareState("idle"), 1500);
+                        } catch {
+                          setSongShareState("error");
+                          setTimeout(() => setSongShareState("idle"), 1500);
+                        }
+                      }}
+                    >
+                      <span>➤</span>
+                      <span>
+                        Share
+                        {songShareState === "copied" ? " • copied" : ""}
+                        {songShareState === "error" ? " • failed" : ""}
+                      </span>
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={!currentTrack.url}
+                    className="w-full rounded-xl bg-[rgba(48,26,89,0.25)] px-4 py-4 text-base hover:bg-[rgba(72,36,124,0.35)] transition disabled:cursor-not-allowed disabled:opacity-50"
+                    onClick={() => setShowSongPlaylistPicker(true)}
+                  >
+                    + Add to playlist(s)
+                  </button>
+                  {!isOnCurrentShowPage && currentTrack.showKey ? (
+                    <button
+                      type="button"
+                      className="w-full rounded-xl bg-[rgba(48,26,89,0.25)] px-4 py-4 text-base hover:bg-[rgba(72,36,124,0.35)] transition"
+                      onClick={() => {
+                        const song = encodeURIComponent(toDisplayTrackTitle(currentTrack.title));
+                        router.push(`/show/${encodeURIComponent(currentTrack.showKey || "")}?song=${song}`);
+                        closeSongSheet();
+                      }}
+                    >
+                      Go to show
+                    </button>
+                  ) : null}
+                </div>
+
+                <button
+                  type="button"
+                  className="mt-5 w-full text-center text-[20px] text-white/90 hover:text-white transition"
+                  onClick={() => closeSongSheet()}
+                >
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="mb-6 flex items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    className="text-base text-white/70 hover:text-white"
+                    onClick={() => setShowSongPlaylistPicker(false)}
+                  >
+                    ←
+                  </button>
+                  <div className="min-w-0 text-center flex-1">
+                    <div className="truncate text-base font-medium">
+                      {toDisplayTrackTitle(currentTrack.title)}
+                    </div>
+                    <div className="truncate text-xs text-white/50">
+                      {String(currentTrack.venueText || "").trim() || "Unknown venue"}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="text-base text-white/70 hover:text-white"
+                    onClick={() => closeSongSheet()}
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="mb-2 flex items-center justify-between">
+                  <div className="mx-auto text-sm text-white/75">Select playlist(s)</div>
+                  <button
+                    type="button"
+                    className="rounded-lg border border-white/15 bg-white/10 px-2.5 py-1 text-xs hover:bg-white/15 transition"
+                    onClick={() => {
+                      if (!currentTrack.url) return;
+                      const id = createPlaylist("New playlist");
+                      addTrackToPlaylist(id, {
+                        title: toDisplayTrackTitle(currentTrack.title),
+                        url: currentTrack.url,
+                        length: currentTrack.length,
+                        track: currentTrack.track,
+                        showKey: currentTrack.showKey,
+                        showDate: currentTrack.showDate,
+                        venueText: currentTrack.venueText,
+                        artwork: currentTrack.artwork,
+                      });
+                      closeSongSheet();
+                      router.push(`/playlists/${id}`);
+                    }}
+                  >
+                    New +
+                  </button>
+                </div>
+
+                <div className="rounded-xl border border-white/10 bg-black/20 p-2">
+                  {selectablePlaylists.length > 0 ? (
+                    <div className="mb-2 max-h-56 space-y-2 overflow-auto">
+                      {selectablePlaylists.map((playlist) => (
+                        <button
+                          key={playlist.id}
+                          type="button"
+                          className="w-full rounded-[10px] bg-[rgba(48,26,89,0.25)] px-3 py-3 text-left text-sm text-white transition hover:bg-[rgba(72,36,124,0.35)]"
+                          onClick={() => {
+                            if (!currentTrack.url) return;
+                            addTrackToPlaylist(playlist.id, {
+                              title: toDisplayTrackTitle(currentTrack.title),
+                              url: currentTrack.url,
+                              length: currentTrack.length,
+                              track: currentTrack.track,
+                              showKey: currentTrack.showKey,
+                              showDate: currentTrack.showDate,
+                              venueText: currentTrack.venueText,
+                              artwork: currentTrack.artwork,
+                            });
+                            closeSongSheet();
+                          }}
+                        >
+                          {playlist.name}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="mb-2 rounded-[10px] bg-[rgba(48,26,89,0.25)] px-3 py-3 text-sm text-white/75">
+                      No playlists yet.
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      ) : null}
       <div className="fixed right-0 bottom-[52px] left-0 z-30 bg-[#080017]/95 backdrop-blur">
         <div className="mx-auto w-full max-w-[1140px] px-4 pb-4 pt-3 [font-family:var(--font-roboto-condensed)] md:px-6">
           {isBuffering && playing && src ? (
@@ -842,6 +1110,19 @@ export function PlayerBar() {
               </button>
             </div>
             <div className="flex items-center gap-3">
+              <button
+                type="button"
+                className="text-[22px] text-white/85 hover:text-white disabled:opacity-40"
+                onClick={() => {
+                  setSongSheetOpen(true);
+                  setShowSongPlaylistPicker(false);
+                  setSongShareState("idle");
+                }}
+                disabled={!currentTrack}
+                title="More options"
+              >
+                <FontAwesomeIcon icon={faEllipsisVertical} />
+              </button>
               {currentVariantContext ? (
                 <button
                   type="button"
