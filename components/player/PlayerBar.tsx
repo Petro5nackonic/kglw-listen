@@ -904,7 +904,6 @@ export function PlayerBar() {
                       type="button"
                       className="flex items-center justify-center gap-2 rounded-xl bg-[rgba(48,26,89,0.25)] px-4 py-4 text-base hover:bg-[rgba(72,36,124,0.35)] transition"
                       onClick={() => {
-                        if (isCurrentSongLoved) return;
                         addCurrentSongToLovedSongsPlaylist();
                       }}
                     >
@@ -912,7 +911,7 @@ export function PlayerBar() {
                         icon={isCurrentSongLoved ? faHeart : faHeartRegular}
                         className={isCurrentSongLoved ? "text-rose-300" : "text-white"}
                       />
-                      <span>{isCurrentSongLoved ? "Loved song" : "Love song"}</span>
+                      <span>Love</span>
                     </button>
 
                     <button
