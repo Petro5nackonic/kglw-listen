@@ -1,9 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faChevronLeft, faCirclePlay } from "@fortawesome/pro-solid-svg-icons";
+import {
+  faChevronLeft,
+  faCirclePlay,
+  faEllipsisVertical,
+  faSpinner,
+} from "@fortawesome/pro-solid-svg-icons";
+import { usePlayer, type Track } from "@/components/player/store";
 import { toDisplayTitle, toDisplayTrackTitle } from "@/utils/displayTitle";
 
 type ShowItem = {
@@ -11,12 +17,15 @@ type ShowItem = {
   showDate: string;
   title: string;
   artwork?: string;
+  defaultId?: string;
   matchedSongTitle?: string | null;
   matchedSongLength?: string | null;
   matchedSongSeconds?: number | null;
+  matchedSongUrl?: string | null;
 };
 
 type ShowsResponse = {
+  items?: ShowItem[];
   song?: {
     total: number;
     items: ShowItem[];
@@ -44,8 +53,63 @@ function uniqueByShowKey(items: ShowItem[]): ShowItem[] {
   return out;
 }
 
+function isAudioName(name: string): boolean {
+  const n = name.toLowerCase();
+  return (
+    n.endsWith(".mp3") ||
+    n.endsWith(".flac") ||
+    n.endsWith(".ogg") ||
+    n.endsWith(".m4a") ||
+    n.endsWith(".wav")
+  );
+}
+
+function audioExtRank(name: string): number {
+  const n = name.toLowerCase();
+  if (n.endsWith(".mp3")) return 1;
+  if (n.endsWith(".m4a")) return 2;
+  if (n.endsWith(".ogg")) return 3;
+  if (n.endsWith(".wav")) return 4;
+  if (n.endsWith(".flac")) return 5;
+  return 999;
+}
+
+function trackSetRank(fileName: string): number {
+  const n = fileName.toLowerCase();
+  if (n.includes("edited")) return 1;
+  if (n.includes("stereo")) return 2;
+  if (n.includes("audience") || n.includes("matrix") || n.includes("soundboard")) return 3;
+  if (n.includes("og")) return 10;
+  if (n.includes("original")) return 11;
+  if (n.includes("4ch") || n.includes("4-ch") || n.includes("4 channel") || n.includes("4-channel"))
+    return 12;
+  return 5;
+}
+
+function parseTrackNum(t?: string): number {
+  if (!t) return Number.POSITIVE_INFINITY;
+  const m = String(t).match(/^(\d+)/);
+  return m ? Number(m[1]) : Number.POSITIVE_INFINITY;
+}
+
+function normalizeSongText(v: string): string {
+  return String(v || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+type IaMetadataFile = {
+  name?: string;
+  title?: string;
+  track?: string;
+  length?: string | number;
+};
+
 export default function SongVersionsPage() {
   const router = useRouter();
+  const { setQueue } = usePlayer();
   const params = useParams<{ song?: string | string[] }>();
   const rawSong = Array.isArray(params?.song) ? params.song[0] : params?.song || "";
   const songQuery = useMemo(() => {
@@ -60,6 +124,10 @@ export default function SongVersionsPage() {
   const [error, setError] = useState<string | null>(null);
   const [shows, setShows] = useState<ShowItem[]>([]);
   const [sortMode, setSortMode] = useState<SortMode>("newest");
+  const [requestedPlayShowKey, setRequestedPlayShowKey] = useState<string | null>(null);
+  const queueByIdentifierRef = useRef<Record<string, Track[]>>({});
+  const inFlightQueueByIdentifierRef = useRef<Record<string, Promise<Track[]>>>({});
+  const resolvedShowIdsRef = useRef<Record<string, string>>({});
 
   useEffect(() => {
     let alive = true;
@@ -71,12 +139,22 @@ export default function SongVersionsPage() {
       setLoading(true);
       setError(null);
       try {
-        const url = `/api/ia/shows?page=1&sort=newest&query=${encodeURIComponent(songQuery.trim())}`;
-        const res = await fetch(url, { cache: "no-store" });
+        const url = `/api/ia/shows?page=1&sort=newest&refresh=1&query=${encodeURIComponent(songQuery.trim())}`;
+        let res = await fetch(url, { cache: "no-store" });
         if (!res.ok) throw new Error(`Failed to load song versions (${res.status})`);
-        const data = (await res.json()) as ShowsResponse;
+        let data = (await res.json()) as ShowsResponse;
+        const firstPassCount = Array.isArray(data.song?.items)
+          ? data.song.items.length
+          : Array.isArray(data.items)
+            ? data.items.length
+            : 0;
+        if (firstPassCount === 0) {
+          const retryUrl = `${url}&refresh=1`;
+          res = await fetch(retryUrl, { cache: "no-store" });
+          if (res.ok) data = (await res.json()) as ShowsResponse;
+        }
         if (!alive) return;
-        const unique = uniqueByShowKey(data.song?.items || []);
+        const unique = uniqueByShowKey(data.song?.items || data.items || []);
         unique.sort((a, b) => String(b.showDate || "").localeCompare(String(a.showDate || "")));
         setShows(unique);
       } catch (e: unknown) {
@@ -95,6 +173,159 @@ export default function SongVersionsPage() {
 
   const displaySongTitle = toDisplayTrackTitle(songQuery || "").trim() || "Song";
   const DEFAULT_ARTWORK_SRC = "/api/default-artwork";
+  async function fetchPlayableQueueForIdentifier(
+    identifier: string,
+    context?: {
+      showKey?: string;
+      showDate?: string;
+      venueText?: string;
+      artwork?: string;
+    },
+  ): Promise<Track[]> {
+    try {
+      const res = await fetch(`/api/ia/show-metadata?id=${encodeURIComponent(identifier)}`, {
+        cache: "no-store",
+      });
+      if (!res.ok) return [];
+      const data = (await res.json()) as { files?: IaMetadataFile[] };
+      const files = Array.isArray(data?.files) ? data.files : [];
+      const audioAll = files.filter((f) => {
+        const name = String(f?.name || "");
+        return Boolean(name) && isAudioName(name);
+      });
+      if (audioAll.length === 0) return [];
+
+      const bestSet = Math.min(...audioAll.map((f) => trackSetRank(String(f?.name || ""))));
+      const inSet = audioAll.filter((f) => trackSetRank(String(f?.name || "")) === bestSet);
+      const bestExt = Math.min(...inSet.map((f) => audioExtRank(String(f?.name || ""))));
+      const picked = inSet.filter((f) => audioExtRank(String(f?.name || "")) === bestExt);
+
+      picked.sort((a, b) => {
+        const ta = parseTrackNum(a?.track);
+        const tb = parseTrackNum(b?.track);
+        if (ta !== tb) return ta - tb;
+        return String(a?.name || "").localeCompare(String(b?.name || ""));
+      });
+
+      const seen = new Set<string>();
+      const queue: Track[] = [];
+      for (const f of picked) {
+        const fileName = String(f?.name || "").trim();
+        if (!fileName) continue;
+        const title = String(f?.title || f?.name || "").trim() || fileName;
+        const lenRaw = String(f?.length || "").trim();
+        const dedupeKey = `${title.toLowerCase()}|${lenRaw}`;
+        if (seen.has(dedupeKey)) continue;
+        seen.add(dedupeKey);
+        queue.push({
+          title: toDisplayTrackTitle(title),
+          url: `https://archive.org/download/${encodeURIComponent(identifier)}/${encodeURIComponent(fileName)}`,
+          length: lenRaw || undefined,
+          track: String(queue.length + 1),
+          name: fileName,
+          showKey: context?.showKey,
+          showDate: context?.showDate,
+          venueText: context?.venueText,
+          artwork: context?.artwork,
+        });
+      }
+      return queue;
+    } catch {
+      return [];
+    }
+  }
+
+  async function ensurePlayableQueueForIdentifier(
+    identifier: string,
+    context?: {
+      showKey?: string;
+      showDate?: string;
+      venueText?: string;
+      artwork?: string;
+    },
+  ): Promise<Track[]> {
+    const cached = queueByIdentifierRef.current[identifier];
+    if (cached && cached.length > 0) return cached;
+    const inFlight = inFlightQueueByIdentifierRef.current[identifier];
+    if (inFlight) return inFlight;
+    const task = fetchPlayableQueueForIdentifier(identifier, context);
+    inFlightQueueByIdentifierRef.current[identifier] = task;
+    try {
+      const queue = await task;
+      if (queue.length > 0) queueByIdentifierRef.current[identifier] = queue;
+      return queue;
+    } finally {
+      delete inFlightQueueByIdentifierRef.current[identifier];
+    }
+  }
+
+  async function resolveIdentifierForShow(show: ShowItem): Promise<string> {
+    const direct = String(show.defaultId || "").trim();
+    if (direct) return direct;
+    const cached = String(resolvedShowIdsRef.current[show.showKey] || "").trim();
+    if (cached) return cached;
+    try {
+      const res = await fetch(`/api/ia/show?key=${encodeURIComponent(show.showKey)}`, {
+        cache: "no-store",
+      });
+      if (!res.ok) return "";
+      const data = (await res.json()) as { defaultId?: string | null };
+      const resolved = String(data?.defaultId || "").trim();
+      if (!resolved) return "";
+      resolvedShowIdsRef.current[show.showKey] = resolved;
+      return resolved;
+    } catch {
+      return "";
+    }
+  }
+
+  async function playSongResult(songShow: ShowItem) {
+    setRequestedPlayShowKey(songShow.showKey);
+    try {
+      const songTitle = toDisplayTrackTitle(songShow.matchedSongTitle || displaySongTitle);
+      const directUrl = String(songShow.matchedSongUrl || "").trim();
+      if (directUrl) {
+        setQueue(
+          [
+            {
+              title: songTitle,
+              url: directUrl,
+              length: songShow.matchedSongLength || undefined,
+              track: "1",
+              showKey: songShow.showKey,
+              showDate: songShow.showDate,
+              venueText: toDisplayTitle(songShow.title),
+              artwork: songShow.artwork,
+            },
+          ],
+          0,
+        );
+        return;
+      }
+
+      const identifier = await resolveIdentifierForShow(songShow);
+      if (!identifier) return;
+
+      const queue = await ensurePlayableQueueForIdentifier(identifier, {
+        showKey: songShow.showKey,
+        showDate: songShow.showDate,
+        venueText: toDisplayTitle(songShow.title),
+        artwork: songShow.artwork,
+      });
+      if (!queue.length) return;
+      const needle = normalizeSongText(songShow.matchedSongTitle || displaySongTitle);
+      const startIndex = needle
+        ? Math.max(
+            0,
+            queue.findIndex((t) => normalizeSongText(t.title).includes(needle)),
+          )
+        : 0;
+      setQueue(queue, startIndex < 0 ? 0 : startIndex);
+    } finally {
+      setRequestedPlayShowKey((current) => (current === songShow.showKey ? null : current));
+    }
+  }
+
   const sortedShows = useMemo(() => {
     const arr = shows.slice();
     arr.sort((a, b) => {
@@ -234,18 +465,33 @@ export default function SongVersionsPage() {
                       </div>
                     </div>
                   </button>
-                  <button
-                    type="button"
-                    className="ml-1 shrink-0 text-white"
-                    aria-label="Open show"
-                    onClick={() =>
-                      router.push(
-                        `/show/${encodeURIComponent(s.showKey)}?song=${encodeURIComponent(songTitle)}`,
-                      )
-                    }
-                  >
-                    <FontAwesomeIcon icon={faCirclePlay} className="text-3xl" />
-                  </button>
+                  <div className="ml-1 flex shrink-0 items-center gap-3">
+                    <button
+                      type="button"
+                      className="text-white"
+                      aria-label="Play song"
+                      onClick={() => {
+                        void playSongResult(s);
+                      }}
+                    >
+                      <FontAwesomeIcon
+                        icon={requestedPlayShowKey === s.showKey ? faSpinner : faCirclePlay}
+                        className={`text-3xl ${requestedPlayShowKey === s.showKey ? "animate-spin" : ""}`}
+                      />
+                    </button>
+                    <button
+                      type="button"
+                      className="text-white/70 hover:text-white"
+                      aria-label="Open show details"
+                      onClick={() =>
+                        router.push(
+                          `/show/${encodeURIComponent(s.showKey)}?song=${encodeURIComponent(songTitle)}`,
+                        )
+                      }
+                    >
+                      <FontAwesomeIcon icon={faEllipsisVertical} />
+                    </button>
+                  </div>
                 </div>
               );
             })}

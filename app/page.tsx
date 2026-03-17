@@ -114,6 +114,12 @@ type HomeShowsCachePayload = {
   facets?: {
     years?: { value: string; count: number }[];
     continents?: { value: string; count: number }[];
+    countries?: { value: string; count: number }[];
+    cities?: { value: string; count: number }[];
+    citiesMeta?: Record<string, { context?: string }>;
+    venues?: { value: string; count: number }[];
+    countriesByContinent?: Record<string, { value: string; count: number }[]>;
+    citiesByCountry?: Record<string, { value: string; count: number }[]>;
     showTypes?: { value: string; count: number }[];
     albums?: { value: string; count: number }[];
     albumShowKeys?: Record<string, string[]>;
@@ -191,7 +197,6 @@ const MICROTONALITY_ALBUMS = ["K.G.", "L.W.", "Flying Microtonal Banana"];
 const METAL_ALBUMS = ["PetroDragonic Apocalypse", "Infest the Rats' Nest"];
 const SHOW_MICROTONALITY_SECTION = false;
 const SHOW_METAL_SECTION = false;
-const SHOWS_PAGE_SIZE = 25;
 const SORT_OPTIONS: { value: string; label: string }[] = [
   { value: "newest", label: "Newest" },
   { value: "oldest", label: "Oldest" },
@@ -419,6 +424,12 @@ type ShowsResponse = {
   facets?: {
     years: { value: string; count: number }[];
     continents: { value: string; count: number }[];
+    countries?: { value: string; count: number }[];
+    cities?: { value: string; count: number }[];
+    citiesMeta?: Record<string, { context?: string }>;
+    venues?: { value: string; count: number }[];
+    countriesByContinent?: Record<string, { value: string; count: number }[]>;
+    citiesByCountry?: Record<string, { value: string; count: number }[]>;
     showTypes?: { value: string; count: number }[];
     albums?: { value: string; count: number }[];
     albumShowKeys?: Record<string, string[]>;
@@ -518,6 +529,7 @@ function MultiSelectDropdown(props: {
   getOptionCount?: (optionValue: string, draft: string[]) => number | undefined;
   getApplyCount?: (draft: string[]) => number | undefined;
   formatOptionLabel?: (value: string) => string;
+  getSecondaryLabel?: (value: string) => string | undefined;
 }) {
   const {
     id,
@@ -530,6 +542,7 @@ function MultiSelectDropdown(props: {
     getOptionCount,
     getApplyCount,
     formatOptionLabel,
+    getSecondaryLabel,
   } = props;
 
   const [open, setOpen] = useState(false);
@@ -663,9 +676,9 @@ function MultiSelectDropdown(props: {
             id={`${id}-panel`}
             role="dialog"
             aria-label={`${panelTitle} filter`}
-            className="fixed inset-x-0 bottom-0 z-50 mx-auto w-full max-w-[393px] rounded-t-[16px] border border-white/15 bg-[#080017] px-6 pb-8 pt-4 shadow-[0_-4px_4px_rgba(0,0,0,0.25)]"
+            className="fixed inset-x-0 bottom-0 z-50 mx-auto w-full max-w-[393px] rounded-t-[16px] border border-white/15 bg-[#080017] px-6 pb-8 pt-4 shadow-[0_-4px_4px_rgba(0,0,0,0.25)] md:inset-y-0 md:right-0 md:left-auto md:mx-0 md:h-screen md:w-[420px] md:max-w-[420px] md:rounded-none md:border-y-0 md:border-r-0 md:border-l md:pt-6 md:pb-6 md:shadow-[-14px_0_36px_rgba(0,0,0,0.42)] md:flex md:flex-col"
           >
-            <div className="mx-auto h-[4px] w-[53px] rounded-[16px] bg-white/30" />
+            <div className="mx-auto h-[4px] w-[53px] rounded-[16px] bg-white/30 md:hidden" />
             <div className="mt-6 text-[24px] font-medium text-white [font-family:var(--font-roboto-condensed)]">
               {panelTitle}
             </div>
@@ -692,7 +705,7 @@ function MultiSelectDropdown(props: {
               </div>
             )}
 
-            <div className="mt-4 max-h-[44vh] space-y-2 overflow-auto pr-1">
+            <div className="mt-4 max-h-[44vh] space-y-2 overflow-auto pr-1 md:max-h-none md:flex-1 md:min-h-0">
               {options.map((opt) => {
                 const checked = draft.includes(opt.value);
                 const contextualCount = getOptionCount?.(opt.value, draft);
@@ -730,8 +743,15 @@ function MultiSelectDropdown(props: {
                         icon={checked ? faSquareCheck : faSquare}
                         className={`text-[18px] ${checked ? "text-white" : "text-white/40"}`}
                       />
-                      <span className="truncate text-[16px] text-white [font-family:var(--font-roboto-condensed)]">
-                        {displayValue(opt.value)}
+                      <span className="min-w-0">
+                        <span className="block truncate text-[16px] text-white [font-family:var(--font-roboto-condensed)]">
+                          {displayValue(opt.value)}
+                        </span>
+                        {getSecondaryLabel?.(opt.value) ? (
+                          <span className="block truncate text-[11px] text-white/55 [font-family:var(--font-roboto-condensed)]">
+                            {getSecondaryLabel(opt.value)}
+                          </span>
+                        ) : null}
                       </span>
                     </span>
                     <span className="text-[16px] text-white [font-family:var(--font-roboto-condensed)]">
@@ -804,6 +824,7 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
 
   const [years, setYears] = useState<string[]>([]);
   const [continents, setContinents] = useState<string[]>([]);
+  const [cities, setCities] = useState<string[]>([]);
   const [showTypes, setShowTypes] = useState<string[]>([]);
   const [albums, setAlbums] = useState<string[]>([]);
   const [yearFacet, setYearFacet] = useState<
@@ -812,6 +833,12 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
   const [continentFacet, setContinentFacet] = useState<
     { value: string; count: number }[]
   >([]);
+  const [cityFacet, setCityFacet] = useState<
+    { value: string; count: number }[]
+  >([]);
+  const [cityMetaFacet, setCityMetaFacet] = useState<
+    Record<string, { context?: string }>
+  >({});
   const [showTypeFacet, setShowTypeFacet] = useState<
     { value: string; count: number }[]
   >([]);
@@ -919,21 +946,26 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
     params.set("page", String(p));
     for (const y of years) params.append("year", y);
     for (const c of continents) params.append("continent", c);
+    for (const c of cities) params.append("city", c);
     for (const t of showTypes) params.append("showType", t);
     for (const a of albums) params.append("album", a);
     params.set("sort", sort);
     return `/api/ia/shows?${params.toString()}`; // IMPORTANT: use /api/ia/shows
   }
 
-  function buildSongSearchUrl(p: number) {
+  function buildSongSearchUrl(p: number, fastMode = false) {
     const params = new URLSearchParams();
     params.set("page", String(p));
     for (const y of years) params.append("year", y);
     for (const c of continents) params.append("continent", c);
+    for (const c of cities) params.append("city", c);
     for (const t of showTypes) params.append("showType", t);
     for (const a of albums) params.append("album", a);
     params.set("query", debouncedQuery);
     params.set("sort", sort);
+    if (fastMode) params.set("fast", "1");
+    // Query-driven song search should bypass stale in-memory cache entries.
+    params.set("refresh", "1");
     return `/api/ia/shows?${params.toString()}`;
   }
 
@@ -943,6 +975,7 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
     params.set("fast", "1");
     for (const y of years) params.append("year", y);
     for (const c of continents) params.append("continent", c);
+    for (const c of cities) params.append("city", c);
     for (const t of showTypes) params.append("showType", t);
     if (debouncedQuery) params.set("query", debouncedQuery);
     params.set("sort", sort);
@@ -971,10 +1004,30 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
     return `/api/ia/shows?${params.toString()}`;
   }
 
+  function buildRandomPickerPlayUrl() {
+    const params = new URLSearchParams();
+    params.set("random", "1");
+    params.set("sort", "newest");
+    const hasYearBounds =
+      randomPickerMinBound != null &&
+      randomPickerMaxBound != null &&
+      randomPickerYearMin != null &&
+      randomPickerYearMax != null;
+    const fullYearRangeSelected =
+      hasYearBounds &&
+      randomPickerYearMin === randomPickerMinBound &&
+      randomPickerYearMax === randomPickerMaxBound;
+    if (!fullYearRangeSelected) {
+      for (const y of randomPickerYearValues) params.append("year", y);
+    }
+    return `/api/ia/shows?${params.toString()}`;
+  }
+
   function canUseHomeCacheForCurrentFilters() {
     return (
       years.length === 0 &&
       continents.length === 0 &&
+      cities.length === 0 &&
       showTypes.length === 0 &&
       albums.length === 0 &&
       !debouncedQuery &&
@@ -1013,6 +1066,8 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
 
       if (data.facets?.years) setYearFacet(data.facets.years);
       if (data.facets?.continents) setContinentFacet(data.facets.continents);
+      if (data.facets?.cities) setCityFacet(data.facets.cities);
+      setCityMetaFacet(data.facets?.citiesMeta || {});
       if (data.facets?.showTypes) setShowTypeFacet(data.facets.showTypes);
       if (hasAlbumFacetData) {
         if (data.facets?.albums) setAlbumFacet(data.facets.albums);
@@ -1020,8 +1075,8 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
         setAlbumUniverseCount(Number(data.facets?.albumUniverseCount || 0));
       }
       if (mode === "replace") {
-        setSongShows(data.song?.items || []);
-        setSongTotal(data.song?.total || 0);
+        setSongShows(data.song?.items || data.items || []);
+        setSongTotal(data.song?.total || data.items?.length || 0);
         setVenueTotal(data.venueTotal || 0);
       }
 
@@ -1070,6 +1125,10 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
     setClientHydrated(true);
   }, []);
   useEffect(() => {
+    // Continent filter is temporarily disabled in the UI.
+    setContinents([]);
+  }, []);
+  useEffect(() => {
     if (!playerLoading) setRequestedPlaylistId(null);
   }, [playerLoading]);
 
@@ -1105,6 +1164,8 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
           setSongTotal(Number(parsed.songTotal || 0));
           if (parsed.facets?.years) setYearFacet(parsed.facets.years);
           if (parsed.facets?.continents) setContinentFacet(parsed.facets.continents);
+          if (parsed.facets?.cities) setCityFacet(parsed.facets.cities);
+          setCityMetaFacet(parsed.facets?.citiesMeta || {});
           if (parsed.facets?.showTypes) setShowTypeFacet(parsed.facets.showTypes);
           if (hasAlbumFacetData) {
             if (parsed.facets?.albums) setAlbumFacet(parsed.facets.albums);
@@ -1559,7 +1620,14 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
     setPage(1);
     loadPage(1, "replace");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [years.join("|"), continents.join("|"), showTypes.join("|"), albums.join("|"), sort]);
+  }, [
+    years.join("|"),
+    continents.join("|"),
+    cities.join("|"),
+    showTypes.join("|"),
+    albums.join("|"),
+    sort,
+  ]);
 
   useEffect(() => {
     let alive = true;
@@ -1571,6 +1639,8 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
         if (!res || !alive) return;
         const data = (await res.json()) as ShowsResponse;
         if (!alive) return;
+        if (data.facets?.cities) setCityFacet(data.facets.cities);
+        setCityMetaFacet(data.facets?.citiesMeta || {});
         if (data.facets?.albums) setAlbumFacet(data.facets.albums);
         setAlbumShowKeysFacet(data.facets?.albumShowKeys || {});
         setAlbumUniverseCount(Number(data.facets?.albumUniverseCount || 0));
@@ -1587,6 +1657,7 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
     advancedFiltersOpen,
     years.join("|"),
     continents.join("|"),
+    cities.join("|"),
     showTypes.join("|"),
     debouncedQuery,
     sort,
@@ -1607,15 +1678,26 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
       }
       setSongSearchLoading(true);
       try {
-        const res = await fetchShowsWithRetry(buildSongSearchUrl(1));
+        const fastRes = await fetchShowsWithRetry(buildSongSearchUrl(1, true), 5000);
+        let res = fastRes;
+        if (fastRes) {
+          const fastData = (await fastRes.clone().json()) as ShowsResponse;
+          const fastSongTotal = Number(fastData.song?.total || fastData.items?.length || 0);
+          if (fastSongTotal <= 0) {
+            // Fall back to the fuller query when fast mode returns empty.
+            res = await fetchShowsWithRetry(buildSongSearchUrl(1), 10000);
+          }
+        } else {
+          res = await fetchShowsWithRetry(buildSongSearchUrl(1), 10000);
+        }
         if (!res) {
           if (alive) setSongSearchLoading(false);
           return;
         }
         const data = (await res.json()) as ShowsResponse;
         if (!alive) return;
-        setSongShows(data.song?.items || []);
-        setSongTotal(data.song?.total || 0);
+        setSongShows(data.song?.items || data.items || []);
+        setSongTotal(data.song?.total || data.items?.length || 0);
         setSearchVenueShows(data.items || []);
       } catch {
         if (!alive || controller.signal.aborted) return;
@@ -1633,7 +1715,15 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
       controller.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [years.join("|"), continents.join("|"), showTypes.join("|"), albums.join("|"), debouncedQuery, sort]);
+  }, [
+    years.join("|"),
+    continents.join("|"),
+    cities.join("|"),
+    showTypes.join("|"),
+    albums.join("|"),
+    debouncedQuery,
+    sort,
+  ]);
 
   useEffect(() => {
     if (!debouncedQuery) {
@@ -1647,7 +1737,11 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
 
   const canInfiniteLoad = !debouncedQuery;
   const hasActiveShowFilters =
-    years.length > 0 || continents.length > 0 || showTypes.length > 0 || albums.length > 0;
+    years.length > 0 ||
+    continents.length > 0 ||
+    cities.length > 0 ||
+    showTypes.length > 0 ||
+    albums.length > 0;
 
   useEffect(() => {
     const el = sentinelRef.current;
@@ -1688,6 +1782,24 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([value, count]) => ({ value, count }));
   }, [continentFacet, continents]);
+  const availableCities = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const o of cityFacet) map.set(o.value, o.count);
+    for (const c of cities) if (!map.has(c)) map.set(c, 0);
+    return Array.from(map.entries())
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([value, count]) => ({ value, count }));
+  }, [cityFacet, cities]);
+  useEffect(() => {
+    const allowed = new Set(availableCities.map((row) => row.value));
+    setCities((prev) => {
+      const next = prev.filter((value) => allowed.has(value));
+      if (next.length === prev.length && next.every((value, idx) => value === prev[idx])) {
+        return prev;
+      }
+      return next;
+    });
+  }, [availableCities]);
   const availableShowTypes = useMemo(() => {
     const map = new Map<string, number>();
     for (const o of showTypeFacet) map.set(o.value, o.count);
@@ -3146,45 +3258,27 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
     setRandomPickerError(null);
     setRandomPickerLoading(true);
     try {
-      const firstRes = await fetchShowsWithRetry(buildRandomPickerUrl(1), 12000);
-      if (!firstRes) {
+      const randomRes = await fetchShowsWithRetry(buildRandomPickerPlayUrl(), 9000);
+      if (!randomRes) {
         setRandomPickerError("Couldn't load shows for the random picker.");
         return;
       }
-      const firstData = (await firstRes.json()) as ShowsResponse;
-      const firstItems = Array.isArray(firstData?.items) ? firstData.items : [];
+      const randomData = (await randomRes.json()) as ShowsResponse & {
+        item?: ShowItem | null;
+      };
+      const firstItems = Array.isArray(randomData?.items) ? randomData.items : [];
       const totalMatches = Math.max(
         0,
-        Number(firstData?.venueTotal || 0) || firstItems.length,
+        Number(randomData?.venueTotal || 0) || firstItems.length,
       );
+      setRandomPickerMatchCount(totalMatches);
       if (totalMatches <= 0) {
         setRandomPickerError("No shows match those filters.");
         return;
       }
-
-      const randomIndex = Math.floor(Math.random() * totalMatches);
-      const targetPage = Math.floor(randomIndex / SHOWS_PAGE_SIZE) + 1;
-      let pageItems = firstItems;
-      if (targetPage !== 1) {
-        const targetRes = await fetchShowsWithRetry(buildRandomPickerUrl(targetPage), 12000);
-        if (targetRes) {
-          const targetData = (await targetRes.json()) as ShowsResponse;
-          pageItems = Array.isArray(targetData?.items) ? targetData.items : [];
-        }
-      }
-      if (pageItems.length === 0) {
-        // Some random pages can be sparse/empty in fast mode.
-        // Fall back to page-1 candidates instead of failing.
-        pageItems = firstItems;
-      }
-      if (pageItems.length === 0) {
-        setRandomPickerError("No playable shows found for those filters.");
-        return;
-      }
-      const indexInPage = randomIndex - (targetPage - 1) * SHOWS_PAGE_SIZE;
       const chosen =
-        pageItems[indexInPage] ||
-        pageItems[Math.floor(Math.random() * pageItems.length)];
+        randomData?.item ||
+        firstItems[Math.floor(Math.random() * Math.max(1, firstItems.length))];
       if (!chosen) {
         setRandomPickerError("Couldn't pick a random show.");
         return;
@@ -3743,10 +3837,17 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
                     setResultFilter("venues");
                   }}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" && songSuggestionsForDisplay.length > 0) {
+                    if (e.key !== "Enter") return;
+                    const topSuggestion = songSuggestionsForDisplay[0];
+                    if (topSuggestion) {
                       e.preventDefault();
-                      applySongSuggestion(songSuggestionsForDisplay[0].title);
+                      applySongSuggestion(topSuggestion.title);
+                      return;
                     }
+                    const target = toDisplayTrackTitle(query || debouncedQuery).trim();
+                    if (!target) return;
+                    e.preventDefault();
+                    router.push(`/songs/${encodeURIComponent(target)}`);
                   }}
                   placeholder="Search songs, shows, venues, etc"
                   className="w-full rounded-xl border border-white/50 bg-transparent px-11 py-[14px] text-[14px] text-white outline-none placeholder:text-white/60"
@@ -3905,14 +4006,16 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
                     minWidthClass="min-w-[110px]"
                     emptyLabel="Years"
                   />
+
                   <MultiSelectDropdown
-                    id="continents"
+                    id="cities"
                     label=""
-                    options={availableContinents}
-                    value={continents}
-                    onChange={setContinents}
-                    minWidthClass="min-w-[124px]"
-                    emptyLabel="Continent"
+                    options={availableCities}
+                    value={cities}
+                    onChange={setCities}
+                    minWidthClass="min-w-[92px]"
+                    emptyLabel="City"
+                    getSecondaryLabel={(value) => cityMetaFacet[value]?.context}
                   />
                   <MultiSelectDropdown
                     id="showTypes"

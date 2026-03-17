@@ -255,7 +255,7 @@ function cleanTrackTitleForShowContext(
 
 function SetlistLoadingPlaceholder() {
   return (
-    <div className="mx-auto -mt-[220px] w-full max-w-[393px] px-6 pb-8">
+    <div className="relative z-20 mx-auto -mt-[220px] w-full max-w-6xl px-4 pb-8 md:px-6">
       <section className="mb-5">
         <div className="relative z-[2] rounded-2xl border border-white/20 bg-white/5 p-4 backdrop-blur-[6px]">
           <div className="flex items-start justify-between gap-3">
@@ -674,13 +674,13 @@ export default function ShowPage() {
 
   return (
     <main className="min-h-screen bg-[#080017] text-white [font-family:var(--font-roboto)]">
-      <div className="relative h-[330px] w-full overflow-hidden">
+      <div className="relative isolate h-[330px] w-full overflow-hidden md:h-[390px]">
         {heroImage ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={heroImageSrc}
             alt=""
-            className="h-full w-full object-cover opacity-[0.22] blur-[10px]"
+            className="absolute inset-0 -z-10 h-full w-full object-cover opacity-[0.24] blur-[10px]"
             onError={(e) => {
               const img = e.currentTarget;
               if (img.src.endsWith(DEFAULT_ARTWORK_SRC)) return;
@@ -688,9 +688,9 @@ export default function ShowPage() {
             }}
           />
         ) : null}
-        <div className="absolute inset-0 bg-linear-to-b from-[#080017]/0 via-[#080017]/35 to-[#080017]" />
+        <div className="pointer-events-none absolute inset-0 z-0 bg-linear-to-b from-[#080017]/10 via-[#080017]/40 to-[#080017]" />
 
-        <div className="absolute inset-x-0 top-0 mx-auto w-full max-w-[393px] px-6 pt-[67px]">
+        <div className="absolute inset-x-0 top-0 z-10 mx-auto w-full max-w-6xl px-4 pt-[67px] md:px-6 md:pt-[80px]">
           <div className="flex items-center justify-between">
             <Link href="/" className="text-white/90 hover:text-white text-[28px] leading-none">
               ←
@@ -707,21 +707,22 @@ export default function ShowPage() {
       {loading ? (
         <SetlistLoadingPlaceholder />
       ) : error ? (
-        <div className="mx-auto mt-6 max-w-md rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200 whitespace-pre-wrap">
+        <div className="mx-auto mt-6 max-w-4xl rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200 whitespace-pre-wrap">
           {error}
         </div>
       ) : !show ? (
-        <div className="mx-auto max-w-md px-6 py-8 text-sm text-white/60">
+        <div className="mx-auto max-w-4xl px-6 py-8 text-sm text-white/60">
           No show data returned.
         </div>
       ) : show.sources.length === 0 && !selectedId ? (
-        <div className="mx-auto mt-6 max-w-md rounded-lg border border-white/10 bg-white/5 p-4 text-sm text-white/70 whitespace-pre-wrap">
+        <div className="mx-auto mt-6 max-w-4xl rounded-lg border border-white/10 bg-white/5 p-4 text-sm text-white/70 whitespace-pre-wrap">
           No sources found for this show.
         </div>
       ) : (
-        <div className="mx-auto -mt-[220px] w-full max-w-[393px] px-6 pb-8">
-          <section className="mb-5">
-            <div className="relative z-[2] rounded-2xl border border-white/20 bg-white/5 p-4 backdrop-blur-[6px]">
+        <div className="relative z-20 mx-auto -mt-[220px] w-full max-w-6xl px-4 pb-8 md:-mt-[200px] md:px-6">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:gap-8">
+            <section className="mb-0 lg:col-span-4 lg:sticky lg:top-[90px] lg:self-start">
+            <div className="relative z-[2] rounded-3xl border border-white/20 bg-white/[0.06] p-4 shadow-[0_12px_32px_rgba(0,0,0,0.28)] backdrop-blur-[8px]">
               <div className="mb-4 overflow-hidden rounded-xl border border-white/15 bg-black/20">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
@@ -737,8 +738,8 @@ export default function ShowPage() {
               </div>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="text-[13px] text-white/90">{showDate}</div>
-                  <div className="mt-1 text-[28px] leading-none font-medium [font-family:var(--font-roboto-condensed)]">
+                  <div className="text-[12px] tracking-[0.08em] text-white/80">{showDate}</div>
+                  <div className="mt-1 text-[28px] leading-[0.98] font-medium [font-family:var(--font-roboto-condensed)]">
                     {toDisplayTitle(rawShowTitle)}
                   </div>
                 </div>
@@ -768,7 +769,7 @@ export default function ShowPage() {
                 </button>
               </div>
 
-              <div className="mt-3 text-[16px] tracking-[0.02em] text-white/95 [font-family:var(--font-roboto-condensed)]">
+              <div className="mt-3 text-[15px] tracking-[0.02em] text-white/90 [font-family:var(--font-roboto-condensed)]">
                 {venueText}
               </div>
               <div className="mt-1 flex items-center gap-2 text-[16px] text-white/85 [font-family:var(--font-roboto-condensed)]">
@@ -779,9 +780,9 @@ export default function ShowPage() {
             </div>
 
             {show.sources.length > 0 ? (
-              <div className="-mt-4 rounded-b-2xl border border-white/20 border-t-0 px-4 pb-3 pt-7">
+              <div className="-mt-3 rounded-b-3xl border border-white/20 border-t-0 bg-black/20 px-4 pb-3 pt-6">
                 <select
-                  className="w-full rounded-xl bg-black/30 py-2 pr-3 text-sm"
+                  className="w-full rounded-xl border border-white/15 bg-black/30 px-3 py-2 pr-3 text-sm"
                   value={selectedId ?? ""}
                   onChange={(e) => {
                     setSelectedId(e.target.value);
@@ -799,9 +800,14 @@ export default function ShowPage() {
                 </select>
               </div>
             ) : null}
-          </section>
+            </section>
 
-          <section className="space-y-1.5">
+            <section className="space-y-2 lg:col-span-8">
+            <div className="flex items-center justify-between px-1 [font-family:var(--font-roboto-condensed)]">
+              <div className="text-[26px] leading-none text-white">Setlist</div>
+              <div className="text-[12px] text-white/60">{tracks.length} songs</div>
+            </div>
+            <div className="rounded-3xl border border-white/15 bg-white/[0.04] p-3 shadow-[0_10px_28px_rgba(0,0,0,0.25)] backdrop-blur-[4px] md:p-4">
             {tracks.map((t, idx) => {
               const currentUrl = queue?.[playingIndex]?.url;
               const isCurrent = Boolean(currentUrl && currentUrl === t.url);
@@ -823,7 +829,7 @@ export default function ShowPage() {
                   ref={(el) => {
                     trackRefs.current[idx] = el;
                   }}
-                  className={`flex items-center justify-between gap-2 rounded-lg px-1 py-1 transition hover:bg-white/6 ${
+                  className={`flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 transition hover:bg-white/6 ${
                     focusedTrackIdx === idx ? "bg-fuchsia-500/10 ring-1 ring-fuchsia-400/50" : ""
                   }`}
                 >
@@ -852,12 +858,17 @@ export default function ShowPage() {
                     }}
                     className="flex min-w-0 flex-1 items-center justify-between gap-3 px-1 py-1 text-left"
                   >
-                    <span
-                      className={`truncate text-[16px] leading-none [font-family:var(--font-roboto-condensed)] ${
-                        isCurrent ? "text-[#EFD50F]" : "text-white"
-                      }`}
-                    >
-                      {displayTrackTitle(t.title)}
+                    <span className="flex min-w-0 items-center gap-3">
+                      <span className="w-5 shrink-0 text-right text-[11px] text-white/45">
+                        {idx + 1}
+                      </span>
+                      <span
+                        className={`truncate text-[16px] leading-none [font-family:var(--font-roboto-condensed)] ${
+                          isCurrent ? "text-[#EFD50F]" : "text-white"
+                        }`}
+                      >
+                        {displayTrackTitle(t.title)}
+                      </span>
                     </span>
                     {t.length ? (
                       <span className="flex shrink-0 items-center gap-[12px]">
@@ -897,7 +908,9 @@ export default function ShowPage() {
                 No audio tracks found for this source.
               </div>
             )}
-          </section>
+            </div>
+            </section>
+          </div>
         </div>
       )}
 
@@ -907,7 +920,7 @@ export default function ShowPage() {
           onClick={() => closeSheet()}
         >
           <div
-            className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-[393px] rounded-t-2xl border border-white/15 bg-[#080017] px-6 pb-10 pt-6 shadow-[0_-4px_16px_rgba(0,0,0,0.4)] [font-family:var(--font-roboto-condensed)]"
+            className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-[393px] rounded-t-2xl border border-white/15 bg-[#080017] px-6 pb-10 pt-6 shadow-[0_-4px_16px_rgba(0,0,0,0.4)] [font-family:var(--font-roboto-condensed)] md:inset-x-4 md:top-1/2 md:bottom-auto md:max-w-3xl md:-translate-y-1/2 md:rounded-2xl md:pb-6 md:max-h-[82vh] md:overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             {!showPlaylistPicker ? (

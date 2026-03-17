@@ -1,5 +1,6 @@
 import "./globals.css";
 import "@fortawesome/fontawesome-svg-core/styles.css";
+import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
 import { PlayerBar } from "@/components/player/PlayerBar";
 import { BottomNav } from "@/components/navigation/BottomNav";
 import { PrebuiltPlaylistsSync } from "@/components/playlists/PrebuiltPlaylistsSync";
@@ -31,15 +32,18 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const gaMeasurementId = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
+
   return (
     <html lang="en">
       <body
         className={`${roboto.variable} ${robotoCondensed.variable} min-h-screen bg-[#080017] text-white`}
       >
         <PrebuiltPlaylistsSync />
-        <div className="w-full pb-44 bg-[#080017]">{children}</div>
+        <div className="w-full bg-[#080017] pb-44 md:pt-16">{children}</div>
         <BottomNav />
         <PlayerBar />
+        <GoogleAnalytics measurementId={gaMeasurementId} />
       </body>
     </html>
   );

@@ -231,7 +231,7 @@ export default function PlaylistsPage() {
 
   return (
     <main className="min-h-screen bg-[#080017] text-white">
-      <div className="mx-auto w-full max-w-md px-6 pb-8 pt-6">
+      <div className="mx-auto w-full max-w-6xl px-4 pb-8 pt-6 md:px-6">
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <h1 className="text-[24px] font-semibold [font-family:var(--font-roboto-condensed)]">
@@ -322,7 +322,7 @@ export default function PlaylistsPage() {
           </div>
         </div>
         {userPlaylists.length === 0 ? (
-          <div className="flex min-h-[calc(100vh-130px)] flex-col items-center justify-center gap-3 text-center">
+          <div className="flex min-h-[calc(100vh-180px)] flex-col items-center justify-center gap-3 text-center">
             <div className="text-[18px] text-white/80 [font-family:var(--font-roboto-condensed)]">
               Create your first playlist!
             </div>
@@ -358,14 +358,14 @@ export default function PlaylistsPage() {
               />
             )}
 
-            <div className="space-y-2 text-left">
+            <div className="grid grid-cols-1 gap-2 text-left lg:grid-cols-2">
               {playlistRows.map(({ playlist: p, versions, chainCount, duration }) => {
                 const isLovedSongs =
                   p.name.trim().toLowerCase() === LOVED_SONGS_PLAYLIST_NAME.toLowerCase();
                 return (
                   <div
                     key={p.id}
-                    className={`relative rounded-[16px] p-3 backdrop-blur-[6px] ${
+                    className={`relative rounded-[16px] p-3 backdrop-blur-[6px] md:p-4 ${
                       isLovedSongs
                         ? "border border-[#7c50d8]/65 bg-linear-to-br from-[#1b0d33] via-[#180b2d] to-[#0f0820]"
                         : "border border-white/20 bg-white/5"
@@ -536,7 +536,7 @@ export default function PlaylistsPage() {
             </div>
             {editMode && selectedPlaylistIds.length > 0 ? (
               <div className="pointer-events-none fixed inset-x-0 bottom-[calc(64px+env(safe-area-inset-bottom))] z-[96] px-6">
-                <div className="mx-auto w-full max-w-md">
+                <div className="mx-auto w-full max-w-xl">
                   <button
                     type="button"
                     className="pointer-events-auto w-full rounded-[14px] bg-rose-600 px-4 py-3 text-[14px] font-semibold text-white shadow-[0_10px_20px_rgba(0,0,0,0.35)] hover:bg-rose-500"

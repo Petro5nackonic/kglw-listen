@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { formatDuration } from "@/utils/formatDuration";
+import { inferCountryFromVenueName } from "@/utils/venueCountryMap";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -578,7 +579,194 @@ async function fetchKglwFallbackShows(): Promise<KglwShowRow[]> {
 
 type Continent = "North America" | "South America" | "Europe" | "Asia" | "Africa" | "Oceania" | "Unknown";
 
-function continentFromVenueCoverageTitle(venue?: string, coverage?: string, title?: string): Continent {
+const COUNTRY_TO_CONTINENT: Record<string, Continent> = {
+  "united states": "North America",
+  usa: "North America",
+  canada: "North America",
+  mexico: "North America",
+  brazil: "South America",
+  argentina: "South America",
+  chile: "South America",
+  colombia: "South America",
+  peru: "South America",
+  uk: "Europe",
+  "united kingdom": "Europe",
+  england: "Europe",
+  ireland: "Europe",
+  scotland: "Europe",
+  france: "Europe",
+  germany: "Europe",
+  netherlands: "Europe",
+  belgium: "Europe",
+  spain: "Europe",
+  portugal: "Europe",
+  italy: "Europe",
+  sweden: "Europe",
+  norway: "Europe",
+  denmark: "Europe",
+  finland: "Europe",
+  austria: "Europe",
+  switzerland: "Europe",
+  poland: "Europe",
+  czechia: "Europe",
+  "czech republic": "Europe",
+  hungary: "Europe",
+  greece: "Europe",
+  bulgaria: "Europe",
+  croatia: "Europe",
+  slovakia: "Europe",
+  japan: "Asia",
+  singapore: "Asia",
+  thailand: "Asia",
+  korea: "Asia",
+  "south korea": "Asia",
+  taiwan: "Asia",
+  "hong kong": "Asia",
+  malaysia: "Asia",
+  indonesia: "Asia",
+  india: "Asia",
+  pakistan: "Asia",
+  australia: "Oceania",
+  "new zealand": "Oceania",
+  "south africa": "Africa",
+  morocco: "Africa",
+  egypt: "Africa",
+};
+
+const CITY_TO_COUNTRY: Record<string, string> = {
+  "new york": "United States",
+  "los angeles": "United States",
+  chicago: "United States",
+  "san francisco": "United States",
+  "san diego": "United States",
+  austin: "United States",
+  denver: "United States",
+  seattle: "United States",
+  boston: "United States",
+  "washington dc": "United States",
+  atlanta: "United States",
+  nashville: "United States",
+  detroit: "United States",
+  toronto: "Canada",
+  montreal: "Canada",
+  vancouver: "Canada",
+  "mexico city": "Mexico",
+  london: "United Kingdom",
+  manchester: "United Kingdom",
+  dublin: "Ireland",
+  paris: "France",
+  berlin: "Germany",
+  hamburg: "Germany",
+  munich: "Germany",
+  amsterdam: "Netherlands",
+  brussels: "Belgium",
+  madrid: "Spain",
+  barcelona: "Spain",
+  lisbon: "Portugal",
+  rome: "Italy",
+  milan: "Italy",
+  stockholm: "Sweden",
+  oslo: "Norway",
+  copenhagen: "Denmark",
+  helsinki: "Finland",
+  vienna: "Austria",
+  zurich: "Switzerland",
+  warsaw: "Poland",
+  prague: "Czechia",
+  budapest: "Hungary",
+  athens: "Greece",
+  tokyo: "Japan",
+  osaka: "Japan",
+  nagoya: "Japan",
+  kyoto: "Japan",
+  singapore: "Singapore",
+  bangkok: "Thailand",
+  seoul: "South Korea",
+  "hong kong": "Hong Kong",
+  sydney: "Australia",
+  melbourne: "Australia",
+  brisbane: "Australia",
+  perth: "Australia",
+  adelaide: "Australia",
+  auckland: "New Zealand",
+  wellington: "New Zealand",
+  christchurch: "New Zealand",
+  "sao paulo": "Brazil",
+  "rio de janeiro": "Brazil",
+  "buenos aires": "Argentina",
+  santiago: "Chile",
+  bogota: "Colombia",
+  "cape town": "South Africa",
+  johannesburg: "South Africa",
+};
+
+function normalizeGeoKey(input: string): string {
+  return String(input || "")
+    .toLowerCase()
+    .replace(/[.'’]/g, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function inferCountryFromCity(city?: string): string | undefined {
+  const key = normalizeGeoKey(String(city || ""));
+  if (!key) return undefined;
+  return CITY_TO_COUNTRY[key];
+}
+
+function inferContinentFromCountry(country?: string): Continent | null {
+  const key = normalizeGeoKey(String(country || ""));
+  if (!key) return null;
+  return COUNTRY_TO_CONTINENT[key] || null;
+}
+
+function normalizeFilterValue(input: string): string {
+  return String(input || "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function matchesAnyFilter(rawValue: string | undefined, normalizedFilters: string[]): boolean {
+  if (normalizedFilters.length === 0) return true;
+  const normalized = normalizeFilterValue(String(rawValue || ""));
+  if (!normalized) return false;
+  return normalizedFilters.includes(normalized);
+}
+
+function filterShowsByLocationAndVenue(
+  shows: ShowListItem[],
+  countryFilters: string[],
+  cityFilters: string[],
+  venueFilters: string[],
+): ShowListItem[] {
+  if (countryFilters.length === 0 && cityFilters.length === 0 && venueFilters.length === 0) {
+    return shows;
+  }
+  return shows.filter((show) => {
+    const countryOk = matchesAnyFilter(show.country, countryFilters);
+    if (!countryOk) return false;
+    const cityOk = matchesAnyFilter(show.city, cityFilters);
+    if (!cityOk) return false;
+    const venueLabel = String(show.venueText || show.title || "").trim();
+    const venueOk = matchesAnyFilter(venueLabel, venueFilters);
+    return venueOk;
+  });
+}
+
+function continentFromVenueCoverageTitle(
+  venue?: string,
+  coverage?: string,
+  title?: string,
+  city?: string,
+  country?: string,
+): Continent {
+  const byCountry = inferContinentFromCountry(country);
+  if (byCountry) return byCountry;
+  const inferredCountryFromCity = inferCountryFromCity(city);
+  const byCity = inferContinentFromCountry(inferredCountryFromCity);
+  if (byCity) return byCity;
   const hay = `${venue || ""} ${coverage || ""} ${title || ""}`.toLowerCase();
 
   // Oceania
@@ -608,24 +796,41 @@ function continentFromVenueCoverageTitle(venue?: string, coverage?: string, titl
 }
 
 function cityFromVenueCoverage(venue?: string, coverage?: string): string {
+  const looksLikeVenueText = (raw: string): boolean => {
+    const text = String(raw || "").trim().toLowerCase();
+    if (!text) return false;
+    return /\b(stadium|theater|theatre|hall|arena|club|amphithea(?:ter|tre)|pavilion|park|bowl|center|centre|ballroom|auditorium|opera house|casino|coliseum|racecourse|hippodrome|grounds|tent|church|bar|pub|hotel|palace|dome|field|campus|university|college|festival)\b/.test(
+      text,
+    );
+  };
   const pickCity = (raw: string): string => {
     const text = String(raw || "").trim();
     if (!text) return "";
     // Common IA shape: "Sydney, Australia"
     if (text.includes(",")) {
       const first = text.split(",")[0]?.trim() || "";
-      if (first) return first;
+      if (first && !looksLikeVenueText(first)) return first;
     }
     // Some values use separators like "Sydney - Australia".
     if (text.includes(" - ")) {
       const first = text.split(" - ")[0]?.trim() || "";
-      if (first) return first;
+      if (first && !looksLikeVenueText(first)) return first;
     }
-    return text;
+    // Unstructured single chunk. Only trust it when it still looks like a city.
+    if (
+      !looksLikeVenueText(text) &&
+      !/\d/.test(text) &&
+      text.length <= 32 &&
+      text.split(/\s+/).length <= 3
+    ) {
+      return text;
+    }
+    return "";
   };
 
   const fromCoverage = pickCity(String(coverage || ""));
   if (fromCoverage) return fromCoverage;
+  // Fall back to venue only when it cleanly resembles a city and not a venue label.
   return pickCity(String(venue || ""));
 }
 
@@ -675,6 +880,15 @@ function parseLocationDetails(
   if (!country && /\b(usa|u\.s\.a|united states|us)\b/.test(hay)) {
     country = "United States";
   }
+  if (!country && city) {
+    country = inferCountryFromCity(city);
+  }
+  if (!country) {
+    country =
+      inferCountryFromVenueName(venueText) ||
+      inferCountryFromVenueName(venueRaw) ||
+      inferCountryFromVenueName(String(title || ""));
+  }
 
   return {
     city,
@@ -683,6 +897,14 @@ function parseLocationDetails(
     venueText: venueText || undefined,
     locationText: locationText || undefined,
   };
+}
+
+function cityContextLabelForShow(show: Pick<ShowListItem, "state" | "country">): string {
+  const country = String(show.country || "").trim();
+  const state = String(show.state || "").trim();
+  if (!country) return "";
+  if (country === "United States" && state) return `${state}, ${country}`;
+  return country;
 }
 
 function buildRecordingsFromDocs(input: IaDoc[], continentFilters: string[]): Recording[] {
@@ -695,12 +917,14 @@ function buildRecordingsFromDocs(input: IaDoc[], continentFilters: string[]): Re
 
       const venueSlug = venueSlugFromTitle(d.title);
       const showKey = `${showDate}|${venueSlug}`;
+      const location = parseLocationDetails(d.venue, d.coverage, d.title);
       const showContinent = continentFromVenueCoverageTitle(
         d.venue,
         d.coverage,
         d.title,
+        location.city,
+        location.country,
       );
-      const location = parseLocationDetails(d.venue, d.coverage, d.title);
 
       if (
         continentFilters.length > 0 &&
@@ -871,6 +1095,12 @@ function buildSongTokenQuery(input: string): string {
   return tokens.map((t) => `text:${t}*`).join(" AND ");
 }
 
+function buildSongTokenQueryLoose(input: string): string {
+  const tokens = tokenizeSearchInput(input);
+  if (tokens.length === 0) return "";
+  return tokens.map((t) => `text:${t}*`).join(" OR ");
+}
+
 function tokenPrefixMatch(text: string, tokens: string[]): boolean {
   if (tokens.length === 0) return false;
   const words = String(text || "")
@@ -945,7 +1175,12 @@ const showsResponseCache = new Map<
   string,
   { expiresAt: number; payload: unknown }
 >();
+const randomPickerUniverseCache = new Map<
+  string,
+  { expiresAt: number; shows: ShowListItem[] }
+>();
 let lastGoodDefaultPayload: unknown | null = null;
+const RANDOM_PICKER_UNIVERSE_CACHE_TTL_MS = 1000 * 60 * 30;
 
 function hasUsableDefaultIds(payload: unknown): boolean {
   if (!payload || typeof payload !== "object") return false;
@@ -1403,6 +1638,18 @@ export async function GET(req: NextRequest) {
     .getAll("continent")
     .map((c) => c.trim())
     .filter(Boolean);
+  const countries = sp
+    .getAll("country")
+    .map((c) => c.trim())
+    .filter(Boolean);
+  const cities = sp
+    .getAll("city")
+    .map((c) => c.trim())
+    .filter(Boolean);
+  const venues = sp
+    .getAll("venue")
+    .map((v) => v.trim())
+    .filter(Boolean);
   const showTypes = sp
     .getAll("showType")
     .map((s) => toShowTypeFilter(s))
@@ -1413,12 +1660,22 @@ export async function GET(req: NextRequest) {
     .filter(Boolean);
   const query = (sp.get("query") || sp.get("q") || "").trim();
   const sort = (sp.get("sort") || "newest").trim().toLowerCase();
-  const fastMode = sp.get("fast") === "1";
+  const randomPickMode = sp.get("random") === "1";
+  const fastMode = randomPickMode ? false : sp.get("fast") === "1";
   const includeAlbumFacets = sp.get("includeAlbumFacets") === "1";
   const forceRefresh = sp.get("refresh") === "1";
 
   const yearFilters = years.filter((y) => /^\d{4}$/.test(y));
   const continentFilters = continents.filter((c) => c && c !== "All");
+  const countryFilters = Array.from(
+    new Set(countries.map((c) => normalizeFilterValue(c)).filter(Boolean)),
+  ).sort();
+  const cityFilters = Array.from(
+    new Set(cities.map((c) => normalizeFilterValue(c)).filter(Boolean)),
+  ).sort();
+  const venueFilters = Array.from(
+    new Set(venues.map((v) => normalizeFilterValue(v)).filter(Boolean)),
+  ).sort();
   const showTypeFilters = [...showTypes].sort();
   const albumFilters = Array.from(
     new Set(
@@ -1427,32 +1684,94 @@ export async function GET(req: NextRequest) {
         .filter((a) => DISCOGRAPHY_ALBUMS_BY_KEY.has(a)),
     ),
   ).sort();
+  const randomUniverseKey = JSON.stringify({
+    v: 1,
+    mode: "random",
+    years: [...yearFilters].sort(),
+    continents: [...continentFilters].sort(),
+    countries: countryFilters,
+    cities: cityFilters,
+    venues: venueFilters,
+    showTypes: showTypeFilters,
+    albums: albumFilters,
+    query: query.toLowerCase(),
+    sort,
+  });
+  if (randomPickMode && !forceRefresh) {
+    const cachedUniverse = randomPickerUniverseCache.get(randomUniverseKey);
+    if (cachedUniverse && cachedUniverse.expiresAt > Date.now() && cachedUniverse.shows.length > 0) {
+      const chosen =
+        cachedUniverse.shows[Math.floor(Math.random() * cachedUniverse.shows.length)];
+      return Response.json(
+        {
+          item: chosen,
+          venueTotal: cachedUniverse.shows.length,
+          debug: {
+            source: "random-universe-cache",
+            years: yearFilters.length > 0 ? yearFilters : ["All"],
+            continents: continentFilters.length > 0 ? continentFilters : ["All"],
+            countries: countryFilters.length > 0 ? countryFilters : ["All"],
+            cities: cityFilters.length > 0 ? cityFilters : ["All"],
+            venues: venueFilters.length > 0 ? venueFilters : ["All"],
+            showTypes: showTypes.length > 0 ? showTypes : ["All"],
+            albums: albumFilters.length > 0 ? albumFilters : ["All"],
+            query,
+            sort,
+          },
+        },
+        { headers: SUCCESS_CACHE_HEADERS },
+      );
+    }
+  }
   const cacheKey = JSON.stringify({
     v: 2,
     page,
     years: [...yearFilters].sort(),
     continents: [...continentFilters].sort(),
+    countries: countryFilters,
+    cities: cityFilters,
+    venues: venueFilters,
     showTypes: showTypeFilters,
     albums: albumFilters,
     query: query.toLowerCase(),
     sort,
     includeAlbumFacets,
   });
-  const cached = showsResponseCache.get(cacheKey);
-  if (!forceRefresh && cached && cached.expiresAt > Date.now()) {
-    const payload = cached.payload;
-    const isDefaultRootQuery =
-      page === 1 &&
-      !query &&
-      yearFilters.length === 0 &&
-      continentFilters.length === 0 &&
-      showTypes.length === 0 &&
-      albumFilters.length === 0 &&
-      sort === "newest";
-    if (isDefaultRootQuery && !hasUsableDefaultIds(payload)) {
-      showsResponseCache.delete(cacheKey);
-    } else {
-      return Response.json(payload, { headers: SUCCESS_CACHE_HEADERS });
+  if (!randomPickMode) {
+    const cached = showsResponseCache.get(cacheKey);
+    if (!forceRefresh && cached && cached.expiresAt > Date.now()) {
+      const payload = cached.payload;
+      if (query) {
+        const maybe = payload as {
+          items?: unknown[];
+          song?: { total?: number; items?: unknown[] };
+        };
+        const itemCount = Array.isArray(maybe?.items) ? maybe.items.length : 0;
+        const songTotal = Number(maybe?.song?.total || 0);
+        // Avoid serving sticky empty query caches from transient upstream failures.
+        if (itemCount === 0 && songTotal === 0) {
+          showsResponseCache.delete(cacheKey);
+        } else {
+          return Response.json(payload, { headers: SUCCESS_CACHE_HEADERS });
+        }
+      } else {
+      const isDefaultRootQuery =
+        page === 1 &&
+        !query &&
+        yearFilters.length === 0 &&
+        continentFilters.length === 0 &&
+        countryFilters.length === 0 &&
+        cityFilters.length === 0 &&
+        venueFilters.length === 0 &&
+        showTypes.length === 0 &&
+        albumFilters.length === 0 &&
+        sort === "newest";
+      if (isDefaultRootQuery && !hasUsableDefaultIds(payload)) {
+        showsResponseCache.delete(cacheKey);
+      } else {
+        return Response.json(payload, { headers: SUCCESS_CACHE_HEADERS });
+      }
+      }
     }
   }
 
@@ -1497,7 +1816,7 @@ export async function GET(req: NextRequest) {
   // This prevents “missing date field in advancedsearch” from hiding shows.
   const IA_ROWS = 500;
   // Keep requests responsive; very large scans can stall UI loading.
-  const MAX_IA_PAGES = fastMode ? 1 : query ? 2 : 3;
+  const MAX_IA_PAGES = randomPickMode ? (query ? 6 : 12) : fastMode ? 1 : query ? 2 : 3;
 
   // Use a stable sort that IA *does* reliably have: addeddate desc
   const SORT = "addeddate desc";
@@ -1615,11 +1934,23 @@ export async function GET(req: NextRequest) {
     if (continentFilters.length > 0) {
       fallbackShows = fallbackShows.filter((s) => continentFilters.includes(s.continent));
     }
+    fallbackShows = filterShowsByLocationAndVenue(
+      fallbackShows,
+      countryFilters,
+      cityFilters,
+      venueFilters,
+    );
     fallbackShows = filterByShowTypes(fallbackShows, showTypes);
     fallbackShows = sortShows(fallbackShows, sort);
 
     const yearCounts = new Map<string, number>();
     const continentCounts = new Map<string, number>();
+    const countryCounts = new Map<string, number>();
+    const cityCounts = new Map<string, number>();
+    const cityContextCounts = new Map<string, Map<string, number>>();
+    const venueCounts = new Map<string, number>();
+    const countriesByContinentCounts = new Map<string, Map<string, number>>();
+    const citiesByCountryCounts = new Map<string, Map<string, number>>();
     const showTypeCounts = new Map<string, number>([
       ["Rave", 0],
       ["Acoustic", 0],
@@ -1630,7 +1961,32 @@ export async function GET(req: NextRequest) {
       const y = s.showDate?.slice(0, 4);
       if (y && /^\d{4}$/.test(y)) yearCounts.set(y, (yearCounts.get(y) || 0) + 1);
       const c = s.continent;
-      if (c && c !== "Unknown") continentCounts.set(c, (continentCounts.get(c) || 0) + 1);
+      if (c) continentCounts.set(c, (continentCounts.get(c) || 0) + 1);
+      const country = String(s.country || "").trim();
+      if (country) {
+        countryCounts.set(country, (countryCounts.get(country) || 0) + 1);
+        const continentKey = String(s.continent || "").trim();
+        if (continentKey && continentKey !== "Unknown") {
+          const byContinent = countriesByContinentCounts.get(continentKey) || new Map<string, number>();
+          byContinent.set(country, (byContinent.get(country) || 0) + 1);
+          countriesByContinentCounts.set(continentKey, byContinent);
+        }
+      }
+      const city = String(s.city || "").trim();
+      if (city) {
+        cityCounts.set(city, (cityCounts.get(city) || 0) + 1);
+        const contextLabel = cityContextLabelForShow(s);
+        const byContext = cityContextCounts.get(city) || new Map<string, number>();
+        byContext.set(contextLabel, (byContext.get(contextLabel) || 0) + 1);
+        cityContextCounts.set(city, byContext);
+        if (country) {
+          const byCountry = citiesByCountryCounts.get(country) || new Map<string, number>();
+          byCountry.set(city, (byCountry.get(city) || 0) + 1);
+          citiesByCountryCounts.set(country, byCountry);
+        }
+      }
+      const venue = String(s.venueText || s.title || "").trim();
+      if (venue) venueCounts.set(venue, (venueCounts.get(venue) || 0) + 1);
       const label = showTypeLabelForShow(s);
       showTypeCounts.set(label, (showTypeCounts.get(label) || 0) + 1);
     }
@@ -1650,6 +2006,38 @@ export async function GET(req: NextRequest) {
         continents: Array.from(continentCounts.entries())
           .sort((a, b) => a[0].localeCompare(b[0]))
           .map(([value, count]) => ({ value, count })),
+        countries: Array.from(countryCounts.entries())
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([value, count]) => ({ value, count })),
+        cities: Array.from(cityCounts.entries())
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([value, count]) => ({ value, count })),
+        citiesMeta: Object.fromEntries(
+          Array.from(cityContextCounts.entries()).map(([city, byContext]) => {
+            const top = Array.from(byContext.entries())
+              .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0];
+            return [city, { context: top?.[0] || "" }];
+          }),
+        ),
+        venues: Array.from(venueCounts.entries())
+          .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+          .map(([value, count]) => ({ value, count })),
+        countriesByContinent: Object.fromEntries(
+          Array.from(countriesByContinentCounts.entries()).map(([continent, byCountry]) => [
+            continent,
+            Array.from(byCountry.entries())
+              .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+              .map(([value, count]) => ({ value, count })),
+          ]),
+        ),
+        citiesByCountry: Object.fromEntries(
+          Array.from(citiesByCountryCounts.entries()).map(([country, byCity]) => [
+            country,
+            Array.from(byCity.entries())
+              .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+              .map(([value, count]) => ({ value, count })),
+          ]),
+        ),
         showTypes: Array.from(showTypeCounts.entries()).map(([value, count]) => ({ value, count })),
         albums: DISCOGRAPHY_ALBUM_TITLES.map((title) => ({ value: title, count: 0 })),
         albumShowKeys: {},
@@ -1658,6 +2046,9 @@ export async function GET(req: NextRequest) {
       debug: {
         years: yearFilters.length > 0 ? yearFilters : ["All"],
         continents: continentFilters.length > 0 ? continentFilters : ["All"],
+        countries: countryFilters.length > 0 ? countryFilters : ["All"],
+        cities: cityFilters.length > 0 ? cityFilters : ["All"],
+        venues: venueFilters.length > 0 ? venueFilters : ["All"],
         showTypes: showTypes.length > 0 ? showTypes : ["All"],
         albums: albumFilters.length > 0 ? albumFilters : ["All"],
         query,
@@ -1668,13 +2059,68 @@ export async function GET(req: NextRequest) {
         searchedShows: fallbackShows.length,
         iaPagesUsed: iaPage,
         source: "kglw-fallback",
+        unresolvedVenueCountryCount: fallbackShows.filter(
+          (s) => !s.country && String(s.venueText || s.title || "").trim().length > 0,
+        ).length,
+        unresolvedVenueCountrySamples: Array.from(
+          new Set(
+            fallbackShows
+              .filter((s) => !s.country)
+              .map((s) => String(s.venueText || s.title || "").trim())
+              .filter(Boolean),
+          ),
+        ).slice(0, 20),
       },
     };
+    if (randomPickMode) {
+      randomPickerUniverseCache.set(randomUniverseKey, {
+        expiresAt: Date.now() + RANDOM_PICKER_UNIVERSE_CACHE_TTL_MS,
+        shows: fallbackShows,
+      });
+      const chosen =
+        fallbackShows[Math.floor(Math.random() * fallbackShows.length)] || null;
+      return Response.json(
+        {
+          item: chosen,
+          venueTotal: fallbackShows.length,
+          debug: {
+            years: yearFilters.length > 0 ? yearFilters : ["All"],
+            continents: continentFilters.length > 0 ? continentFilters : ["All"],
+            countries: countryFilters.length > 0 ? countryFilters : ["All"],
+            cities: cityFilters.length > 0 ? cityFilters : ["All"],
+            venues: venueFilters.length > 0 ? venueFilters : ["All"],
+            showTypes: showTypes.length > 0 ? showTypes : ["All"],
+            albums: albumFilters.length > 0 ? albumFilters : ["All"],
+            query,
+            sort,
+            fetchedDocs: 0,
+            recordings: 0,
+            uniqueShows: fallbackShows.length,
+            searchedShows: fallbackShows.length,
+            iaPagesUsed: iaPage,
+            source: "kglw-fallback-random",
+            unresolvedVenueCountryCount: fallbackShows.filter(
+              (s) => !s.country && String(s.venueText || s.title || "").trim().length > 0,
+            ).length,
+          },
+        },
+        { headers: SUCCESS_CACHE_HEADERS },
+      );
+    }
     showsResponseCache.set(cacheKey, {
       expiresAt: Date.now() + SHOWS_RESPONSE_CACHE_TTL_MS,
       payload,
     });
-    if (page === 1 && yearFilters.length === 0 && continentFilters.length === 0 && showTypes.length === 0 && sort === "newest") {
+    if (
+      page === 1 &&
+      yearFilters.length === 0 &&
+      continentFilters.length === 0 &&
+      countryFilters.length === 0 &&
+      cityFilters.length === 0 &&
+      venueFilters.length === 0 &&
+      showTypes.length === 0 &&
+      sort === "newest"
+    ) {
       lastGoodDefaultPayload = payload;
     }
     return Response.json(payload, { headers: SUCCESS_CACHE_HEADERS });
@@ -1708,7 +2154,16 @@ export async function GET(req: NextRequest) {
         return queryMatchesByTokens(haystack, qLower);
       })
     : sortedShowsForQuery;
-  const searchedShowsWithoutAlbums = filterByShowTypes(searchedShowsForFacets, showTypes);
+  const searchedShowsWithLocationFilters = filterShowsByLocationAndVenue(
+    searchedShowsForFacets,
+    countryFilters,
+    cityFilters,
+    venueFilters,
+  );
+  const searchedShowsWithoutAlbums = filterByShowTypes(
+    searchedShowsWithLocationFilters,
+    showTypes,
+  );
   const showsForFacetCount = searchedShowsWithoutAlbums;
   const scopedUniverseKeys = new Set(showsForFacetCount.map((s) => s.showKey));
   const shouldComputeAlbumFacets = includeAlbumFacets || albumFilters.length > 0;
@@ -1802,12 +2257,64 @@ export async function GET(req: NextRequest) {
         songPage++;
       }
 
+      if (songDocs.length === 0) {
+        // Fallback for multi-word queries: IA full-text can miss strict AND token matches.
+        const looseQuery = buildSongTokenQueryLoose(songTerm);
+        if (looseQuery) {
+          const SONG_ROWS = fastMode ? 200 : 500;
+          const MAX_SONG_DOCS = fastMode ? 120 : 1000;
+          const MAX_SONG_PAGES = Math.ceil(MAX_SONG_DOCS / SONG_ROWS);
+          let songPage = 1;
+          while (songPage <= MAX_SONG_PAGES) {
+            const songQ = `${q} AND (${looseQuery})`;
+            const songUrl =
+              "https://archive.org/advancedsearch.php" +
+              `?q=${encodeURIComponent(songQ)}` +
+              fields.map((f) => `&fl[]=${encodeURIComponent(f)}`).join("") +
+              `&rows=${SONG_ROWS}&page=${songPage}&output=json` +
+              `&sort[]=${encodeURIComponent(SORT)}`;
+
+            let songRes: Response | null = null;
+            for (const timeoutMs of fastMode ? [4500] : [UPSTREAM_TIMEOUT_MS, UPSTREAM_TIMEOUT_MS + 5000]) {
+              let songTimeout: ReturnType<typeof setTimeout> | null = null;
+              try {
+                const controller = new AbortController();
+                songTimeout = setTimeout(() => controller.abort(), timeoutMs);
+                songRes = await fetch(songUrl, { cache: "no-store", signal: controller.signal });
+                if (songRes.ok) break;
+              } catch {
+                // Retry once with a longer timeout.
+              } finally {
+                if (songTimeout) clearTimeout(songTimeout);
+              }
+            }
+            if (!songRes) break;
+            if (!songRes.ok) break;
+
+            const songData = (await songRes.json()) as { response?: { docs?: IaDoc[] } };
+            const batch: IaDoc[] = Array.isArray(songData?.response?.docs)
+              ? songData.response.docs
+              : [];
+            if (batch.length === 0) break;
+
+            songDocs.push(...batch);
+            if (songDocs.length >= MAX_SONG_DOCS) break;
+            songPage++;
+          }
+        }
+      }
+
       const songRecordings = buildRecordingsFromDocs(songDocs, continentFilters);
       songMatchedShows = sortShows(
         filterByShowTypes(
-          applySpecialTagsToShows(
-            buildShowsFromRecordings(songRecordings),
-            kglwSpecialTagsByDate,
+          filterShowsByLocationAndVenue(
+            applySpecialTagsToShows(
+              buildShowsFromRecordings(songRecordings),
+              kglwSpecialTagsByDate,
+            ),
+            countryFilters,
+            cityFilters,
+            venueFilters,
           ),
           showTypes,
         ),
@@ -1846,14 +2353,76 @@ export async function GET(req: NextRequest) {
     searchedShows = sortShows(Array.from(mergedByKey.values()), sort);
     searchedShowsForFacets = searchedShows;
   }
+  if (randomPickMode) {
+    randomPickerUniverseCache.set(randomUniverseKey, {
+      expiresAt: Date.now() + RANDOM_PICKER_UNIVERSE_CACHE_TTL_MS,
+      shows: searchedShows,
+    });
+    const chosen = searchedShows[Math.floor(Math.random() * searchedShows.length)] || null;
+    return Response.json(
+      {
+        item: chosen,
+        venueTotal: searchedShows.length,
+        debug: {
+          years: yearFilters.length > 0 ? yearFilters : ["All"],
+          continents: continentFilters.length > 0 ? continentFilters : ["All"],
+          countries: countryFilters.length > 0 ? countryFilters : ["All"],
+          cities: cityFilters.length > 0 ? cityFilters : ["All"],
+          venues: venueFilters.length > 0 ? venueFilters : ["All"],
+          showTypes: showTypes.length > 0 ? showTypes : ["All"],
+          albums: albumFilters.length > 0 ? albumFilters : ["All"],
+          query,
+          sort,
+          fetchedDocs: docs.length,
+          recordings: recordings.length,
+          uniqueShows: shows.length,
+          searchedShows: searchedShows.length,
+          iaPagesUsed: iaPage,
+          source: "ia-random",
+        },
+      },
+      { headers: SUCCESS_CACHE_HEADERS },
+    );
+  }
 
   const yearCounts = new Map<string, number>();
   const continentCounts = new Map<string, number>();
+  const countryCounts = new Map<string, number>();
+  const cityCounts = new Map<string, number>();
+  const cityContextCounts = new Map<string, Map<string, number>>();
+  const venueCounts = new Map<string, number>();
+  const countriesByContinentCounts = new Map<string, Map<string, number>>();
+  const citiesByCountryCounts = new Map<string, Map<string, number>>();
   for (const s of searchedShows) {
     const y = s.showDate?.slice(0, 4);
     if (y && /^\d{4}$/.test(y)) yearCounts.set(y, (yearCounts.get(y) || 0) + 1);
     const c = s.continent;
-    if (c && c !== "Unknown") continentCounts.set(c, (continentCounts.get(c) || 0) + 1);
+    if (c) continentCounts.set(c, (continentCounts.get(c) || 0) + 1);
+    const country = String(s.country || "").trim();
+    if (country) {
+      countryCounts.set(country, (countryCounts.get(country) || 0) + 1);
+      const continentKey = String(s.continent || "").trim();
+      if (continentKey && continentKey !== "Unknown") {
+        const byContinent = countriesByContinentCounts.get(continentKey) || new Map<string, number>();
+        byContinent.set(country, (byContinent.get(country) || 0) + 1);
+        countriesByContinentCounts.set(continentKey, byContinent);
+      }
+    }
+    const city = String(s.city || "").trim();
+    if (city) {
+      cityCounts.set(city, (cityCounts.get(city) || 0) + 1);
+      const contextLabel = cityContextLabelForShow(s);
+      const byContext = cityContextCounts.get(city) || new Map<string, number>();
+      byContext.set(contextLabel, (byContext.get(contextLabel) || 0) + 1);
+      cityContextCounts.set(city, byContext);
+      if (country) {
+        const byCountry = citiesByCountryCounts.get(country) || new Map<string, number>();
+        byCountry.set(city, (byCountry.get(city) || 0) + 1);
+        citiesByCountryCounts.set(country, byCountry);
+      }
+    }
+    const venue = String(s.venueText || s.title || "").trim();
+    if (venue) venueCounts.set(venue, (venueCounts.get(venue) || 0) + 1);
   }
   const showTypeCounts = new Map<string, number>([
     ["Rave", 0],
@@ -1873,6 +2442,38 @@ export async function GET(req: NextRequest) {
     continents: Array.from(continentCounts.entries())
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([value, count]) => ({ value, count })),
+    countries: Array.from(countryCounts.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([value, count]) => ({ value, count })),
+    cities: Array.from(cityCounts.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([value, count]) => ({ value, count })),
+    citiesMeta: Object.fromEntries(
+      Array.from(cityContextCounts.entries()).map(([city, byContext]) => {
+        const top = Array.from(byContext.entries())
+          .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0];
+        return [city, { context: top?.[0] || "" }];
+      }),
+    ),
+    venues: Array.from(venueCounts.entries())
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([value, count]) => ({ value, count })),
+    countriesByContinent: Object.fromEntries(
+      Array.from(countriesByContinentCounts.entries()).map(([continent, byCountry]) => [
+        continent,
+        Array.from(byCountry.entries())
+          .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+          .map(([value, count]) => ({ value, count })),
+      ]),
+    ),
+    citiesByCountry: Object.fromEntries(
+      Array.from(citiesByCountryCounts.entries()).map(([country, byCity]) => [
+        country,
+        Array.from(byCity.entries())
+          .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+          .map(([value, count]) => ({ value, count })),
+      ]),
+    ),
     showTypes: Array.from(showTypeCounts.entries()).map(([value, count]) => ({ value, count })),
     albums: DISCOGRAPHY_ALBUM_TITLES.map((title) => ({
       value: title,
@@ -1912,6 +2513,9 @@ export async function GET(req: NextRequest) {
     debug: {
       years: yearFilters.length > 0 ? yearFilters : ["All"],
       continents: continentFilters.length > 0 ? continentFilters : ["All"],
+      countries: countryFilters.length > 0 ? countryFilters : ["All"],
+      cities: cityFilters.length > 0 ? cityFilters : ["All"],
+      venues: venueFilters.length > 0 ? venueFilters : ["All"],
       showTypes: showTypes.length > 0 ? showTypes : ["All"],
       albums: albumFilters.length > 0 ? albumFilters : ["All"],
       query,
@@ -1921,6 +2525,17 @@ export async function GET(req: NextRequest) {
       uniqueShows: shows.length,
       searchedShows: searchedShows.length,
       iaPagesUsed: iaPage,
+      unresolvedVenueCountryCount: searchedShows.filter(
+        (s) => !s.country && String(s.venueText || s.title || "").trim().length > 0,
+      ).length,
+      unresolvedVenueCountrySamples: Array.from(
+        new Set(
+          searchedShows
+            .filter((s) => !s.country)
+            .map((s) => String(s.venueText || s.title || "").trim())
+            .filter(Boolean),
+        ),
+      ).slice(0, 20),
     },
   };
   const isDefaultRootQuery =
@@ -1928,6 +2543,9 @@ export async function GET(req: NextRequest) {
     !query &&
     yearFilters.length === 0 &&
     continentFilters.length === 0 &&
+    countryFilters.length === 0 &&
+    cityFilters.length === 0 &&
+    venueFilters.length === 0 &&
     showTypes.length === 0 &&
     albumFilters.length === 0 &&
     sort === "newest";
@@ -1937,9 +2555,15 @@ export async function GET(req: NextRequest) {
   if (isDefaultRootQuery && payload.items.length === 0 && lastGoodDefaultPayload) {
     return Response.json(lastGoodDefaultPayload, { headers: SUCCESS_CACHE_HEADERS });
   }
-  showsResponseCache.set(cacheKey, {
-    expiresAt: Date.now() + SHOWS_RESPONSE_CACHE_TTL_MS,
-    payload,
-  });
+  const shouldCacheQueryPayload =
+    !query ||
+    payload.items.length > 0 ||
+    Number(payload.song?.total || 0) > 0;
+  if (shouldCacheQueryPayload) {
+    showsResponseCache.set(cacheKey, {
+      expiresAt: Date.now() + SHOWS_RESPONSE_CACHE_TTL_MS,
+      payload,
+    });
+  }
   return Response.json(payload, { headers: SUCCESS_CACHE_HEADERS });
 }

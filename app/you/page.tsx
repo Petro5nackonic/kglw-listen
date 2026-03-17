@@ -168,7 +168,7 @@ export default function YouPage() {
 
   return (
     <main className="min-h-screen bg-[#080017] text-white">
-      <div className="mx-auto w-full max-w-md px-6 pb-8 pt-6">
+      <div className="mx-auto w-full max-w-6xl px-4 pb-8 pt-6 md:px-6">
         <div className="mb-4 flex items-center justify-between">
           <h1 className="text-[24px] font-semibold [font-family:var(--font-roboto-condensed)]">
             Recent
@@ -200,90 +200,97 @@ export default function YouPage() {
             ) : null}
           </div>
         </div>
-        <section className="mb-7 rounded-[16px] border border-white/10 bg-[rgba(21,9,49,0.72)] p-4">
-          <div className="mb-3 text-[15px] font-medium text-white [font-family:var(--font-roboto-condensed)]">
-            Show Listening Mix
-          </div>
-          <div className="flex items-center gap-4">
-            <div
-              className="relative h-[148px] w-[148px] shrink-0 rounded-full"
-              style={{ background: donutBackground }}
-              aria-label="Studio album listening donut chart"
-            >
-              <div className="absolute inset-[24px] flex flex-col items-center justify-center rounded-full bg-[#12052B] text-center">
-                <div className="text-[28px] font-semibold leading-none">
-                  {showChart.total}
-                </div>
-                <div className="mt-1 text-[11px] text-white/65">Show Plays</div>
-              </div>
-            </div>
-            <div className="min-w-0 flex-1 space-y-1.5">
-              {showChart.entries.length === 0 ? (
-                <div className="text-[12px] text-white/65">
-                  Start playing shows to populate this chart.
-                </div>
-              ) : (
-                showChart.entries.slice(0, 6).map((entry) => (
-                  <div key={entry.show} className="flex items-center justify-between gap-2 text-[12px]">
-                    <div className="flex min-w-0 items-center gap-2 text-white/80">
-                      <span
-                        className="h-2.5 w-2.5 shrink-0 rounded-full"
-                        style={{ backgroundColor: entry.color }}
-                      />
-                      <span className="truncate">{entry.show}</span>
-                    </div>
-                    <span className="shrink-0 text-white/70">{entry.percent.toFixed(0)}%</span>
-                  </div>
-                ))
-              )}
-              {showChart.entries.length > 6 ? (
-                <div className="pt-1 text-[11px] text-white/55">
-                  +{showChart.entries.length - 6} more shows
-                </div>
-              ) : null}
-            </div>
-          </div>
-        </section>
 
-        {items.length === 0 ? (
-          <div className="rounded-[16px] border border-white/20 bg-white/5 p-4 text-sm text-white/70">
-            No activity yet. Play a show, playlist, or song to start your feed.
-          </div>
-        ) : (
-          <div className="space-y-10">
-            {grouped.map(([day, dayItems]) => (
-              <section key={day}>
-                <div className="mb-3 text-[16px] font-medium text-white [font-family:var(--font-roboto-condensed)]">
-                  {day}
+        <div className="grid grid-cols-1 gap-7 lg:grid-cols-12 lg:gap-8">
+          <div className="lg:col-span-5">
+            <section className="rounded-[16px] border border-white/10 bg-[rgba(21,9,49,0.72)] p-4 md:p-5 lg:sticky lg:top-[92px]">
+              <div className="mb-3 text-[15px] font-medium text-white [font-family:var(--font-roboto-condensed)]">
+                Show Listening Mix
+              </div>
+              <div className="flex items-center gap-4">
+                <div
+                  className="relative h-[148px] w-[148px] shrink-0 rounded-full md:h-[168px] md:w-[168px]"
+                  style={{ background: donutBackground }}
+                  aria-label="Studio album listening donut chart"
+                >
+                  <div className="absolute inset-[24px] flex flex-col items-center justify-center rounded-full bg-[#12052B] text-center md:inset-[26px]">
+                    <div className="text-[28px] font-semibold leading-none">
+                      {showChart.total}
+                    </div>
+                    <div className="mt-1 text-[11px] text-white/65">Show Plays</div>
+                  </div>
                 </div>
-                <div className="space-y-2.5">
-                  {dayItems.map((item) => {
-                    const href = activityHref(item);
-                    const parts = activityParts(item);
-                    const content = (
-                      <div className="flex items-start gap-3 text-[14px] leading-[1.35] text-[#d5d5d5] [font-family:var(--font-roboto-condensed)]">
-                        <div className="mt-[1px] w-4 shrink-0 text-center text-[13px] text-white/50">
-                          <FontAwesomeIcon icon={activityIcon(item)} />
+                <div className="min-w-0 flex-1 space-y-1.5">
+                  {showChart.entries.length === 0 ? (
+                    <div className="text-[12px] text-white/65">
+                      Start playing shows to populate this chart.
+                    </div>
+                  ) : (
+                    showChart.entries.slice(0, 6).map((entry) => (
+                      <div key={entry.show} className="flex items-center justify-between gap-2 text-[12px]">
+                        <div className="flex min-w-0 items-center gap-2 text-white/80">
+                          <span
+                            className="h-2.5 w-2.5 shrink-0 rounded-full"
+                            style={{ backgroundColor: entry.color }}
+                          />
+                          <span className="truncate">{entry.show}</span>
                         </div>
-                        <p className="min-w-0">
-                          <span>{parts.lead}</span>
-                          <span className="font-semibold text-[#7f58f4]">{parts.emphasis}</span>
-                          {parts.tail ? <span>{parts.tail}</span> : null}
-                        </p>
+                        <span className="shrink-0 text-white/70">{entry.percent.toFixed(0)}%</span>
                       </div>
-                    );
-                    if (!href) return <div key={item.id}>{content}</div>;
-                    return (
-                      <Link key={item.id} href={href} className="block hover:opacity-95">
-                        {content}
-                      </Link>
-                    );
-                  })}
+                    ))
+                  )}
+                  {showChart.entries.length > 6 ? (
+                    <div className="pt-1 text-[11px] text-white/55">
+                      +{showChart.entries.length - 6} more shows
+                    </div>
+                  ) : null}
                 </div>
-              </section>
-            ))}
           </div>
-        )}
+            </section>
+          </div>
+
+          <div className="lg:col-span-7">
+            {items.length === 0 ? (
+              <div className="rounded-[16px] border border-white/20 bg-white/5 p-4 text-sm text-white/70">
+                No activity yet. Play a show, playlist, or song to start your feed.
+              </div>
+            ) : (
+              <div className="space-y-10">
+                {grouped.map(([day, dayItems]) => (
+                  <section key={day}>
+                    <div className="mb-3 text-[16px] font-medium text-white [font-family:var(--font-roboto-condensed)]">
+                      {day}
+                    </div>
+                    <div className="space-y-2.5">
+                      {dayItems.map((item) => {
+                        const href = activityHref(item);
+                        const parts = activityParts(item);
+                        const content = (
+                          <div className="flex items-start gap-3 text-[14px] leading-[1.35] text-[#d5d5d5] [font-family:var(--font-roboto-condensed)]">
+                            <div className="mt-[1px] w-4 shrink-0 text-center text-[13px] text-white/50">
+                              <FontAwesomeIcon icon={activityIcon(item)} />
+                            </div>
+                            <p className="min-w-0">
+                              <span>{parts.lead}</span>
+                              <span className="font-semibold text-[#7f58f4]">{parts.emphasis}</span>
+                              {parts.tail ? <span>{parts.tail}</span> : null}
+                            </p>
+                          </div>
+                        );
+                        if (!href) return <div key={item.id}>{content}</div>;
+                        return (
+                          <Link key={item.id} href={href} className="block hover:opacity-95">
+                            {content}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </main>
   );

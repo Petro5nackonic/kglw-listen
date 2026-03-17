@@ -44,3 +44,18 @@ This project uses `@fortawesome/pro-solid-svg-icons`, which is a private package
 - For local dev, set the env var in your shell.
 - For deploys (e.g. Vercel), add `FONTAWESOME_NPM_AUTH_TOKEN` in project Environment Variables.
 
+## Analytics (Google Analytics 4)
+
+Analytics is optional and only enabled when `NEXT_PUBLIC_GA_MEASUREMENT_ID` is set.
+
+1. Create a GA4 Web Data Stream and copy the Measurement ID (format: `G-XXXXXXXXXX`).
+2. Add this to your environment:
+
+```bash
+NEXT_PUBLIC_GA_MEASUREMENT_ID=G-XXXXXXXXXX
+```
+
+3. Restart the app and verify traffic in GA4 Realtime.
+
+If this variable is not present, no analytics script is loaded.
+
