@@ -223,6 +223,69 @@ function getArchiveIdentifier(url?: string): string {
   return match?.[1] ? decodeURIComponent(match[1]) : "";
 }
 
+function buildPrebuiltPreviewThumbs(
+  slots: Array<{ variants: Array<{ track: Track }> }>,
+): string[] {
+  const thumbs: string[] = [];
+  const seenArtworkKeys = new Set<string>();
+  const seenUrls = new Set<string>();
+
+  const toThumb = (track: Track): { src: string; artworkKey: string; urlKey: string } | null => {
+    const rawUrl = String(track?.url || "").trim();
+    if (!rawUrl) return null;
+
+    const rawArtwork = String(track?.artwork || "").trim();
+    const archiveId = getArchiveIdentifier(rawUrl);
+    const src = rawArtwork
+      ? rawArtwork
+      : archiveId
+        ? `https://archive.org/services/img/${encodeURIComponent(archiveId)}`
+        : DEFAULT_ARTWORK_SRC;
+    const artworkKey = rawArtwork || (archiveId ? `ia:${archiveId}` : `url:${rawUrl}`);
+    return { src, artworkKey, urlKey: rawUrl };
+  };
+
+  const pushIfUniqueArtwork = (track: Track): boolean => {
+    if (thumbs.length >= 4) return true;
+    const thumb = toThumb(track);
+    if (!thumb || seenUrls.has(thumb.urlKey)) return false;
+    if (seenArtworkKeys.has(thumb.artworkKey)) return false;
+    seenUrls.add(thumb.urlKey);
+    seenArtworkKeys.add(thumb.artworkKey);
+    thumbs.push(thumb.src);
+    return thumbs.length >= 4;
+  };
+
+  const maxVariantDepth = slots.reduce(
+    (maxDepth, slot) => Math.max(maxDepth, slot.variants.length),
+    0,
+  );
+  for (let variantIdx = 0; variantIdx < maxVariantDepth && thumbs.length < 4; variantIdx += 1) {
+    for (const slot of slots) {
+      const track = slot.variants[variantIdx]?.track;
+      if (!track) continue;
+      if (pushIfUniqueArtwork(track)) break;
+    }
+  }
+
+  // Fill remaining cells, allowing repeated artwork when necessary.
+  if (thumbs.length < 4) {
+    for (const slot of slots) {
+      for (const variant of slot.variants) {
+        if (thumbs.length >= 4) break;
+        const thumb = toThumb(variant.track);
+        if (!thumb || seenUrls.has(thumb.urlKey)) continue;
+        seenUrls.add(thumb.urlKey);
+        thumbs.push(thumb.src);
+      }
+      if (thumbs.length >= 4) break;
+    }
+  }
+
+  while (thumbs.length < 4) thumbs.push(DEFAULT_ARTWORK_SRC);
+  return thumbs;
+}
+
 function formatShowLength(sec?: number | null): string {
   if (typeof sec !== "number" || !Number.isFinite(sec) || sec <= 0) return "";
   const total = Math.floor(sec);
@@ -3539,16 +3602,7 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
                   >
                     {showPrebuiltSkeleton ? renderPrebuiltSkeletonCards() : readyPrebuiltPlaylists.map((p) => {
                     const versions = p.slots.reduce((sum, slot) => sum + slot.variants.length, 0);
-                    const previewThumbs = p.slots
-                      .flatMap((slot) => slot.variants.map((v) => v.track))
-                      .slice(0, 4)
-                      .map((t) => {
-                        const id = getArchiveIdentifier(t.url);
-                        if (t.artwork) return t.artwork;
-                        if (!id) return DEFAULT_ARTWORK_SRC;
-                        return `https://archive.org/services/img/${encodeURIComponent(id)}`;
-                      });
-                    while (previewThumbs.length < 4) previewThumbs.push(DEFAULT_ARTWORK_SRC);
+                    const previewThumbs = buildPrebuiltPreviewThumbs(p.slots);
                     const chainCount = new Set(p.slots.map((s) => s.linkGroupId).filter(Boolean)).size;
                     const totalSeconds = p.slots.reduce(
                       (sum, slot) => sum + (parseLengthToSeconds(slot.variants[0]?.track.length) ?? 0),
