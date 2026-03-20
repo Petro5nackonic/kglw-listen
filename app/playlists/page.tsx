@@ -97,6 +97,50 @@ function parseTrackNum(t?: string): number {
   return m ? Number(m[1]) : Number.POSITIVE_INFINITY;
 }
 
+function normalizeSongToken(input: string): string {
+  return String(input || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function decodeUrlFileName(url: string): string {
+  try {
+    const parsed = new URL(String(url || "").trim());
+    const file = decodeURIComponent(parsed.pathname.split("/").pop() || "");
+    return file.replace(/\.[a-z0-9]{2,5}$/i, "");
+  } catch {
+    return String(url || "");
+  }
+}
+
+function trackLikelyMatchesSlot(track: Track, canonicalTitle: string): boolean {
+  const file = normalizeSongToken(decodeUrlFileName(String(track.url || "")));
+  const title = normalizeSongToken(String(track.title || ""));
+  const canonical = normalizeSongToken(canonicalTitle);
+  if (!file || !canonical) return false;
+  if (file.includes(canonical) || canonical.includes(file)) return true;
+  if (title && (file.includes(title) || title.includes(file))) return true;
+  const ignore = new Set(["the", "and", "of", "in", "to", "for", "live"]);
+  const canonicalTokens = new Set(
+    canonical
+      .split(" ")
+      .filter((t) => t.length >= 3 && !ignore.has(t)),
+  );
+  const fileTokens = new Set(
+    file
+      .split(" ")
+      .filter((t) => t.length >= 3 && !ignore.has(t)),
+  );
+  if (!canonicalTokens.size || !fileTokens.size) return false;
+  let overlap = 0;
+  for (const token of canonicalTokens) {
+    if (fileTokens.has(token)) overlap += 1;
+  }
+  return overlap / canonicalTokens.size >= 0.6;
+}
+
 const PLAYLIST_SORT_OPTIONS = [
   { value: "date_added", label: "Date Added" },
   { value: "updated", label: "Updated" },
@@ -187,10 +231,16 @@ export default function PlaylistsPage() {
     if (!playlist) return;
     const queue: Track[] = playlist.slots
       .map((slot) => {
-        const playable = slot.variants
+        const playableAll = slot.variants
           .map((v) => v.track)
           .filter((track) => Boolean(String(track?.url || "").trim()))
-          .filter((track) => isAudioName(String(track.url || "")))
+          .filter((track) => isAudioName(String(track.url || "")));
+        const playable = (() => {
+          const matching = playableAll.filter((track) =>
+            trackLikelyMatchesSlot(track, slot.canonicalTitle),
+          );
+          return matching.length > 0 ? matching : playableAll;
+        })()
           .slice()
           .sort((a, b) => {
             const setDiff = trackSetRank(String(a.name || a.url || "")) - trackSetRank(String(b.name || b.url || ""));

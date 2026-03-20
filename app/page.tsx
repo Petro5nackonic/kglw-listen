@@ -332,6 +332,50 @@ function trackSetRank(fileName: string): number {
   return 5;
 }
 
+function normalizeSongToken(input: string): string {
+  return String(input || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function decodeUrlFileName(url: string): string {
+  try {
+    const parsed = new URL(String(url || "").trim());
+    const file = decodeURIComponent(parsed.pathname.split("/").pop() || "");
+    return file.replace(/\.[a-z0-9]{2,5}$/i, "");
+  } catch {
+    return String(url || "");
+  }
+}
+
+function trackLikelyMatchesSlot(track: Track, canonicalTitle: string): boolean {
+  const file = normalizeSongToken(decodeUrlFileName(String(track.url || "")));
+  const title = normalizeSongToken(String(track.title || ""));
+  const canonical = normalizeSongToken(canonicalTitle);
+  if (!file || !canonical) return false;
+  if (file.includes(canonical) || canonical.includes(file)) return true;
+  if (title && (file.includes(title) || title.includes(file))) return true;
+  const ignore = new Set(["the", "and", "of", "in", "to", "for", "live"]);
+  const canonicalTokens = new Set(
+    canonical
+      .split(" ")
+      .filter((t) => t.length >= 3 && !ignore.has(t)),
+  );
+  const fileTokens = new Set(
+    file
+      .split(" ")
+      .filter((t) => t.length >= 3 && !ignore.has(t)),
+  );
+  if (!canonicalTokens.size || !fileTokens.size) return false;
+  let overlap = 0;
+  for (const token of canonicalTokens) {
+    if (fileTokens.has(token)) overlap += 1;
+  }
+  return overlap / canonicalTokens.size >= 0.6;
+}
+
 function parseTrackNum(t?: string): number {
   if (!t) return Number.POSITIVE_INFINITY;
   const m = String(t).match(/^(\d+)/);
@@ -3389,10 +3433,16 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
     const buildQueue = (pl: typeof playlist): Track[] =>
       pl.slots
         .map((slot) => {
-          const playable = slot.variants
+          const playableAll = slot.variants
             .map((v) => v.track)
             .filter((t): t is Track => Boolean(String(t?.url || "").trim()));
-          if (playable.length === 0) return null;
+          if (playableAll.length === 0) return null;
+          const playable = (() => {
+            const matching = playableAll.filter((track) =>
+              trackLikelyMatchesSlot(track, slot.canonicalTitle),
+            );
+            return matching.length > 0 ? matching : playableAll;
+          })();
           const primaryIndex =
             isPrebuilt && playable.length > 1
               ? Math.floor(Math.random() * playable.length)
