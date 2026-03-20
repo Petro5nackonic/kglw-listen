@@ -33,6 +33,10 @@ type ShowsResponse = {
 };
 type SortMode = "newest" | "oldest" | "song_len_longest" | "song_len_shortest";
 
+function isValidShowKey(showKey: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}\|.+/.test(String(showKey || "").trim());
+}
+
 function formatCardDate(input: string): string {
   const m = input.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!m) return input;
@@ -433,6 +437,7 @@ export default function SongVersionsPage() {
           <section className="space-y-2">
             {sortedShows.map((s) => {
               const songTitle = toDisplayTrackTitle(s.matchedSongTitle || displaySongTitle);
+              const canOpenShow = isValidShowKey(s.showKey);
               return (
                 <div
                   key={s.showKey}
@@ -441,11 +446,13 @@ export default function SongVersionsPage() {
                   <button
                     type="button"
                     className="flex min-w-0 flex-1 items-center gap-3 text-left"
-                    onClick={() =>
+                    onClick={() => {
+                      if (!canOpenShow) return;
                       router.push(
                         `/show/${encodeURIComponent(s.showKey)}?song=${encodeURIComponent(songTitle)}`,
-                      )
-                    }
+                      );
+                    }}
+                    disabled={!canOpenShow}
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
@@ -483,11 +490,13 @@ export default function SongVersionsPage() {
                       type="button"
                       className="text-white/70 hover:text-white"
                       aria-label="Open show details"
-                      onClick={() =>
+                      onClick={() => {
+                        if (!canOpenShow) return;
                         router.push(
                           `/show/${encodeURIComponent(s.showKey)}?song=${encodeURIComponent(songTitle)}`,
-                        )
-                      }
+                        );
+                      }}
+                      disabled={!canOpenShow}
                     >
                       <FontAwesomeIcon icon={faEllipsisVertical} />
                     </button>

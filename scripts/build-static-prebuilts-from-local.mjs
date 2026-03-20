@@ -153,6 +153,54 @@ const normalize = (text) =>
     .replace(/[^a-z0-9\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+const compact = (text) => String(text || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+const NOISE_WORDS = new Set([
+  "live",
+  "version",
+  "edit",
+  "take",
+  "intro",
+  "outro",
+  "part",
+  "pt",
+  "feat",
+  "the",
+  "and",
+]);
+
+function escapeRegex(text) {
+  return String(text || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function hasWord(haystack, token) {
+  if (!haystack || !token) return false;
+  const re = new RegExp(`(^|\\s)${escapeRegex(token)}(\\s|$)`, "i");
+  return re.test(haystack);
+}
+
+function getSongTokens(songName) {
+  return normalize(songName)
+    .split(" ")
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 2 && !NOISE_WORDS.has(token));
+}
+
+function getSongMatchStats(songName, haystackText) {
+  const needle = normalize(songName);
+  const hay = normalize(haystackText);
+  const needleCompact = compact(songName);
+  const hayCompact = compact(haystackText);
+  const tokens = getSongTokens(songName);
+  const tokenHits = tokens.reduce((sum, token) => (hasWord(hay, token) ? sum + 1 : sum), 0);
+  const phraseMatch = Boolean(needle) && hay.includes(needle);
+  const compactMatch = needleCompact.length >= 4 && hayCompact.includes(needleCompact);
+  const hitRatio = tokens.length > 0 ? tokenHits / tokens.length : 0;
+  const strong =
+    phraseMatch ||
+    compactMatch ||
+    (tokens.length === 1 ? tokenHits === 1 : tokenHits >= Math.max(2, Math.ceil(tokens.length * 0.67)));
+  return { strong, tokenHits, hitRatio, phraseMatch, compactMatch };
+}
 const STUDIO_ALBUM_ALLOWLIST_SET = new Set(STUDIO_ALBUM_ALLOWLIST.map((name) => normalize(name)));
 
 const identifierCache = new Map();
@@ -253,7 +301,10 @@ function buildDownloadUrl(identifier, fileName) {
 
 function isTrackNumberStyle(name) {
   const base = String(name || "").toLowerCase().split("/").pop() || "";
-  return /\bt\d{1,3}\b/.test(base) || /\b\d{1,3}\b/.test(base.replace(/\.[a-z0-9]+$/i, ""));
+  const noExt = base.replace(/\.[a-z0-9]+$/i, "");
+  // Accept compact track-number identifiers only (e.g. t12, 08, xxx.t03).
+  // Reject descriptive names like "16-I'm In Your Mind..." or "08-Ontology".
+  return /(?:^|[._-])t?\d{1,3}[a-z]?$/.test(noExt);
 }
 
 function classifyValidationStatus(status) {
@@ -326,13 +377,23 @@ function buildMp3Candidates(identifier, files) {
 }
 
 function scoreCandidate(songName, candidate) {
-  const tokens = normalize(songName).split(" ").filter((part) => part.length >= 2);
-  const hay = normalize(`${candidate.fileName} ${candidate.title || ""}`);
-  let hits = 0;
-  for (const t of tokens) if (hay.includes(t)) hits += 1;
-  let score = hits * 10;
+  const fileStats = getSongMatchStats(songName, candidate.fileName || "");
+  const titleStats = getSongMatchStats(songName, candidate.title || "");
+  const allowTitleOnly =
+    candidate.isTrackNumberStyle && candidate.hasTrackMapping && titleStats.strong;
+  if (!fileStats.strong && !allowTitleOnly) return Number.NEGATIVE_INFINITY;
+  let score = fileStats.tokenHits * 14;
+  if (fileStats.phraseMatch) score += 34;
+  if (fileStats.compactMatch) score += 14;
+  score += Math.round(fileStats.hitRatio * 12);
+  if (allowTitleOnly) {
+    score += titleStats.tokenHits * 4;
+    if (titleStats.phraseMatch) score += 10;
+    if (titleStats.compactMatch) score += 6;
+  }
   const fileNorm = normalize(candidate.fileName);
   const titleNorm = normalize(candidate.title || "");
+  const tokens = getSongTokens(songName);
   if (tokens.length > 0 && tokens.every((t) => fileNorm.includes(t))) score += 40;
   if (tokens.length > 0 && tokens.every((t) => titleNorm.includes(t))) score += 20;
   if (candidate.isTrackNumberStyle && !candidate.hasTrackMapping) score -= 25;
@@ -365,6 +426,7 @@ async function resolveIdentifierCandidates(identifier, songName) {
 
   const rawCandidates = buildMp3Candidates(id, metaRes.data?.files || [])
     .map((candidate) => ({ candidate, score: scoreCandidate(songName, candidate) }))
+    .filter((entry) => Number.isFinite(entry.score))
     .sort((a, b) => b.score - a.score)
     .map((entry) => entry.candidate);
 

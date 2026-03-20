@@ -195,6 +195,70 @@ function normalizeSongToken(input: string): string {
     .trim();
 }
 
+function compactSongToken(input: string): string {
+  return String(input || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
+const SONG_MATCH_NOISE_WORDS = new Set([
+  "live",
+  "version",
+  "edit",
+  "take",
+  "intro",
+  "outro",
+  "part",
+  "pt",
+  "feat",
+  "the",
+  "and",
+]);
+
+function escapeRegexToken(input: string): string {
+  return String(input || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function hasTokenWord(haystack: string, token: string): boolean {
+  if (!haystack || !token) return false;
+  const re = new RegExp(`(^|\\s)${escapeRegexToken(token)}(\\s|$)`, "i");
+  return re.test(haystack);
+}
+
+function songMatchStats(songName: string, haystack: string): {
+  strong: boolean;
+  tokenHits: number;
+  hitRatio: number;
+  phraseMatch: boolean;
+  compactMatch: boolean;
+} {
+  const needle = normalizeSongToken(songName);
+  const hay = normalizeSongToken(haystack);
+  const needleCompact = compactSongToken(songName);
+  const hayCompact = compactSongToken(haystack);
+  const tokens = needle
+    .split(" ")
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 2 && !SONG_MATCH_NOISE_WORDS.has(token));
+  const tokenHits = tokens.reduce((sum, token) => (hasTokenWord(hay, token) ? sum + 1 : sum), 0);
+  const phraseMatch = Boolean(needle) && hay.includes(needle);
+  const compactMatch = needleCompact.length >= 4 && hayCompact.includes(needleCompact);
+  const hitRatio = tokens.length > 0 ? tokenHits / tokens.length : 0;
+  const strong =
+    phraseMatch ||
+    compactMatch ||
+    (tokens.length === 1 ? tokenHits === 1 : tokenHits >= Math.max(2, Math.ceil(tokens.length * 0.67)));
+  return { strong, tokenHits, hitRatio, phraseMatch, compactMatch };
+}
+
+function isCompactTrackNumberName(nameOrUrl: string): boolean {
+  const raw = String(nameOrUrl || "");
+  const base = raw.split("/").pop() || raw;
+  const decoded = decodeURIComponent(base).toLowerCase();
+  const noExt = decoded.replace(/\.[a-z0-9]+$/i, "");
+  return /(?:^|[._-])t?\d{1,3}[a-z]?$/.test(noExt);
+}
+
 function audioExtRankFromUrl(url?: string): number {
   const u = String(url || "").toLowerCase();
   if (u.endsWith(".flac")) return 1;
@@ -276,16 +340,13 @@ function sanitizePrebuiltPlaylist(input: ApiPrebuiltPlaylist): ApiPrebuiltPlayli
 }
 
 function trackTitleMatchScore(songName: string, trackTitle: string): number {
-  const needle = normalizeSongToken(songName);
-  const hay = normalizeSongToken(trackTitle);
-  if (!needle || !hay) return 0;
-  if (hay.includes(needle) || needle.includes(hay)) return 100;
-  const parts = needle.split(" ").filter((p) => p.length >= 3);
-  let overlap = 0;
-  for (const p of parts) {
-    if (hay.includes(p)) overlap += 1;
-  }
-  return overlap;
+  const stats = songMatchStats(songName, trackTitle);
+  if (!stats.strong) return Number.NEGATIVE_INFINITY;
+  let score = stats.tokenHits * 12;
+  if (stats.phraseMatch) score += 30;
+  if (stats.compactMatch) score += 12;
+  score += Math.round(stats.hitRatio * 10);
+  return score;
 }
 
 async function resolveTrackFromItemApi(
@@ -310,6 +371,7 @@ async function resolveTrackFromItemApi(
         score: trackTitleMatchScore(songName, String(t?.title || "")),
       }))
       .filter((t) => Boolean(String(t?.url || "").trim()))
+      .filter((t) => Number.isFinite(t.score))
       .sort((a, b) => b.score - a.score);
     const best = playable[0];
     if (!best?.url) return null;
@@ -353,8 +415,13 @@ async function resolvePlayableUrl(
     if (audio.length === 0) return null;
     const best =
       audio.find((f) => {
-        const hay = normalizeSongToken(`${f?.title || ""} ${f?.name || ""}`);
-        return token && hay && (hay.includes(token) || token.includes(hay));
+        const stats = songMatchStats(preferredTitle, `${f?.name || ""}`);
+        const titleStats = songMatchStats(preferredTitle, `${f?.title || ""}`);
+        if (stats.strong) return true;
+        // Track-number filenames can rely on title metadata when available.
+        const name = String(f?.name || "");
+        const trackNumberStyle = isCompactTrackNumberName(name);
+        return trackNumberStyle && titleStats.strong;
       }) || audio[0];
     const fileName = String(best?.name || "").trim();
     if (!fileName) return null;
@@ -387,10 +454,8 @@ async function fetchLiveVariants(origin: string, songName: string): Promise<Trac
       };
     };
     const items = Array.isArray(data?.song?.items) ? data.song.items : [];
-    const queryToken = normalizeSongToken(songName);
     const seenUrl = new Set<string>();
     const exactish: Track[] = [];
-    const fallback: Track[] = [];
     for (const item of items) {
       let resolvedUrl = String(item?.matchedSongUrl || "").trim();
       let resolvedLength = String(item?.matchedSongLength || "").trim() || undefined;
@@ -407,7 +472,9 @@ async function fetchLiveVariants(origin: string, songName: string): Promise<Trac
       if (!resolvedUrl || seenUrl.has(resolvedUrl)) continue;
       seenUrl.add(resolvedUrl);
       const titleRaw = resolvedTitle || String(item?.matchedSongTitle || songName);
-      const titleNorm = normalizeSongToken(titleRaw);
+      const titleStats = songMatchStats(songName, titleRaw);
+      const urlStats = songMatchStats(songName, resolvedUrl);
+      const allowTitleOnly = isCompactTrackNumberName(resolvedUrl);
       const candidate: Track = {
         title: songName,
         url: resolvedUrl,
@@ -418,18 +485,12 @@ async function fetchLiveVariants(origin: string, songName: string): Promise<Trac
         venueText: String(item?.title || "").trim() || undefined,
         artwork: String(item?.artwork || "").trim() || undefined,
       };
-      if (
-        queryToken &&
-        titleNorm &&
-        (titleNorm.includes(queryToken) || queryToken.includes(titleNorm))
-      ) {
+      if (urlStats.strong || (allowTitleOnly && titleStats.strong)) {
         exactish.push(candidate);
-      } else {
-        fallback.push(candidate);
       }
-      if (exactish.length + fallback.length >= 8) break;
+      if (exactish.length >= 8) break;
     }
-    const quick = exactish.concat(fallback).slice(0, 3);
+    const quick = exactish.slice(0, 3);
     if (quick.length > 0) return quick;
 
     // Single cheap fallback attempt using one top identifier only.

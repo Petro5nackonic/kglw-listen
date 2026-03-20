@@ -169,6 +169,20 @@ function getTrackShowLabel(
   return "Live recording";
 }
 
+function getTrackShowLabelFromTrack(
+  track: Track | null | undefined,
+  showTitleByIdentifier: Record<string, string>,
+): string {
+  if (!track) return "Live recording";
+  const venue = String(track.venueText || "").trim();
+  const date = String(track.showDate || "").trim();
+  const id = String(track.showKey || "").trim() || getArchiveIdentifier(track.url);
+  if (venue || date) {
+    return buildShowLabel(String(track.title || ""), id, venue, date);
+  }
+  return getTrackShowLabel(track.url, showTitleByIdentifier);
+}
+
 function splitShowLabelAndIsoDate(showLabel: string): { venueLabel: string; isoDate: string } {
   const raw = String(showLabel || "").trim();
   if (!raw) return { venueLabel: "", isoDate: "" };
@@ -200,6 +214,10 @@ function getTrackShowJumpTarget(track: Track | null): { showKey: string; song: s
   if (!showKey) return null;
   const song = toDisplayTrackTitle(track.title || "").trim();
   return { showKey, song };
+}
+
+function isValidShowKey(showKey: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}\|.+/.test(String(showKey || "").trim());
 }
 
 type PlayableSlot = { slot: PlaylistSlot; track: Track };
@@ -573,6 +591,10 @@ export default function PlaylistDetailPage() {
     if (!activeQueueTrack) return "";
     const queuePlaylistId = String(activeQueueTrack.playlistId || "").trim();
     if (queuePlaylistId && queuePlaylistId !== playlistId) return "";
+    const explicitSlotId = String(activeQueueTrack.playlistSlotId || "").trim();
+    if (explicitSlotId && playableSlots.some((item) => item.slot.id === explicitSlotId)) {
+      return explicitSlotId;
+    }
     const activeUrl = String(activeQueueTrack.url || "").trim();
     if (!activeUrl) return "";
 
@@ -679,7 +701,7 @@ export default function PlaylistDetailPage() {
     if (!track?.url) return;
     const id = getOrCreateLovedSongsPlaylistId();
     const jumpTarget = getTrackShowJumpTarget(track);
-    const showLabel = getTrackShowLabel(track.url, showTitleByIdentifier);
+    const showLabel = getTrackShowLabelFromTrack(track, showTitleByIdentifier);
     const { venueLabel, isoDate } = splitShowLabelAndIsoDate(showLabel);
     addTrack(id, {
       title: toDisplayTrackTitle(track.title || ""),
@@ -710,14 +732,18 @@ export default function PlaylistDetailPage() {
     const resolvedByIdx = playableSlots.map((item) =>
       resolveSlotTrack(item.slot, forcedBySlotId[item.slot.id], isPrebuiltPlaylist),
     );
-    const playbackQueue = playbackOrder
-      .map((idx) => resolvedByIdx[idx])
-      .filter(Boolean)
-      .map((track) => ({
-        ...(track as Track),
-        playlistId,
-        playlistSource: isPrebuiltPlaylist ? "prebuilt" : "user",
-      })) as Track[];
+    const playbackQueue: Track[] = playbackOrder
+      .map((idx) => {
+        const track = resolvedByIdx[idx];
+        if (!track) return null;
+        return {
+          ...(track as Track),
+          playlistId,
+          playlistSlotId: playableSlots[idx]?.slot.id,
+          playlistSource: isPrebuiltPlaylist ? "prebuilt" : "user",
+        } as Track;
+      })
+      .filter((track): track is Exclude<typeof track, null> => track !== null);
     if (playbackQueue.length === 0) return;
 
     const startInQueue = playbackOrder.indexOf(startIdx);
@@ -1241,7 +1267,7 @@ export default function PlaylistDetailPage() {
                         {title}
                       </div>
                       <div className="mt-1 truncate text-[12px] leading-none text-white/70">
-                        {getTrackShowLabel(item.track.url, showTitleByIdentifier)}
+                        {getTrackShowLabelFromTrack(item.track, showTitleByIdentifier)}
                       </div>
                     </button>
                     <div className="ml-3 flex shrink-0 items-center gap-3">
@@ -1301,8 +1327,8 @@ export default function PlaylistDetailPage() {
                           {toDisplayTrackTitle(slot.variants[0]?.track.title || "")}
                         </div>
                         <div className="mt-1 truncate text-[12px] leading-[1.05] text-white/70">
-                          {getTrackShowLabel(
-                            activeVariantTrack?.url || track.url,
+                          {getTrackShowLabelFromTrack(
+                            activeVariantTrack || track,
                             showTitleByIdentifier,
                           )}
                         </div>
@@ -1356,7 +1382,7 @@ export default function PlaylistDetailPage() {
                                 v.id === activeVariantId ? "text-[#EFD50F]" : "text-white/75"
                               }`}
                             >
-                              {vi + 1}. {getTrackShowLabel(v.track.url, showTitleByIdentifier)}
+                              {vi + 1}. {getTrackShowLabelFromTrack(v.track, showTitleByIdentifier)}
                             </span>
                             <span className="ml-auto shrink-0 text-[14px] text-white">
                               {v.track.length || ""}
@@ -1440,8 +1466,8 @@ export default function PlaylistDetailPage() {
                                     {toDisplayTrackTitle(slot.variants[0]?.track.title || "")}
                                   </div>
                                   <div className="mt-1 truncate text-[12px] leading-[1.05] text-white/70">
-                                    {getTrackShowLabel(
-                                      activeVariantTrack?.url || track.url,
+                                    {getTrackShowLabelFromTrack(
+                                      activeVariantTrack || track,
                                       showTitleByIdentifier,
                                     )}
                                   </div>
@@ -1498,7 +1524,7 @@ export default function PlaylistDetailPage() {
                                         v.id === activeVariantId ? "text-[#EFD50F]" : "text-white/75"
                                       }`}
                                     >
-                                      {vi + 1}. {getTrackShowLabel(v.track.url, showTitleByIdentifier)}
+                                      {vi + 1}. {getTrackShowLabelFromTrack(v.track, showTitleByIdentifier)}
                                     </span>
                                     <span className="ml-auto shrink-0 text-[14px] text-white">
                                       {v.track.length || ""}
@@ -1658,7 +1684,7 @@ export default function PlaylistDetailPage() {
                   </div>
                 ) : (
                   editVersionsDraftTracks.map((track, idx) => {
-                    const showLabel = getTrackShowLabel(track.url, showTitleByIdentifier);
+                    const showLabel = getTrackShowLabelFromTrack(track, showTitleByIdentifier);
                     return (
                       <div
                         key={`${track.url}-${idx}`}
@@ -1903,8 +1929,8 @@ export default function PlaylistDetailPage() {
           <div className="fixed inset-x-0 bottom-0 z-50 mx-auto w-full max-w-[393px] rounded-t-[16px] bg-[#080017] px-6 pb-10 pt-6 shadow-[0_-4px_4px_rgba(0,0,0,0.25)]">
             <div>
               {(() => {
-                const showLabel = getTrackShowLabel(
-                  activeActionTrack?.url,
+                const showLabel = getTrackShowLabelFromTrack(
+                  activeActionTrack,
                   showTitleByIdentifier,
                 );
                 const { venueLabel, isoDate } = splitShowLabelAndIsoDate(showLabel);
@@ -2011,6 +2037,7 @@ export default function PlaylistDetailPage() {
                     type="button"
                     className="w-full rounded-[12px] bg-[rgba(48,26,89,0.25)] px-4 py-4 text-[16px] [font-family:var(--font-roboto-condensed)] hover:bg-[rgba(72,36,124,0.35)] transition flex items-center justify-center gap-2"
                     onClick={() => {
+                      if (!isValidShowKey(activeActionShowJumpTarget.showKey)) return;
                       const songQuery = activeActionShowJumpTarget.song
                         ? `?song=${encodeURIComponent(activeActionShowJumpTarget.song)}`
                         : "";

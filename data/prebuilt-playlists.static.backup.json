@@ -1,44 +1,89 @@
 {
-  "generatedAt": 1773968908532,
+  "generatedAt": 1773968725108,
   "playlists": [
     {
       "name": "12 Bar Bruise",
       "prebuiltKind": "album-live-comp",
       "slots": [
         {
-          "canonicalTitle": "muckraker",
+          "canonicalTitle": "elbow",
           "variants": [
             {
-              "title": "Muckraker",
-              "url": "https://archive.org/download/king-gizzard-the-lizard-wizard-live-at-happy-dog-in-cleveland-ohio-on-june-14-2015-audio/07%20Muckraker.mp3",
+              "title": "Elbow",
+              "url": "https://archive.org/download/kglw2024-09-08.SBD/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Red%20Rocks%20Amphitheatre%2C%20Morrison%2C%20CO%20(9-8-24)%20-%2006%20Elbow%20(Live).mp3",
               "track": "1",
-              "showKey": "2015-06-14|happy-dog-in-cleveland-ohio-on-june-14-2015",
-              "showDate": "2015-06-14",
-              "venueText": "King Gizzard & the Lizard Wizard Live at Happy Dog in Cleveland, Ohio on June 14, 2015 (Audio)",
-              "artwork": "https://archive.org/services/img/king-gizzard-the-lizard-wizard-live-at-happy-dog-in-cleveland-ohio-on-june-14-2015-audio"
+              "showKey": "2024-09-08|red-rocks-ampitheatre",
+              "showDate": "2024-09-08",
+              "venueText": "King Gizzard & The Lizard Wizard Live at Red Rocks Amphitheatre on 2024-09-08",
+              "artwork": "https://archive.org/services/img/kglw2024-09-08.SBD"
             },
             {
-              "title": "Muckraker",
-              "url": "https://archive.org/download/king-gizzard-the-lizard-wizard-live-2012-audio/10%20Muckraker%20by%20King%20Gizzard%20%26%20The%20Lizard%20Wizard.mp3",
+              "title": "Elbow",
+              "url": "https://archive.org/download/king-gizzard-the-lizard-wizard-live-from-studio-5-at-pbs-106.7fms-2013-drive/02%20Elbow.mp3",
               "track": "1",
-              "showKey": "2012-01-01|king-gizzard-and-the-lizard-wizard-live-2012-audio",
-              "showDate": "2012-01-01",
-              "venueText": "King Gizzard & The Lizard Wizard Live 2012 (Audio)",
-              "artwork": "https://archive.org/services/img/king-gizzard-the-lizard-wizard-live-2012-audio"
+              "showKey": "2013-02-08|pbs-106-7-fm-studios",
+              "showDate": "2013-02-08",
+              "venueText": "King Gizzard & The Lizard Wizard Live at PBS 106.7 FM Studios on 2013-02-08",
+              "artwork": "https://archive.org/services/img/king-gizzard-the-lizard-wizard-live-from-studio-5-at-pbs-106.7fms-2013-drive"
+            },
+            {
+              "title": "Elbow",
+              "url": "https://archive.org/download/kglw2011-12-31/01%20-%20Elbow.mp3",
+              "track": "1",
+              "showKey": "2011-12-31|esplanade-hotel",
+              "showDate": "2011-12-31",
+              "venueText": "King Gizzard & The Lizard Wizard Live at Esplanade Hotel on 2011-12-31",
+              "artwork": "https://archive.org/services/img/kglw2011-12-31"
+            },
+            {
+              "title": "Elbow",
+              "url": "https://archive.org/download/king-gizzard-the-lizard-wizard-live-at-cherry-fest-2012-audio/12-Elbow_master.mp3",
+              "track": "1",
+              "showKey": "2012-11-25|ac-dc-lane",
+              "showDate": "2012-11-25",
+              "venueText": "King Gizzard & The Lizard Wizard Live at AC/DC Lane on 2012-11-25",
+              "artwork": "https://archive.org/services/img/king-gizzard-the-lizard-wizard-live-at-cherry-fest-2012-audio"
             }
           ]
         },
         {
-          "canonicalTitle": "12 bar bruise",
+          "canonicalTitle": "muckraker",
           "variants": [
             {
-              "title": "12 Bar Bruise",
-              "url": "https://archive.org/download/king-gizzard-the-lizard-wizard-live-2012-audio/10%20Muckraker%20by%20King%20Gizzard%20%26%20The%20Lizard%20Wizard.mp3",
+              "title": "Muckraker",
+              "url": "https://archive.org/download/kglw2015-06-19/07%20-%20Muckraker.mp3",
               "track": "1",
-              "showKey": "2012-01-01|king-gizzard-and-the-lizard-wizard-live-2012-audio",
-              "showDate": "2012-01-01",
-              "venueText": "King Gizzard & The Lizard Wizard Live 2012 (Audio)",
-              "artwork": "https://archive.org/services/img/king-gizzard-the-lizard-wizard-live-2012-audio"
+              "showKey": "2015-06-19|the-bowery-ballroom-on-june-19-2015",
+              "showDate": "2015-06-19",
+              "venueText": "King Gizzard & the Lizard Wizard Live at the Bowery Ballroom on June 19, 2015 (Audio)",
+              "artwork": "https://archive.org/services/img/kglw2015-06-19"
+            },
+            {
+              "title": "Muckraker",
+              "url": "https://archive.org/download/king-gizzard-the-lizard-wizard-live-from-studio-5-at-pbs-106.7fms-2013-drive/02%20Elbow.mp3",
+              "track": "1",
+              "showKey": "2013-02-08|pbs-106-7-fm-studios",
+              "showDate": "2013-02-08",
+              "venueText": "King Gizzard & The Lizard Wizard Live at PBS 106.7 FM Studios on 2013-02-08",
+              "artwork": "https://archive.org/services/img/king-gizzard-the-lizard-wizard-live-from-studio-5-at-pbs-106.7fms-2013-drive"
+            },
+            {
+              "title": "Muckraker",
+              "url": "https://archive.org/download/king-gizzard-the-lizard-wizard-live-at-cherry-fest-2012-audio/12-Elbow_master.mp3",
+              "track": "1",
+              "showKey": "2012-11-25|ac-dc-lane",
+              "showDate": "2012-11-25",
+              "venueText": "King Gizzard & The Lizard Wizard Live at AC/DC Lane on 2012-11-25",
+              "artwork": "https://archive.org/services/img/king-gizzard-the-lizard-wizard-live-at-cherry-fest-2012-audio"
+            },
+            {
+              "title": "Muckraker",
+              "url": "https://archive.org/download/kglw2015-06-24.matrix.flac1644/KingGizzard2015-06-24_nyctaper_t11.mp3",
+              "track": "1",
+              "showKey": "2015-06-24|baby-s-all-right-on-june-24-2015",
+              "showDate": "2015-06-24",
+              "venueText": "King Gizzard & the Lizard Wizard Live at Baby’s All Right on June 24, 2015 (Audio)",
+              "artwork": "https://archive.org/services/img/kglw2015-06-24.matrix.flac1644"
             }
           ]
         },
@@ -47,7 +92,7 @@
           "variants": [
             {
               "title": "Sam Cherry's Last Shot",
-              "url": "https://archive.org/download/king-gizzard-the-lizard-wizard-live-2012-audio/10%20Muckraker%20by%20King%20Gizzard%20%26%20The%20Lizard%20Wizard.mp3",
+              "url": "https://archive.org/download/king-gizzard-the-lizard-wizard-live-2012-audio/09%20Sam%20Cherry's%20Last%20Shot%20by%20King%20Gizzard%20%26%20The%20Lizard%20Wizard%20and%20Broderick%20Smith.mp3",
               "track": "1",
               "showKey": "2012-01-01|king-gizzard-and-the-lizard-wizard-live-2012-audio",
               "showDate": "2012-01-01",
@@ -61,7 +106,7 @@
           "variants": [
             {
               "title": "High Hopes Low",
-              "url": "https://archive.org/download/king-gizzard-the-lizard-wizard-live-from-studio-5-at-pbs-106.7fms-2013-drive/09%20High%20Hopes%20Low.mp3",
+              "url": "https://archive.org/download/king-gizzard-the-lizard-wizard-live-from-studio-5-at-pbs-106.7fms-2013-drive/02%20Elbow.mp3",
               "track": "1",
               "showKey": "2013-02-08|pbs-106-7-fm-studios",
               "showDate": "2013-02-08",
@@ -70,7 +115,7 @@
             },
             {
               "title": "High Hopes Low",
-              "url": "https://archive.org/download/kglw2011-12-31/07%20-%20High%20Hopes%20Low.mp3",
+              "url": "https://archive.org/download/kglw2011-12-31/01%20-%20Elbow.mp3",
               "track": "1",
               "showKey": "2011-12-31|esplanade-hotel",
               "showDate": "2011-12-31",
@@ -79,7 +124,7 @@
             },
             {
               "title": "High Hopes Low",
-              "url": "https://archive.org/download/king-gizzard-the-lizard-wizard-live-at-cherry-fest-2012-audio/06-HighHopesLow_master.mp3",
+              "url": "https://archive.org/download/king-gizzard-the-lizard-wizard-live-at-cherry-fest-2012-audio/12-Elbow_master.mp3",
               "track": "1",
               "showKey": "2012-11-25|ac-dc-lane",
               "showDate": "2012-11-25",
@@ -143,7 +188,7 @@
           "variants": [
             {
               "title": "Bloody Ripper",
-              "url": "https://archive.org/download/king-gizzard-the-lizard-wizard-live-from-studio-5-at-pbs-106.7fms-2013-drive/09%20High%20Hopes%20Low.mp3",
+              "url": "https://archive.org/download/king-gizzard-the-lizard-wizard-live-from-studio-5-at-pbs-106.7fms-2013-drive/02%20Elbow.mp3",
               "track": "1",
               "showKey": "2013-02-08|pbs-106-7-fm-studios",
               "showDate": "2013-02-08",
@@ -152,7 +197,7 @@
             },
             {
               "title": "Bloody Ripper",
-              "url": "https://archive.org/download/king-gizzard-the-lizard-wizard-live-at-cherry-fest-2012-audio/06-HighHopesLow_master.mp3",
+              "url": "https://archive.org/download/king-gizzard-the-lizard-wizard-live-at-cherry-fest-2012-audio/12-Elbow_master.mp3",
               "track": "1",
               "showKey": "2012-11-25|ac-dc-lane",
               "showDate": "2012-11-25",
@@ -170,7 +215,7 @@
             },
             {
               "title": "Bloody Ripper",
-              "url": "https://archive.org/download/king-gizzard-the-lizard-wizard-live-2012-audio/10%20Muckraker%20by%20King%20Gizzard%20%26%20The%20Lizard%20Wizard.mp3",
+              "url": "https://archive.org/download/king-gizzard-the-lizard-wizard-live-2012-audio/09%20Sam%20Cherry's%20Last%20Shot%20by%20King%20Gizzard%20%26%20The%20Lizard%20Wizard%20and%20Broderick%20Smith.mp3",
               "track": "1",
               "showKey": "2012-01-01|king-gizzard-and-the-lizard-wizard-live-2012-audio",
               "showDate": "2012-01-01",
@@ -184,7 +229,7 @@
           "variants": [
             {
               "title": "Uh Oh, I Called Mum",
-              "url": "https://archive.org/download/king-gizzard-the-lizard-wizard-live-from-studio-5-at-pbs-106.7fms-2013-drive/09%20High%20Hopes%20Low.mp3",
+              "url": "https://archive.org/download/king-gizzard-the-lizard-wizard-live-from-studio-5-at-pbs-106.7fms-2013-drive/02%20Elbow.mp3",
               "track": "1",
               "showKey": "2013-02-08|pbs-106-7-fm-studios",
               "showDate": "2013-02-08",
@@ -193,7 +238,7 @@
             },
             {
               "title": "Uh Oh, I Called Mum",
-              "url": "https://archive.org/download/king-gizzard-the-lizard-wizard-live-at-cherry-fest-2012-audio/06-HighHopesLow_master.mp3",
+              "url": "https://archive.org/download/king-gizzard-the-lizard-wizard-live-at-cherry-fest-2012-audio/12-Elbow_master.mp3",
               "track": "1",
               "showKey": "2012-11-25|ac-dc-lane",
               "showDate": "2012-11-25",
@@ -411,6 +456,15 @@
           "variants": [
             {
               "title": "Head On/Pill",
+              "url": "https://archive.org/download/kglw2023-06-03/kglw2023-03-06t13.mp3",
+              "track": "1",
+              "showKey": "2023-06-03|the-caverns-ampitheater-outdoor-stage",
+              "showDate": "2023-06-03",
+              "venueText": "King Gizzard & The Lizard Wizard Live at The Caverns Ampitheater Outdoor Stage on 2023-06-03",
+              "artwork": "https://archive.org/services/img/kglw2023-06-03"
+            },
+            {
+              "title": "Head On/Pill",
               "url": "https://archive.org/download/kglw2024-11-15.bandcampbootlegger/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20in%20Austin%20'24%20-%2001%20Head%20On-Pill%20(Live%20in%20Austin%20'24).mp3",
               "track": "1",
               "showKey": "2024-11-15|germania-insurance-amphitheater",
@@ -435,15 +489,6 @@
               "showDate": "2018-06-22",
               "venueText": "King Gizzard & The Lizard Wizard Live at Stubbs BBQ Waller Creek Amphitheater on 2018-06-22",
               "artwork": "https://archive.org/services/img/kglw2018-06-22"
-            },
-            {
-              "title": "Head On/Pill",
-              "url": "https://archive.org/download/kglw2019-07-12/18.%20Head%20On-Pill.mp3",
-              "track": "1",
-              "showKey": "2019-07-12|thebarton-theatre",
-              "showDate": "2019-07-12",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Thebarton Theatre on 2019-07-12",
-              "artwork": "https://archive.org/services/img/kglw2019-07-12"
             }
           ]
         },
@@ -525,6 +570,15 @@
             },
             {
               "title": "Let Me Mend the Past",
+              "url": "https://archive.org/download/kglw2023-06-04/kglw2023-06-04t08.mp3",
+              "track": "1",
+              "showKey": "2023-06-04|the-caverns-ampitheater-outdoor-stage",
+              "showDate": "2023-06-04",
+              "venueText": "King Gizzard & The Lizard Wizard Live at The Caverns Ampitheater Outdoor Stage on 2023-06-04",
+              "artwork": "https://archive.org/services/img/kglw2023-06-04"
+            },
+            {
+              "title": "Let Me Mend the Past",
               "url": "https://archive.org/download/kglw2024-09-14.bandcampbootlegger/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20The%20Gorge%20Amphitheatre%2C%20Quincy%2C%20WA%20(9-14-24)%20-%2015%20Let%20Me%20Mend%20The%20Past%20(Live).mp3",
               "track": "1",
               "showKey": "2024-09-14|the-gorge-amphitheater",
@@ -540,15 +594,6 @@
               "showDate": "2024-08-20",
               "venueText": "King Gizzard & The Lizard Wizard Live at Thompson's Point on 2024-08-20",
               "artwork": "https://archive.org/services/img/kglw2024-08-20.SBD"
-            },
-            {
-              "title": "Let Me Mend the Past",
-              "url": "https://archive.org/download/kglw2024-09-09.earlyshowbandcampbootlegger/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Red%20Rocks%20Amphitheatre%20EARLY-%20Morrison-%20CO%20(9-9-24)%20(1)%2FKing%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Red%20Rocks%20Amphitheatre%20EARLY%2C%20Morrison%2C%20CO%20(9-9-24)%20-%2012%20God%20Is%20Calling%20Me%20Back%20Home%20(Live).mp3",
-              "track": "1",
-              "showKey": "2024-09-09|red-rocks-ampitheatre",
-              "showDate": "2024-09-09",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Red Rocks Amphitheatre on 2024-09-09",
-              "artwork": "https://archive.org/services/img/kglw2024-09-09.earlyshowbandcampbootlegger"
             }
           ]
         },
@@ -648,12 +693,12 @@
             },
             {
               "title": "Float Along – Fill Your Lungs",
-              "url": "https://archive.org/download/kglw2024-09-09.lateshowbandcampbootlegger/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Red%20Rocks%20Amphitheatre%20LATE-%20Morrison-%20CO%20(9-9-24)%20(1)%2FKing%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Red%20Rocks%20Amphitheatre%20LATE%2C%20Morrison%2C%20CO%20(9-9-24)%20-%2019%20Float%20Along%20-%20Fill%20Your%20Lungs%20(Live).mp3",
+              "url": "https://archive.org/download/kglw2024-05-29.dankski/kglw2024.05.29t01.mp3",
               "track": "1",
-              "showKey": "2024-09-09|red-rocks-ampitheatre",
-              "showDate": "2024-09-09",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Red Rocks Amphitheatre on 2024-09-09",
-              "artwork": "https://archive.org/services/img/kglw2024-09-09.lateshowbandcampbootlegger"
+              "showKey": "2024-05-29|the-civic-hall",
+              "showDate": "2024-05-29",
+              "venueText": "King Gizzard & The Lizard Wizard Live at The Civic Hall on 2024-05-29",
+              "artwork": "https://archive.org/services/img/kglw2024-05-29.dankski"
             }
           ]
         }
@@ -668,7 +713,7 @@
           "variants": [
             {
               "title": "Stressin'",
-              "url": "https://archive.org/download/kglw2024-09-08.SBD/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Red%20Rocks%20Amphitheatre%2C%20Morrison%2C%20CO%20(9-8-24)%20-%2012%20Stressin'%20(Live).mp3",
+              "url": "https://archive.org/download/kglw2024-09-08.SBD/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Red%20Rocks%20Amphitheatre%2C%20Morrison%2C%20CO%20(9-8-24)%20-%2006%20Elbow%20(Live).mp3",
               "track": "1",
               "showKey": "2024-09-08|red-rocks-ampitheatre",
               "showDate": "2024-09-08",
@@ -741,6 +786,15 @@
           "variants": [
             {
               "title": "It's Got Old",
+              "url": "https://archive.org/download/kglw2023-06-04/kglw2023-06-04t08.mp3",
+              "track": "1",
+              "showKey": "2023-06-04|the-caverns-ampitheater-outdoor-stage",
+              "showDate": "2023-06-04",
+              "venueText": "King Gizzard & The Lizard Wizard Live at The Caverns Ampitheater Outdoor Stage on 2023-06-04",
+              "artwork": "https://archive.org/services/img/kglw2023-06-04"
+            },
+            {
+              "title": "It's Got Old",
               "url": "https://archive.org/download/kglw2024-09-09.earlyshowbandcampbootlegger/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Red%20Rocks%20Amphitheatre%20EARLY-%20Morrison-%20CO%20(9-9-24)%20(1)%2FKing%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Red%20Rocks%20Amphitheatre%20EARLY%2C%20Morrison%2C%20CO%20(9-9-24)%20-%2012%20God%20Is%20Calling%20Me%20Back%20Home%20(Live).mp3",
               "track": "1",
               "showKey": "2024-09-09|red-rocks-ampitheatre",
@@ -765,15 +819,6 @@
               "showDate": "2021-12-19",
               "venueText": "King Gizzard & The Lizard Wizard Live at The Princess Theatre on 2021-12-19",
               "artwork": "https://archive.org/services/img/king-gizzard-the-lizard-wizard-live-in-brisbane-21-audio"
-            },
-            {
-              "title": "It's Got Old",
-              "url": "https://archive.org/download/kglw2015-09-12.sbd-mk41v.flac1644/kglw2015-09-12pourhouse_acidjack-10.mp3",
-              "track": "1",
-              "showKey": "2015-09-12|the-hopscotch-music-festival-at-the-pour-house-on-september-",
-              "showDate": "2015-09-12",
-              "venueText": "King Gizzard & the Lizard Wizard Live at the Hopscotch Music Festival at the Pour House on September 12, 2015 (Audio)",
-              "artwork": "https://archive.org/services/img/kglw2015-09-12.sbd-mk41v.flac1644"
             }
           ]
         },
@@ -846,6 +891,15 @@
           "variants": [
             {
               "title": "Sleepwalker",
+              "url": "https://archive.org/download/kglw2023-06-04/kglw2023-06-04t08.mp3",
+              "track": "1",
+              "showKey": "2023-06-04|the-caverns-ampitheater-outdoor-stage",
+              "showDate": "2023-06-04",
+              "venueText": "King Gizzard & The Lizard Wizard Live at The Caverns Ampitheater Outdoor Stage on 2023-06-04",
+              "artwork": "https://archive.org/services/img/kglw2023-06-04"
+            },
+            {
+              "title": "Sleepwalker",
               "url": "https://archive.org/download/king-gizzard-the-lizard-wizard-one-off-acoustic-show-at-the-brunswick-ballroom-on-12132021-audio/13%20Stressin'.mp3",
               "track": "1",
               "showKey": "2021-12-13|the-brunswick-ballroom",
@@ -870,15 +924,6 @@
               "showDate": "2014-05-02",
               "venueText": "King Gizzard & The Lizard Wizard Live at Carson Creek Ranch on 2014-05-02",
               "artwork": "https://archive.org/services/img/king-gizzard-the-lizard-wizard-live-at-levitation-14-audio"
-            },
-            {
-              "title": "Sleepwalker",
-              "url": "https://archive.org/download/king-gizzard-the-lizard-wizard-live-in-brisbane-21-audio/13%20Stressin'.mp3",
-              "track": "1",
-              "showKey": "2021-12-19|the-princess-theatre",
-              "showDate": "2021-12-19",
-              "venueText": "King Gizzard & The Lizard Wizard Live at The Princess Theatre on 2021-12-19",
-              "artwork": "https://archive.org/services/img/king-gizzard-the-lizard-wizard-live-in-brisbane-21-audio"
             }
           ]
         },
@@ -928,7 +973,7 @@
           "variants": [
             {
               "title": "Oddments",
-              "url": "https://archive.org/download/king-gizzard-the-lizard-wizard-live-2012-audio/10%20Muckraker%20by%20King%20Gizzard%20%26%20The%20Lizard%20Wizard.mp3",
+              "url": "https://archive.org/download/king-gizzard-the-lizard-wizard-live-2012-audio/09%20Sam%20Cherry's%20Last%20Shot%20by%20King%20Gizzard%20%26%20The%20Lizard%20Wizard%20and%20Broderick%20Smith.mp3",
               "track": "1",
               "showKey": "2012-01-01|king-gizzard-and-the-lizard-wizard-live-2012-audio",
               "showDate": "2012-01-01",
@@ -1162,12 +1207,12 @@
             },
             {
               "title": "Hot Water",
-              "url": "https://archive.org/download/kglw2024-05-22.Hamburg24/02%20-%20Float%20Along%20%E2%80%93%20Fill%20Your%20Lungs.mp3",
+              "url": "https://archive.org/download/kglw2023-06-03/kglw2023-03-06t13.mp3",
               "track": "1",
-              "showKey": "2024-05-22|stadtpark-open-air",
-              "showDate": "2024-05-22",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Stadtpark Open Air on 2024-05-22",
-              "artwork": "https://archive.org/services/img/kglw2024-05-22.Hamburg24"
+              "showKey": "2023-06-03|the-caverns-ampitheater-outdoor-stage",
+              "showDate": "2023-06-03",
+              "venueText": "King Gizzard & The Lizard Wizard Live at The Caverns Ampitheater Outdoor Stage on 2023-06-03",
+              "artwork": "https://archive.org/services/img/kglw2023-06-03"
             }
           ]
         },
@@ -1194,21 +1239,21 @@
             },
             {
               "title": "Am I In Heaven?",
+              "url": "https://archive.org/download/kglw2023-06-03/kglw2023-03-06t13.mp3",
+              "track": "1",
+              "showKey": "2023-06-03|the-caverns-ampitheater-outdoor-stage",
+              "showDate": "2023-06-03",
+              "venueText": "King Gizzard & The Lizard Wizard Live at The Caverns Ampitheater Outdoor Stage on 2023-06-03",
+              "artwork": "https://archive.org/services/img/kglw2023-06-03"
+            },
+            {
+              "title": "Am I In Heaven?",
               "url": "https://archive.org/download/kglw2024-05-15.wav/12-Float%20Along%20-%20Fill%20Your%20Lungs.mp3",
               "track": "1",
               "showKey": "2024-05-15|forest-national-brussels-belgium",
               "showDate": "2024-05-15",
               "venueText": "King Gizzard & The Lizard Wizard Live at Forest National, Brussels, Belgium on 2024-05-15",
               "artwork": "https://archive.org/services/img/kglw2024-05-15.wav"
-            },
-            {
-              "title": "Am I In Heaven?",
-              "url": "https://archive.org/download/kglw2024-09-08.SBD/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Red%20Rocks%20Amphitheatre%2C%20Morrison%2C%20CO%20(9-8-24)%20-%2012%20Stressin'%20(Live).mp3",
-              "track": "1",
-              "showKey": "2024-09-08|red-rocks-ampitheatre",
-              "showDate": "2024-09-08",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Red Rocks Amphitheatre on 2024-09-08",
-              "artwork": "https://archive.org/services/img/kglw2024-09-08.SBD"
             }
           ]
         },
@@ -1235,21 +1280,21 @@
             },
             {
               "title": "Slow Jam 1",
+              "url": "https://archive.org/download/kglw2023-06-04/kglw2023-06-04t08.mp3",
+              "track": "1",
+              "showKey": "2023-06-04|the-caverns-ampitheater-outdoor-stage",
+              "showDate": "2023-06-04",
+              "venueText": "King Gizzard & The Lizard Wizard Live at The Caverns Ampitheater Outdoor Stage on 2023-06-04",
+              "artwork": "https://archive.org/services/img/kglw2023-06-04"
+            },
+            {
+              "title": "Slow Jam 1",
               "url": "https://archive.org/download/kglw2022-10-22.ScheopsMK41.Flac24/KingGizzard2022-10-22-t-07.mp3",
               "track": "1",
               "showKey": "2022-10-22|franklin-music-hall",
               "showDate": "2022-10-22",
               "venueText": "King Gizzard & The Lizard Wizard Live at Franklin Music Hall on 2022-10-22",
               "artwork": "https://archive.org/services/img/kglw2022-10-22.ScheopsMK41.Flac24"
-            },
-            {
-              "title": "Slow Jam 1",
-              "url": "https://archive.org/download/kglw2024-08-25.24-48_SchoepsM41V_/13%20Slow%20Jam%201%20(''Work%20This%20Time''%20tease)%20(_)%20Sense%20-%20(Tour%20debut).mp3",
-              "track": "1",
-              "showKey": "2024-08-25|megacorp-pavilion",
-              "showDate": "2024-08-25",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Megacorp Pavilion Outdoor on 2024-08-25",
-              "artwork": "https://archive.org/services/img/kglw2024-08-25.24-48_SchoepsM41V_"
             }
           ]
         },
@@ -1281,6 +1326,15 @@
           "variants": [
             {
               "title": "Her and I (Slow Jam 2)",
+              "url": "https://archive.org/download/kglw2023-06-04/kglw2023-06-04t08.mp3",
+              "track": "1",
+              "showKey": "2023-06-04|the-caverns-ampitheater-outdoor-stage",
+              "showDate": "2023-06-04",
+              "venueText": "King Gizzard & The Lizard Wizard Live at The Caverns Ampitheater Outdoor Stage on 2023-06-04",
+              "artwork": "https://archive.org/services/img/kglw2023-06-04"
+            },
+            {
+              "title": "Her and I (Slow Jam 2)",
               "url": "https://archive.org/download/kglw2022-10-22.ScheopsMK41.Flac24/KingGizzard2022-10-22-t-07.mp3",
               "track": "1",
               "showKey": "2022-10-22|franklin-music-hall",
@@ -1305,15 +1359,6 @@
               "showDate": "2024-08-23",
               "venueText": "King Gizzard & The Lizard Wizard Live at The Aretha Franklin Amphitheatre on 2024-08-23",
               "artwork": "https://archive.org/services/img/kglw2024-08-23"
-            },
-            {
-              "title": "Her and I (Slow Jam 2)",
-              "url": "https://archive.org/download/kglw2024-08-25.24-48_SchoepsM41V_/13%20Slow%20Jam%201%20(''Work%20This%20Time''%20tease)%20(_)%20Sense%20-%20(Tour%20debut).mp3",
-              "track": "1",
-              "showKey": "2024-08-25|megacorp-pavilion",
-              "showDate": "2024-08-25",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Megacorp Pavilion on 2024-08-25",
-              "artwork": "https://archive.org/services/img/kglw2024-08-25.24-48_SchoepsM41V_"
             }
           ]
         }
@@ -1383,6 +1428,15 @@
           "variants": [
             {
               "title": "Lonely Steel Sheet Flyer",
+              "url": "https://archive.org/download/kglw2023-06-04/kglw2023-06-04t08.mp3",
+              "track": "1",
+              "showKey": "2023-06-04|the-caverns-ampitheater-outdoor-stage",
+              "showDate": "2023-06-04",
+              "venueText": "King Gizzard & The Lizard Wizard Live at The Caverns Ampitheater Outdoor Stage on 2023-06-04",
+              "artwork": "https://archive.org/services/img/kglw2023-06-04"
+            },
+            {
+              "title": "Lonely Steel Sheet Flyer",
               "url": "https://archive.org/download/kglw2023.08.14/02-Lonely%20Steel%20Sheet%20Flyer%20_.mp3",
               "track": "1",
               "showKey": "2023-08-14|palp-festival-rocklette-verbier-switzerland-2023-08-14",
@@ -1392,30 +1446,21 @@
             },
             {
               "title": "Lonely Steel Sheet Flyer",
+              "url": "https://archive.org/download/kglw2017-10-12.ccm4.flac1644/kglw2017-10-12t25.mp3",
+              "track": "1",
+              "showKey": "2017-10-12|the-fillmore",
+              "showDate": "2017-10-12",
+              "venueText": "King Gizzard & The Lizard Wizard Live at The Fillmore on 2017-10-12",
+              "artwork": "https://archive.org/services/img/kglw2017-10-12.ccm4.flac1644"
+            },
+            {
+              "title": "Lonely Steel Sheet Flyer",
               "url": "https://archive.org/download/kglw2017-09-27.zoom-h4.flac1644/12%20Lonely%20Steel%20Sheet%20Flyer.mp3",
               "track": "1",
               "showKey": "2017-09-27|variety-playhouse",
               "showDate": "2017-09-27",
               "venueText": "King Gizzard & The Lizard Wizard Live at Variety Playhouse on 2017-09-27",
               "artwork": "https://archive.org/services/img/kglw2017-09-27.zoom-h4.flac1644"
-            },
-            {
-              "title": "Lonely Steel Sheet Flyer",
-              "url": "https://archive.org/download/KG2017-09-23/14-Lonely%20Steel%20Sheet%20Flyer.mp3",
-              "track": "1",
-              "showKey": "2017-09-23|arcadia-creek-festival-place",
-              "showDate": "2017-09-23",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Arcadia Creek Festival Place on 2017-09-23",
-              "artwork": "https://archive.org/services/img/KG2017-09-23"
-            },
-            {
-              "title": "Lonely Steel Sheet Flyer",
-              "url": "https://archive.org/download/kglw2023-04-06/002%20lonely%20steel%20sheet.mp3",
-              "track": "1",
-              "showKey": "2023-04-06|the-caverns",
-              "showDate": "2023-04-06",
-              "venueText": "King Gizzard & The Lizard Wizard Live at The Caverns on 2023-04-06",
-              "artwork": "https://archive.org/services/img/kglw2023-04-06"
             }
           ]
         }
@@ -1734,6 +1779,15 @@
             },
             {
               "title": "Wah Wah",
+              "url": "https://archive.org/download/kglw2023-06-04/kglw2023-06-04t08.mp3",
+              "track": "1",
+              "showKey": "2023-06-04|the-caverns-ampitheater-outdoor-stage",
+              "showDate": "2023-06-04",
+              "venueText": "King Gizzard & The Lizard Wizard Live at The Caverns Ampitheater Outdoor Stage on 2023-06-04",
+              "artwork": "https://archive.org/services/img/kglw2023-06-04"
+            },
+            {
+              "title": "Wah Wah",
               "url": "https://archive.org/download/kglw2024-05-23.Amsterdam24/10%20-%20Wah%20Wah.mp3",
               "track": "1",
               "showKey": "2024-05-23|afas-live",
@@ -1749,15 +1803,6 @@
               "showDate": "2024-08-23",
               "venueText": "King Gizzard & The Lizard Wizard Live at The Aretha Franklin Amphitheatre on 2024-08-23",
               "artwork": "https://archive.org/services/img/kglw2024-08-23"
-            },
-            {
-              "title": "Wah Wah",
-              "url": "https://archive.org/download/kglw2024-11-15.bandcampbootlegger/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20in%20Austin%20'24%20-%2001%20Head%20On-Pill%20(Live%20in%20Austin%20'24).mp3",
-              "track": "1",
-              "showKey": "2024-11-15|germania-insurance-amphitheater",
-              "showDate": "2024-11-15",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Germania Insurance Amphitheater on 2024-11-15",
-              "artwork": "https://archive.org/services/img/kglw2024-11-15.bandcampbootlegger"
             }
           ]
         },
@@ -2475,7 +2520,7 @@
             },
             {
               "title": "Some Context",
-              "url": "https://archive.org/download/KG2017-09-23/14-Lonely%20Steel%20Sheet%20Flyer.mp3",
+              "url": "https://archive.org/download/KG2017-09-23/02-Some%20Context.mp3",
               "track": "1",
               "showKey": "2017-09-23|arcadia-creek-festival-place",
               "showDate": "2017-09-23",
@@ -2621,7 +2666,7 @@
             },
             {
               "title": "Welcome to an Altered Future",
-              "url": "https://archive.org/download/kglw2024-09-09.lateshowbandcampbootlegger/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Red%20Rocks%20Amphitheatre%20LATE-%20Morrison-%20CO%20(9-9-24)%20(1)%2FKing%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Red%20Rocks%20Amphitheatre%20LATE%2C%20Morrison%2C%20CO%20(9-9-24)%20-%2019%20Float%20Along%20-%20Fill%20Your%20Lungs%20(Live).mp3",
+              "url": "https://archive.org/download/kglw2024-09-09.lateshowbandcampbootlegger/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Red%20Rocks%20Amphitheatre%20LATE-%20Morrison-%20CO%20(9-9-24)%20(1)%2FKing%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Red%20Rocks%20Amphitheatre%20LATE%2C%20Morrison%2C%20CO%20(9-9-24)%20-%2015%20Welcome%20To%20An%20Altered%20Future%20(Live).mp3",
               "track": "1",
               "showKey": "2024-09-09|red-rocks-ampitheatre",
               "showDate": "2024-09-09",
@@ -2639,12 +2684,12 @@
             },
             {
               "title": "Welcome to an Altered Future",
-              "url": "https://archive.org/download/kglw2017-09-27.zoom-h4.flac1644/12%20Lonely%20Steel%20Sheet%20Flyer.mp3",
+              "url": "https://archive.org/download/kglw2017-10-12.ccm4.flac1644/kglw2017-10-12t25.mp3",
               "track": "1",
-              "showKey": "2017-09-27|variety-playhouse",
-              "showDate": "2017-09-27",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Variety Playhouse on 2017-09-27",
-              "artwork": "https://archive.org/services/img/kglw2017-09-27.zoom-h4.flac1644"
+              "showKey": "2017-10-12|the-fillmore",
+              "showDate": "2017-10-12",
+              "venueText": "King Gizzard & The Lizard Wizard Live at The Fillmore on 2017-10-12",
+              "artwork": "https://archive.org/services/img/kglw2017-10-12.ccm4.flac1644"
             }
           ]
         },
@@ -2703,6 +2748,15 @@
             },
             {
               "title": "Han-Tyumi, The Confused Cyborg",
+              "url": "https://archive.org/download/kglw2023-06-04/kglw2023-06-04t08.mp3",
+              "track": "1",
+              "showKey": "2023-06-04|the-caverns-ampitheater-outdoor-stage",
+              "showDate": "2023-06-04",
+              "venueText": "King Gizzard & The Lizard Wizard Live at The Caverns Ampitheater Outdoor Stage on 2023-06-04",
+              "artwork": "https://archive.org/services/img/kglw2023-06-04"
+            },
+            {
+              "title": "Han-Tyumi, The Confused Cyborg",
               "url": "https://archive.org/download/kglw2024-05-23.Amsterdam24/10%20-%20Wah%20Wah.mp3",
               "track": "1",
               "showKey": "2024-05-23|afas-live",
@@ -2718,15 +2772,6 @@
               "showDate": "2024-05-15",
               "venueText": "King Gizzard & The Lizard Wizard Live at Forest National, Brussels, Belgium on 2024-05-15",
               "artwork": "https://archive.org/services/img/kglw2024-05-15.wav"
-            },
-            {
-              "title": "Han-Tyumi, The Confused Cyborg",
-              "url": "https://archive.org/download/kglw2025-08-16.SBD.wav/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Field%20of%20Vision%20'25%20-%2006%20Hot%20Wax%20(Live%20at%20Field%20of%20Vision%20'25).mp3",
-              "track": "1",
-              "showKey": "2025-08-16|field-of-vision-at-meadow-creek",
-              "showDate": "2025-08-16",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Field of Vision at Meadow Creek on 2025-08-16",
-              "artwork": "https://archive.org/services/img/kglw2025-08-16.SBD.wav"
             }
           ]
         },
@@ -3321,7 +3366,7 @@
           "variants": [
             {
               "title": "Tetrachromacy",
-              "url": "https://archive.org/download/kglw2024-09-08.SBD/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Red%20Rocks%20Amphitheatre%2C%20Morrison%2C%20CO%20(9-8-24)%20-%2012%20Stressin'%20(Live).mp3",
+              "url": "https://archive.org/download/kglw2024-09-08.SBD/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Red%20Rocks%20Amphitheatre%2C%20Morrison%2C%20CO%20(9-8-24)%20-%2006%20Elbow%20(Live).mp3",
               "track": "1",
               "showKey": "2024-09-08|red-rocks-ampitheatre",
               "showDate": "2024-09-08",
@@ -3473,6 +3518,15 @@
             },
             {
               "title": "Greenhouse Heat Death",
+              "url": "https://archive.org/download/kglw2018-06-02.ccm4.flac16/kglw2018-06-02t09.mp3",
+              "track": "1",
+              "showKey": "2018-06-02|the-warfield",
+              "showDate": "2018-06-02",
+              "venueText": "King Gizzard & The Lizard Wizard Live at The Warfield on 2018-06-02",
+              "artwork": "https://archive.org/services/img/kglw2018-06-02.ccm4.flac16"
+            },
+            {
+              "title": "Greenhouse Heat Death",
               "url": "https://archive.org/download/kglw2018-03-06/02-Greenhouse%20Heat%20Death.mp3",
               "track": "1",
               "showKey": "2018-03-06|paradiso-grote-zaal",
@@ -3505,6 +3559,15 @@
             },
             {
               "title": "Muddy Water",
+              "url": "https://archive.org/download/kglw2023-06-04/kglw2023-06-04t08.mp3",
+              "track": "1",
+              "showKey": "2023-06-04|the-caverns-ampitheater-outdoor-stage",
+              "showDate": "2023-06-04",
+              "venueText": "King Gizzard & The Lizard Wizard Live at The Caverns Ampitheater Outdoor Stage on 2023-06-04",
+              "artwork": "https://archive.org/services/img/kglw2023-06-04"
+            },
+            {
+              "title": "Muddy Water",
               "url": "https://archive.org/download/kglw2024-05-23.Amsterdam24/10%20-%20Wah%20Wah.mp3",
               "track": "1",
               "showKey": "2024-05-23|afas-live",
@@ -3514,21 +3577,12 @@
             },
             {
               "title": "Muddy Water",
-              "url": "https://archive.org/download/kglw2024-09-08.SBD/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Red%20Rocks%20Amphitheatre%2C%20Morrison%2C%20CO%20(9-8-24)%20-%2012%20Stressin'%20(Live).mp3",
+              "url": "https://archive.org/download/kglw2024-09-08.SBD/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Red%20Rocks%20Amphitheatre%2C%20Morrison%2C%20CO%20(9-8-24)%20-%2006%20Elbow%20(Live).mp3",
               "track": "1",
               "showKey": "2024-09-08|red-rocks-ampitheatre",
               "showDate": "2024-09-08",
               "venueText": "King Gizzard & The Lizard Wizard Live at Red Rocks Amphitheatre on 2024-09-08",
               "artwork": "https://archive.org/services/img/kglw2024-09-08.SBD"
-            },
-            {
-              "title": "Muddy Water",
-              "url": "https://archive.org/download/kglw2024-08-28.mtx.flac24/kglw2024-08-28d1t05_Muddy_Water.mp3",
-              "track": "1",
-              "showKey": "2024-08-28|brown-s-island",
-              "showDate": "2024-08-28",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Brown's Island - Richmond, VA on 2024-08-28",
-              "artwork": "https://archive.org/services/img/kglw2024-08-28.mtx.flac24"
             }
           ]
         },
@@ -3628,7 +3682,7 @@
             },
             {
               "title": "The Great Chain of Being",
-              "url": "https://archive.org/download/kglw2024-09-09.lateshowbandcampbootlegger/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Red%20Rocks%20Amphitheatre%20LATE-%20Morrison-%20CO%20(9-9-24)%20(1)%2FKing%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Red%20Rocks%20Amphitheatre%20LATE%2C%20Morrison%2C%20CO%20(9-9-24)%20-%2019%20Float%20Along%20-%20Fill%20Your%20Lungs%20(Live).mp3",
+              "url": "https://archive.org/download/kglw2024-09-09.lateshowbandcampbootlegger/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Red%20Rocks%20Amphitheatre%20LATE-%20Morrison-%20CO%20(9-9-24)%20(1)%2FKing%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Red%20Rocks%20Amphitheatre%20LATE%2C%20Morrison%2C%20CO%20(9-9-24)%20-%2015%20Welcome%20To%20An%20Altered%20Future%20(Live).mp3",
               "track": "1",
               "showKey": "2024-09-09|red-rocks-ampitheatre",
               "showDate": "2024-09-09",
@@ -3701,30 +3755,30 @@
             },
             {
               "title": "The Wheel",
+              "url": "https://archive.org/download/kglw2023-06-04/kglw2023-06-04t08.mp3",
+              "track": "1",
+              "showKey": "2023-06-04|the-caverns-ampitheater-outdoor-stage",
+              "showDate": "2023-06-04",
+              "venueText": "King Gizzard & The Lizard Wizard Live at The Caverns Ampitheater Outdoor Stage on 2023-06-04",
+              "artwork": "https://archive.org/services/img/kglw2023-06-04"
+            },
+            {
+              "title": "The Wheel",
+              "url": "https://archive.org/download/kglw2024-05-29.dankski/kglw2024.05.29t01.mp3",
+              "track": "1",
+              "showKey": "2024-05-29|the-civic-hall",
+              "showDate": "2024-05-29",
+              "venueText": "King Gizzard & The Lizard Wizard Live at The Civic Hall on 2024-05-29",
+              "artwork": "https://archive.org/services/img/kglw2024-05-29.dankski"
+            },
+            {
+              "title": "The Wheel",
               "url": "https://archive.org/download/KGATLW6718/05The%20Castle%20in%20the%20Air.mp3",
               "track": "1",
               "showKey": "2018-06-07|kexp-studio",
               "showDate": "2018-06-07",
               "venueText": "King Gizzard & The Lizard Wizard Live at KEXP Studio on 2018-06-07",
               "artwork": "https://archive.org/services/img/KGATLW6718"
-            },
-            {
-              "title": "The Wheel",
-              "url": "https://archive.org/download/king-gizzard-the-lizard-wizard-one-off-acoustic-show-at-the-brunswick-ballroom-on-12132021-audio/13%20Stressin'.mp3",
-              "track": "1",
-              "showKey": "2021-12-13|the-brunswick-ballroom",
-              "showDate": "2021-12-13",
-              "venueText": "King Gizzard & The Lizard Wizard Live at The Brunswick Ballroom on 2021-12-13",
-              "artwork": "https://archive.org/services/img/king-gizzard-the-lizard-wizard-one-off-acoustic-show-at-the-brunswick-ballroom-on-12132021-audio"
-            },
-            {
-              "title": "The Wheel",
-              "url": "https://archive.org/download/king-gizzard-the-lizard-wizard-live-in-brisbane-21-audio/13%20Stressin'.mp3",
-              "track": "1",
-              "showKey": "2021-12-19|the-princess-theatre",
-              "showDate": "2021-12-19",
-              "venueText": "King Gizzard & The Lizard Wizard Live at The Princess Theatre on 2021-12-19",
-              "artwork": "https://archive.org/services/img/king-gizzard-the-lizard-wizard-live-in-brisbane-21-audio"
             }
           ]
         }
@@ -3771,6 +3825,15 @@
             },
             {
               "title": "Boogieman Sam",
+              "url": "https://archive.org/download/kglw2023-06-03/kglw2023-03-06t13.mp3",
+              "track": "1",
+              "showKey": "2023-06-03|the-caverns-ampitheater-outdoor-stage",
+              "showDate": "2023-06-03",
+              "venueText": "King Gizzard & The Lizard Wizard Live at The Caverns Ampitheater Outdoor Stage on 2023-06-03",
+              "artwork": "https://archive.org/services/img/kglw2023-06-03"
+            },
+            {
+              "title": "Boogieman Sam",
               "url": "https://archive.org/download/kglw2024-09-14.bandcampbootlegger/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20The%20Gorge%20Amphitheatre%2C%20Quincy%2C%20WA%20(9-14-24)%20-%2015%20Let%20Me%20Mend%20The%20Past%20(Live).mp3",
               "track": "1",
               "showKey": "2024-09-14|the-gorge-amphitheater",
@@ -3786,15 +3849,6 @@
               "showDate": "2024-05-16",
               "venueText": "King Gizzard & The Lizard Wizard Live at Offenbach Stadthalle on 2024-05-16",
               "artwork": "https://archive.org/services/img/kglw2024-05-16.KGLWOffenbach24"
-            },
-            {
-              "title": "Boogieman Sam",
-              "url": "https://archive.org/download/kglw2025-08-16.SBD.wav/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Field%20of%20Vision%20'25%20-%2006%20Hot%20Wax%20(Live%20at%20Field%20of%20Vision%20'25).mp3",
-              "track": "1",
-              "showKey": "2025-08-16|field-of-vision-at-meadow-creek",
-              "showDate": "2025-08-16",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Field of Vision at Meadow Creek on 2025-08-16",
-              "artwork": "https://archive.org/services/img/kglw2025-08-16.SBD.wav"
             }
           ]
         },
@@ -3999,30 +4053,21 @@
             },
             {
               "title": "Acarine",
-              "url": "https://archive.org/download/kglw2019-10-11.dpa4061.flac2448/20%20-%20Acarine.mp3",
+              "url": "https://archive.org/download/kglw2019-08-30/13-The%20Bird%20Song.mp3",
               "track": "1",
-              "showKey": "2019-10-11|carlswerk-victoria",
-              "showDate": "2019-10-11",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Carlswerk, Victoria on 2019-10-11",
-              "artwork": "https://archive.org/services/img/kglw2019-10-11.dpa4061.flac2448"
+              "showKey": "2019-08-30|franklin-music-hall",
+              "showDate": "2019-08-30",
+              "venueText": "King Gizzard & The Lizard Wizard Live at Franklin Music Hall on 2019-08-30",
+              "artwork": "https://archive.org/services/img/kglw2019-08-30"
             },
             {
               "title": "Acarine",
-              "url": "https://archive.org/download/kglw2019-10-01/1.7%20Acarine.mp3",
+              "url": "https://archive.org/download/kglw2019-01-01/tomp3.cc%20-King%20Gizzard%20and%20the%20Lizard%20Wizard%20%20Fishing%20For%20Fishies%20Recording%20Sessions.mp3",
               "track": "1",
-              "showKey": "2019-10-01|barrowland-ballroom",
-              "showDate": "2019-10-01",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Barrowland Ballroom on 2019-10-01",
-              "artwork": "https://archive.org/services/img/kglw2019-10-01"
-            },
-            {
-              "title": "Acarine",
-              "url": "https://archive.org/download/kglw2019-09-06/1.7%20KGATLW%20-%2007%20-%20Acarine%20(Live%20In%20Dallas%20_19).mp3",
-              "track": "1",
-              "showKey": "2019-09-06|bomb-factory",
-              "showDate": "2019-09-06",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Bomb Factory on 2019-09-06",
-              "artwork": "https://archive.org/services/img/kglw2019-09-06"
+              "showKey": "2019-01-01|the-studio",
+              "showDate": "2019-01-01",
+              "venueText": "King Gizzard & The Lizard Wizard Live at The Studio on 2019-01-01",
+              "artwork": "https://archive.org/services/img/kglw2019-01-01"
             }
           ]
         },
@@ -4049,21 +4094,21 @@
             },
             {
               "title": "Cyboogie",
-              "url": "https://archive.org/download/kglw2020-02-21/26%20-%20Cyboogie.mp3",
-              "track": "1",
-              "showKey": "2020-02-21|the-croxton",
-              "showDate": "2020-02-21",
-              "venueText": "King Gizzard & The Lizard Wizard Live at The Croxton on 2020-02-21",
-              "artwork": "https://archive.org/services/img/kglw2020-02-21"
-            },
-            {
-              "title": "Cyboogie",
               "url": "https://archive.org/download/kg2019-06-27/11-Tezeta.mp3",
               "track": "1",
               "showKey": "2019-06-27|forum-melbourne",
               "showDate": "2019-06-27",
               "venueText": "King Gizzard & The Lizard Wizard Live at Forum Melbourne on 2019-06-27",
               "artwork": "https://archive.org/services/img/kg2019-06-27"
+            },
+            {
+              "title": "Cyboogie",
+              "url": "https://archive.org/download/kglw2019-09-02.ca14.flac1648/12-Tezeta.mp3",
+              "track": "1",
+              "showKey": "2019-09-02|the-tabernacle",
+              "showDate": "2019-09-02",
+              "venueText": "King Gizzard & The Lizard Wizard Live at The Tabernacle on 2019-09-02",
+              "artwork": "https://archive.org/services/img/kglw2019-09-02.ca14.flac1648"
             }
           ]
         }
@@ -4105,7 +4150,7 @@
             },
             {
               "title": "Planet B",
-              "url": "https://archive.org/download/kglw2024-09-08.SBD/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Red%20Rocks%20Amphitheatre%2C%20Morrison%2C%20CO%20(9-8-24)%20-%2012%20Stressin'%20(Live).mp3",
+              "url": "https://archive.org/download/kglw2024-09-08.SBD/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Red%20Rocks%20Amphitheatre%2C%20Morrison%2C%20CO%20(9-8-24)%20-%2006%20Elbow%20(Live).mp3",
               "track": "1",
               "showKey": "2024-09-08|red-rocks-ampitheatre",
               "showDate": "2024-09-08",
@@ -4228,7 +4273,7 @@
             },
             {
               "title": "Superbug",
-              "url": "https://archive.org/download/kglw2020-02-21/26%20-%20Cyboogie.mp3",
+              "url": "https://archive.org/download/kglw2020-02-21/32%20-%20Superbug.mp3",
               "track": "1",
               "showKey": "2020-02-21|the-croxton",
               "showDate": "2020-02-21",
@@ -4301,21 +4346,21 @@
             },
             {
               "title": "Perihelion",
+              "url": "https://archive.org/download/kglw2023-06-03/kglw2023-03-06t13.mp3",
+              "track": "1",
+              "showKey": "2023-06-03|the-caverns-ampitheater-outdoor-stage",
+              "showDate": "2023-06-03",
+              "venueText": "King Gizzard & The Lizard Wizard Live at The Caverns Ampitheater Outdoor Stage on 2023-06-03",
+              "artwork": "https://archive.org/services/img/kglw2023-06-03"
+            },
+            {
+              "title": "Perihelion",
               "url": "https://archive.org/download/kglw2024-05-16.KGLWOffenbach24/08-Sea%20of%20Trees.mp3",
               "track": "1",
               "showKey": "2024-05-16|offenbach-stadthalle",
               "showDate": "2024-05-16",
               "venueText": "King Gizzard & The Lizard Wizard Live at Offenbach Stadthalle on 2024-05-16",
               "artwork": "https://archive.org/services/img/kglw2024-05-16.KGLWOffenbach24"
-            },
-            {
-              "title": "Perihelion",
-              "url": "https://archive.org/download/kglw2022-10-28/kglw2022-10-28%2005-Hot%20Wax.mp3",
-              "track": "1",
-              "showKey": "2022-10-28|stubb-s-bbq-waller-creek-amphitheater",
-              "showDate": "2022-10-28",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Waller Creek Amphitheater at Stubb's Bar-B-Q on 2022-10-28",
-              "artwork": "https://archive.org/services/img/kglw2022-10-28"
             }
           ]
         },
@@ -4392,12 +4437,12 @@
             },
             {
               "title": "Self-Immolate",
-              "url": "https://archive.org/download/kglw2024-05-16.KGLWOffenbach24/08-Sea%20of%20Trees.mp3",
+              "url": "https://archive.org/download/kglw2023-06-03/kglw2023-03-06t13.mp3",
               "track": "1",
-              "showKey": "2024-05-16|offenbach-stadthalle",
-              "showDate": "2024-05-16",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Offenbach Stadthalle on 2024-05-16",
-              "artwork": "https://archive.org/services/img/kglw2024-05-16.KGLWOffenbach24"
+              "showKey": "2023-06-03|the-caverns-ampitheater-outdoor-stage",
+              "showDate": "2023-06-03",
+              "venueText": "King Gizzard & The Lizard Wizard Live at The Caverns Ampitheater Outdoor Stage on 2023-06-03",
+              "artwork": "https://archive.org/services/img/kglw2023-06-03"
             }
           ]
         },
@@ -4433,12 +4478,12 @@
             },
             {
               "title": "Hell",
-              "url": "https://archive.org/download/kglw2022-10-29/kglw2022-10-29%2004-Sleep%20Drifter.mp3",
+              "url": "https://archive.org/download/kglw2023-06-03/kglw2023-03-06t13.mp3",
               "track": "1",
-              "showKey": "2022-10-29|stubb-s-bbq-waller-creek-amphitheater",
-              "showDate": "2022-10-29",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Stubb's BBQ Waller Creek Amphitheater on 2022-10-29",
-              "artwork": "https://archive.org/services/img/kglw2022-10-29"
+              "showKey": "2023-06-03|the-caverns-ampitheater-outdoor-stage",
+              "showDate": "2023-06-03",
+              "venueText": "King Gizzard & The Lizard Wizard Live at The Caverns Ampitheater Outdoor Stage on 2023-06-03",
+              "artwork": "https://archive.org/services/img/kglw2023-06-03"
             }
           ]
         }
@@ -4544,6 +4589,15 @@
             },
             {
               "title": "Minimum Brain Size",
+              "url": "https://archive.org/download/kglw2023-06-03/kglw2023-03-06t13.mp3",
+              "track": "1",
+              "showKey": "2023-06-03|the-caverns-ampitheater-outdoor-stage",
+              "showDate": "2023-06-03",
+              "venueText": "King Gizzard & The Lizard Wizard Live at The Caverns Ampitheater Outdoor Stage on 2023-06-03",
+              "artwork": "https://archive.org/services/img/kglw2023-06-03"
+            },
+            {
+              "title": "Minimum Brain Size",
               "url": "https://archive.org/download/kglw2024-08-27/16-I'm%20In%20Your%20Mind%20%3E%20I'm%20Not%20In%20Your%20Mind%20%3E%20Cellophane%20%3E%20I'm%20In%20Your%20Mind%20Fuzz.mp3",
               "track": "1",
               "showKey": "2024-08-27|the-dell-music-center",
@@ -4559,15 +4613,6 @@
               "showDate": "2024-05-16",
               "venueText": "King Gizzard & The Lizard Wizard Live at Offenbach Stadthalle on 2024-05-16",
               "artwork": "https://archive.org/services/img/kglw2024-05-16.KGLWOffenbach24"
-            },
-            {
-              "title": "Minimum Brain Size",
-              "url": "https://archive.org/download/kglw2024-05-15.wav/12-Float%20Along%20-%20Fill%20Your%20Lungs.mp3",
-              "track": "1",
-              "showKey": "2024-05-15|forest-national-brussels-belgium",
-              "showDate": "2024-05-15",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Forest National, Brussels, Belgium on 2024-05-15",
-              "artwork": "https://archive.org/services/img/kglw2024-05-15.wav"
             }
           ]
         },
@@ -4594,21 +4639,21 @@
             },
             {
               "title": "Straws In The Wind",
+              "url": "https://archive.org/download/kglw2023-06-03/kglw2023-03-06t13.mp3",
+              "track": "1",
+              "showKey": "2023-06-03|the-caverns-ampitheater-outdoor-stage",
+              "showDate": "2023-06-03",
+              "venueText": "King Gizzard & The Lizard Wizard Live at The Caverns Ampitheater Outdoor Stage on 2023-06-03",
+              "artwork": "https://archive.org/services/img/kglw2023-06-03"
+            },
+            {
+              "title": "Straws In The Wind",
               "url": "https://archive.org/download/kglw2023-06-07.SBD/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Red%20Rocks%20'23%20-%2012%20Robot%20Stop%20(Live%20at%20Red%20Rocks%20'23).mp3",
               "track": "1",
               "showKey": "2023-06-07|red-rocks-amphitheatre",
               "showDate": "2023-06-07",
               "venueText": "King Gizzard & The Lizard Wizard Live at Red Rocks Amphitheatre on 2023-06-07",
               "artwork": "https://archive.org/services/img/kglw2023-06-07.SBD"
-            },
-            {
-              "title": "Straws In The Wind",
-              "url": "https://archive.org/download/kglw2024-05-16.KGLWOffenbach24/08-Sea%20of%20Trees.mp3",
-              "track": "1",
-              "showKey": "2024-05-16|offenbach-stadthalle",
-              "showDate": "2024-05-16",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Offenbach Stadthalle on 2024-05-16",
-              "artwork": "https://archive.org/services/img/kglw2024-05-16.KGLWOffenbach24"
             }
           ]
         },
@@ -4842,6 +4887,15 @@
           "variants": [
             {
               "title": "Ataraxia",
+              "url": "https://archive.org/download/kglw2023-06-03/kglw2023-03-06t13.mp3",
+              "track": "1",
+              "showKey": "2023-06-03|the-caverns-ampitheater-outdoor-stage",
+              "showDate": "2023-06-03",
+              "venueText": "King Gizzard & The Lizard Wizard Live at The Caverns Ampitheater Outdoor Stage on 2023-06-03",
+              "artwork": "https://archive.org/services/img/kglw2023-06-03"
+            },
+            {
+              "title": "Ataraxia",
               "url": "https://archive.org/download/kglw2022-04-18.aud.flac24/09%20Supreme%20Ascendancy.mp3",
               "track": "1",
               "showKey": "2022-04-18|event-lawn-virgin-hotels",
@@ -4866,15 +4920,6 @@
               "showDate": "2023-03-02",
               "venueText": "King Gizzard & The Lizard Wizard Live at Le Zénith, Paris on 2023-03-02",
               "artwork": "https://archive.org/services/img/kglw2023-03-02"
-            },
-            {
-              "title": "Ataraxia",
-              "url": "https://archive.org/download/kglw2022-03-07/12-Mystery%20Jack.mp3",
-              "track": "1",
-              "showKey": "2022-03-07|enmore-theatre",
-              "showDate": "2022-03-07",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Enmore Theatre on 2022-03-07",
-              "artwork": "https://archive.org/services/img/kglw2022-03-07"
             }
           ]
         },
@@ -4889,6 +4934,15 @@
               "showDate": "2022-10-23",
               "venueText": "King Gizzard & The Lizard Wizard Live at The Anthem on 2022-10-23",
               "artwork": "https://archive.org/services/img/kglw2022-10-23.vwmule"
+            },
+            {
+              "title": "See Me",
+              "url": "https://archive.org/download/kglw2023-06-04/kglw2023-06-04t08.mp3",
+              "track": "1",
+              "showKey": "2023-06-04|the-caverns-ampitheater-outdoor-stage",
+              "showDate": "2023-06-04",
+              "venueText": "King Gizzard & The Lizard Wizard Live at The Caverns Ampitheater Outdoor Stage on 2023-06-04",
+              "artwork": "https://archive.org/services/img/kglw2023-06-04"
             },
             {
               "title": "See Me",
@@ -4907,15 +4961,6 @@
               "showDate": "2023-08-29",
               "venueText": "King Gizzard & The Lizard Wizard Live at Le Bikini on 2023-08-29",
               "artwork": "https://archive.org/services/img/kglw2023-08-29"
-            },
-            {
-              "title": "See Me",
-              "url": "https://archive.org/download/kglw2023-06-01.sbd-flac/03%20Hot%20Water.mp3",
-              "track": "1",
-              "showKey": "2023-06-01|the-caverns",
-              "showDate": "2023-06-01",
-              "venueText": "King Gizzard & The Lizard Wizard Live at The Caverns on 2023-06-01",
-              "artwork": "https://archive.org/services/img/kglw2023-06-01.sbd-flac"
             }
           ]
         },
@@ -5000,15 +5045,6 @@
               "showDate": "2023-06-13",
               "venueText": "King Gizzard & The Lizard Wizard Live at The Salt Shed on 2023-06-13",
               "artwork": "https://archive.org/services/img/kglw2023-06-13"
-            },
-            {
-              "title": "Yours",
-              "url": "https://archive.org/download/kglw2019-07-12/18.%20Head%20On-Pill.mp3",
-              "track": "1",
-              "showKey": "2019-07-12|thebarton-theatre",
-              "showDate": "2019-07-12",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Thebarton Theatre on 2019-07-12",
-              "artwork": "https://archive.org/services/img/kglw2019-07-12"
             },
             {
               "title": "Yours",
@@ -5467,6 +5503,15 @@
             },
             {
               "title": "Ambergris",
+              "url": "https://archive.org/download/kglw2023-06-04/kglw2023-06-04t08.mp3",
+              "track": "1",
+              "showKey": "2023-06-04|the-caverns-ampitheater-outdoor-stage",
+              "showDate": "2023-06-04",
+              "venueText": "King Gizzard & The Lizard Wizard Live at The Caverns Ampitheater Outdoor Stage on 2023-06-04",
+              "artwork": "https://archive.org/services/img/kglw2023-06-04"
+            },
+            {
+              "title": "Ambergris",
               "url": "https://archive.org/download/kglw2024-08-23/18%20Her%20and%20I%20(Slow%20Jam%202).mp3",
               "track": "1",
               "showKey": "2024-08-23|aretha-franklin-amphitheatre",
@@ -5482,15 +5527,6 @@
               "showDate": "2022-10-28",
               "venueText": "King Gizzard & The Lizard Wizard Live at Waller Creek Amphitheater at Stubb's Bar-B-Q on 2022-10-28",
               "artwork": "https://archive.org/services/img/kglw2022-10-28"
-            },
-            {
-              "title": "Ambergris",
-              "url": "https://archive.org/download/kglw2025-08-02.SBD/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20in%20New%20York%20City%20'25%20-Rock%20Night-%20-%2014%20Altered%20Beast%20IV%20(Live%20in%20New%20York%20City%20'25).mp3",
-              "track": "1",
-              "showKey": "2025-08-02|forest-hills-stadium",
-              "showDate": "2025-08-02",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Forest Hills Stadium on 2025-08-02",
-              "artwork": "https://archive.org/services/img/kglw2025-08-02.SBD"
             }
           ]
         },
@@ -5722,21 +5758,21 @@
             },
             {
               "title": "Presumptuous",
+              "url": "https://archive.org/download/kglw2023-06-04/kglw2023-06-04t08.mp3",
+              "track": "1",
+              "showKey": "2023-06-04|the-caverns-ampitheater-outdoor-stage",
+              "showDate": "2023-06-04",
+              "venueText": "King Gizzard & The Lizard Wizard Live at The Caverns Ampitheater Outdoor Stage on 2023-06-04",
+              "artwork": "https://archive.org/services/img/kglw2023-06-04"
+            },
+            {
+              "title": "Presumptuous",
               "url": "https://archive.org/download/kglw2022-10-02.schoeps/21%20Sleepwalker%20-%202022.10.02%20-%20Greek%20Theater%2C%20Berkeley%20CA.mp3",
               "track": "1",
               "showKey": "2022-10-02|greek-theater",
               "showDate": "2022-10-02",
               "venueText": "King Gizzard & The Lizard Wizard Live at The William Randolph Hearst Greek Theatre on 2022-10-02",
               "artwork": "https://archive.org/services/img/kglw2022-10-02.schoeps"
-            },
-            {
-              "title": "Presumptuous",
-              "url": "https://archive.org/download/kglw2022-05-24/kglw2022-05-24t11Presumptuous.mp3",
-              "track": "1",
-              "showKey": "2022-05-24|water-street-music-hall",
-              "showDate": "2022-05-24",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Water Street Music Hall on 2022-05-24",
-              "artwork": "https://archive.org/services/img/kglw2022-05-24"
             }
           ]
         },
@@ -5929,6 +5965,15 @@
             },
             {
               "title": "Lava",
+              "url": "https://archive.org/download/kglw2023-06-03/kglw2023-03-06t13.mp3",
+              "track": "1",
+              "showKey": "2023-06-03|the-caverns-ampitheater-outdoor-stage",
+              "showDate": "2023-06-03",
+              "venueText": "King Gizzard & The Lizard Wizard Live at The Caverns Ampitheater Outdoor Stage on 2023-06-03",
+              "artwork": "https://archive.org/services/img/kglw2023-06-03"
+            },
+            {
+              "title": "Lava",
               "url": "https://archive.org/download/kglw2022-10-29/kglw2022-10-29%2004-Sleep%20Drifter.mp3",
               "track": "1",
               "showKey": "2022-10-29|stubb-s-bbq-waller-creek-amphitheater",
@@ -5944,15 +5989,6 @@
               "showDate": "2024-09-06",
               "venueText": "King Gizzard & The Lizard Wizard 2024.09.06 Live at Astro Amphitheater, La Vista, NE",
               "artwork": "https://archive.org/services/img/kglw2024-09-06.dpa4011c"
-            },
-            {
-              "title": "Lava",
-              "url": "https://archive.org/download/kglw2024-09-03.bandcampbootlegger/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Minneapolis%20Armory-%20Minneapolis-%20MN%20(9-3-24)%202%2FKing%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Minneapolis%20Armory%2C%20Minneapolis%2C%20MN%20(9-3-24)%20-%2007%20Mystery%20Jack%20(Live).mp3",
-              "track": "1",
-              "showKey": "2024-09-03|minneapolis-armory",
-              "showDate": "2024-09-03",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Minneapolis Armory on 2024-09-03",
-              "artwork": "https://archive.org/services/img/kglw2024-09-03.bandcampbootlegger"
             }
           ]
         },
@@ -6256,7 +6292,7 @@
             },
             {
               "title": "Gondii",
-              "url": "https://archive.org/download/kglw2024-09-08.SBD/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Red%20Rocks%20Amphitheatre%2C%20Morrison%2C%20CO%20(9-8-24)%20-%2012%20Stressin'%20(Live).mp3",
+              "url": "https://archive.org/download/kglw2024-09-08.SBD/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Red%20Rocks%20Amphitheatre%2C%20Morrison%2C%20CO%20(9-8-24)%20-%2006%20Elbow%20(Live).mp3",
               "track": "1",
               "showKey": "2024-09-08|red-rocks-ampitheatre",
               "showDate": "2024-09-08",
@@ -6481,7 +6517,7 @@
             },
             {
               "title": "Hog Calling Contest",
-              "url": "https://archive.org/download/kglw2024-09-08.SBD/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Red%20Rocks%20Amphitheatre%2C%20Morrison%2C%20CO%20(9-8-24)%20-%2012%20Stressin'%20(Live).mp3",
+              "url": "https://archive.org/download/kglw2024-09-08.SBD/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Red%20Rocks%20Amphitheatre%2C%20Morrison%2C%20CO%20(9-8-24)%20-%2006%20Elbow%20(Live).mp3",
               "track": "1",
               "showKey": "2024-09-08|red-rocks-ampitheatre",
               "showDate": "2024-09-08",
@@ -6792,12 +6828,12 @@
             },
             {
               "title": "Deadstick",
-              "url": "https://archive.org/download/kglw2025-08-10/%5B2025.08.10%5D%20King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20the%20Hollywood%20Bowl%20'25%20(Edited)%2F03%20-%20Deadstick.mp3",
+              "url": "https://archive.org/download/kglw2025-08-01/kglw2025-08-01t02.mp3",
               "track": "1",
-              "showKey": "2025-08-10|hollywood-bowl",
-              "showDate": "2025-08-10",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Hollywood Bowl on 2025-08-10",
-              "artwork": "https://archive.org/services/img/kglw2025-08-10"
+              "showKey": "2025-08-01|forest-hills-stadium",
+              "showDate": "2025-08-01",
+              "venueText": "King Gizzard & The Lizard Wizard Live at Forest Hills Stadium on 2025-08-01",
+              "artwork": "https://archive.org/services/img/kglw2025-08-01"
             }
           ]
         },
@@ -6833,12 +6869,12 @@
             },
             {
               "title": "Lonely Cosmos",
-              "url": "https://archive.org/download/kglw2025-08-10/%5B2025.08.10%5D%20King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20the%20Hollywood%20Bowl%20'25%20(Edited)%2F03%20-%20Deadstick.mp3",
+              "url": "https://archive.org/download/kglw2025-08-01/kglw2025-08-01t02.mp3",
               "track": "1",
-              "showKey": "2025-08-10|hollywood-bowl",
-              "showDate": "2025-08-10",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Hollywood Bowl on 2025-08-10",
-              "artwork": "https://archive.org/services/img/kglw2025-08-10"
+              "showKey": "2025-08-01|forest-hills-stadium",
+              "showDate": "2025-08-01",
+              "venueText": "King Gizzard & The Lizard Wizard Live at Forest Hills Stadium on 2025-08-01",
+              "artwork": "https://archive.org/services/img/kglw2025-08-01"
             }
           ]
         },
@@ -6874,12 +6910,12 @@
             },
             {
               "title": "Eternal Return",
-              "url": "https://archive.org/download/kglw2025-08-10/%5B2025.08.10%5D%20King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20the%20Hollywood%20Bowl%20'25%20(Edited)%2F03%20-%20Deadstick.mp3",
+              "url": "https://archive.org/download/kglw2025-08-01/kglw2025-08-01t02.mp3",
               "track": "1",
-              "showKey": "2025-08-10|hollywood-bowl",
-              "showDate": "2025-08-10",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Hollywood Bowl on 2025-08-10",
-              "artwork": "https://archive.org/services/img/kglw2025-08-10"
+              "showKey": "2025-08-01|forest-hills-stadium",
+              "showDate": "2025-08-01",
+              "venueText": "King Gizzard & The Lizard Wizard Live at Forest Hills Stadium on 2025-08-01",
+              "artwork": "https://archive.org/services/img/kglw2025-08-01"
             }
           ]
         },
@@ -6906,21 +6942,21 @@
             },
             {
               "title": "Panpsych",
-              "url": "https://archive.org/download/kglw2025-08-10/%5B2025.08.10%5D%20King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20the%20Hollywood%20Bowl%20'25%20(Edited)%2F03%20-%20Deadstick.mp3",
+              "url": "https://archive.org/download/kglw2025-08-01/kglw2025-08-01t02.mp3",
+              "track": "1",
+              "showKey": "2025-08-01|forest-hills-stadium",
+              "showDate": "2025-08-01",
+              "venueText": "King Gizzard & The Lizard Wizard Live at Forest Hills Stadium on 2025-08-01",
+              "artwork": "https://archive.org/services/img/kglw2025-08-01"
+            },
+            {
+              "title": "Panpsych",
+              "url": "https://archive.org/download/kglw2025-08-10/%5B2025.08.10%5D%20King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20the%20Hollywood%20Bowl%20'25%20(Edited)%2F06%20-%20Panpsych.mp3",
               "track": "1",
               "showKey": "2025-08-10|hollywood-bowl",
               "showDate": "2025-08-10",
               "venueText": "King Gizzard & The Lizard Wizard Live at Hollywood Bowl on 2025-08-10",
               "artwork": "https://archive.org/services/img/kglw2025-08-10"
-            },
-            {
-              "title": "Panpsych",
-              "url": "https://archive.org/download/kglw2025-08-06.ravinia/06%20Panpsych.mp3",
-              "track": "1",
-              "showKey": "2025-08-06|ravinia-festival",
-              "showDate": "2025-08-06",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Ravinia Festival on 2025-08-06",
-              "artwork": "https://archive.org/services/img/kglw2025-08-06.ravinia"
             }
           ]
         },
@@ -6956,12 +6992,12 @@
             },
             {
               "title": "Spacesick",
-              "url": "https://archive.org/download/kglw2025-08-10/%5B2025.08.10%5D%20King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20the%20Hollywood%20Bowl%20'25%20(Edited)%2F03%20-%20Deadstick.mp3",
+              "url": "https://archive.org/download/kglw2025-08-01/kglw2025-08-01t02.mp3",
               "track": "1",
-              "showKey": "2025-08-10|hollywood-bowl",
-              "showDate": "2025-08-10",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Hollywood Bowl on 2025-08-10",
-              "artwork": "https://archive.org/services/img/kglw2025-08-10"
+              "showKey": "2025-08-01|forest-hills-stadium",
+              "showDate": "2025-08-01",
+              "venueText": "King Gizzard & The Lizard Wizard Live at Forest Hills Stadium on 2025-08-01",
+              "artwork": "https://archive.org/services/img/kglw2025-08-01"
             }
           ]
         },
@@ -6997,12 +7033,12 @@
             },
             {
               "title": "Aerodynamic",
-              "url": "https://archive.org/download/kglw2025-08-17.SBD.wav/King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20Field%20of%20Vision%20'25%20-%2054%20Aerodynamic%20(Live%20at%20Field%20of%20Vision%20'25).mp3",
+              "url": "https://archive.org/download/kglw2025-08-01/kglw2025-08-01t02.mp3",
               "track": "1",
-              "showKey": "2025-08-17|field-of-vision-at-meadow-creek",
-              "showDate": "2025-08-17",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Field of Vision at Meadow Creek on 2025-08-17",
-              "artwork": "https://archive.org/services/img/kglw2025-08-17.SBD.wav"
+              "showKey": "2025-08-01|forest-hills-stadium",
+              "showDate": "2025-08-01",
+              "venueText": "King Gizzard & The Lizard Wizard Live at Forest Hills Stadium on 2025-08-01",
+              "artwork": "https://archive.org/services/img/kglw2025-08-01"
             }
           ]
         },
@@ -7038,12 +7074,12 @@
             },
             {
               "title": "Sea of Doubt",
-              "url": "https://archive.org/download/kglw2025-08-10/%5B2025.08.10%5D%20King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20the%20Hollywood%20Bowl%20'25%20(Edited)%2F03%20-%20Deadstick.mp3",
+              "url": "https://archive.org/download/kglw2025-08-01/kglw2025-08-01t02.mp3",
               "track": "1",
-              "showKey": "2025-08-10|hollywood-bowl",
-              "showDate": "2025-08-10",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Hollywood Bowl on 2025-08-10",
-              "artwork": "https://archive.org/services/img/kglw2025-08-10"
+              "showKey": "2025-08-01|forest-hills-stadium",
+              "showDate": "2025-08-01",
+              "venueText": "King Gizzard & The Lizard Wizard Live at Forest Hills Stadium on 2025-08-01",
+              "artwork": "https://archive.org/services/img/kglw2025-08-01"
             }
           ]
         },
@@ -7079,12 +7115,12 @@
             },
             {
               "title": "Silent Spirit",
-              "url": "https://archive.org/download/kglw2025-08-10/%5B2025.08.10%5D%20King%20Gizzard%20%26%20The%20Lizard%20Wizard%20-%20Live%20at%20the%20Hollywood%20Bowl%20'25%20(Edited)%2F03%20-%20Deadstick.mp3",
+              "url": "https://archive.org/download/kglw2025-08-01/kglw2025-08-01t02.mp3",
               "track": "1",
-              "showKey": "2025-08-10|hollywood-bowl",
-              "showDate": "2025-08-10",
-              "venueText": "King Gizzard & The Lizard Wizard Live at Hollywood Bowl on 2025-08-10",
-              "artwork": "https://archive.org/services/img/kglw2025-08-10"
+              "showKey": "2025-08-01|forest-hills-stadium",
+              "showDate": "2025-08-01",
+              "venueText": "King Gizzard & The Lizard Wizard Live at Forest Hills Stadium on 2025-08-01",
+              "artwork": "https://archive.org/services/img/kglw2025-08-01"
             }
           ]
         },
@@ -7140,11 +7176,11 @@
     "unresolvedTracks": [
       {
         "album": "12 Bar Bruise",
-        "track": "Elbow"
+        "track": "Nein"
       },
       {
         "album": "12 Bar Bruise",
-        "track": "Nein"
+        "track": "12 Bar Bruise"
       },
       {
         "album": "12 Bar Bruise",
@@ -7318,27 +7354,7 @@
   },
   "identifierCache": [
     {
-      "identifier": "king-gizzard-the-lizard-wizard-live-at-happy-dog-in-cleveland-ohio-on-june-14-2015-audio",
-      "stability": "good"
-    },
-    {
-      "identifier": "king-gizzard-the-lizard-wizard-live-2012-audio",
-      "stability": "good"
-    },
-    {
-      "identifier": "kglw2013-08-29",
-      "stability": "good"
-    },
-    {
-      "identifier": "kglw2024-09-09.lateshowbandcampbootlegger",
-      "stability": "good"
-    },
-    {
-      "identifier": "king-gizzard-and-the-lizard-wizard-disography-2011-2025-mp-3",
-      "stability": "good"
-    },
-    {
-      "identifier": "triple-j-zan-rowe-2012-09-05",
+      "identifier": "kglw2024-09-08.SBD",
       "stability": "good"
     },
     {
@@ -7351,6 +7367,30 @@
     },
     {
       "identifier": "king-gizzard-the-lizard-wizard-live-at-cherry-fest-2012-audio",
+      "stability": "good"
+    },
+    {
+      "identifier": "kglw2015-06-19",
+      "stability": "good"
+    },
+    {
+      "identifier": "kglw2015-06-24.matrix.flac1644",
+      "stability": "good"
+    },
+    {
+      "identifier": "kglw2024-09-09.lateshowbandcampbootlegger",
+      "stability": "good"
+    },
+    {
+      "identifier": "king-gizzard-the-lizard-wizard-live-2012-audio",
+      "stability": "good"
+    },
+    {
+      "identifier": "king-gizzard-and-the-lizard-wizard-disography-2011-2025-mp-3",
+      "stability": "good"
+    },
+    {
+      "identifier": "triple-j-zan-rowe-2012-09-05",
       "stability": "good"
     },
     {
@@ -7502,7 +7542,7 @@
       "stability": "good"
     },
     {
-      "identifier": "kglw2019-07-12",
+      "identifier": "kglw2013-08-29",
       "stability": "good"
     },
     {
@@ -7578,10 +7618,6 @@
       "stability": "good"
     },
     {
-      "identifier": "kglw2023-06-04.AT853",
-      "stability": "good"
-    },
-    {
       "identifier": "kglw2024-08-16.mysteryjackofficial",
       "stability": "good"
     },
@@ -7606,19 +7642,15 @@
       "stability": "good"
     },
     {
-      "identifier": "KGTLW2024-08-30.flac.24",
-      "stability": "good"
-    },
-    {
-      "identifier": "kglw2024-09-08.SBD",
-      "stability": "good"
-    },
-    {
       "identifier": "king-gizzard-the-lizard-wizard-live-in-milwaukee-19-audio",
       "stability": "good"
     },
     {
       "identifier": "lizards-caught-live",
+      "stability": "good"
+    },
+    {
+      "identifier": "kglw2023-06-04.AT853",
       "stability": "good"
     },
     {
@@ -7674,10 +7706,6 @@
       "stability": "good"
     },
     {
-      "identifier": "kglw2023-06-07.SBD",
-      "stability": "good"
-    },
-    {
       "identifier": "kglw2023-06-12.leary",
       "stability": "good"
     },
@@ -7722,11 +7750,7 @@
       "stability": "good"
     },
     {
-      "identifier": "KG2017-09-23",
-      "stability": "good"
-    },
-    {
-      "identifier": "kglw2023-04-06",
+      "identifier": "kglw2023-06-07.SBD",
       "stability": "good"
     },
     {
@@ -7875,6 +7899,10 @@
     },
     {
       "identifier": "kglw2018-06-20.ca14.flac1644",
+      "stability": "good"
+    },
+    {
+      "identifier": "KG2017-09-23",
       "stability": "good"
     },
     {
@@ -8038,26 +8066,6 @@
       "stability": "good"
     },
     {
-      "identifier": "audio-king-gizzard-the-lizard-wizard-live-in-utrecht-19-show-2-audio",
-      "stability": "good"
-    },
-    {
-      "identifier": "kglw2024-08-15.vwmule",
-      "stability": "good"
-    },
-    {
-      "identifier": "kglw2019-10-11.dpa4061.flac2448",
-      "stability": "good"
-    },
-    {
-      "identifier": "kglw2019-10-01",
-      "stability": "good"
-    },
-    {
-      "identifier": "kglw2019-09-06",
-      "stability": "good"
-    },
-    {
       "identifier": "kglw2024-08-24",
       "stability": "good"
     },
@@ -8098,10 +8106,6 @@
       "stability": "good"
     },
     {
-      "identifier": "kglw2024-08-20.mk4v.cmc1k.sx-r4.flac",
-      "stability": "good"
-    },
-    {
       "identifier": "kglw2025-10-24.SBD",
       "stability": "good"
     },
@@ -8126,6 +8130,10 @@
       "stability": "good"
     },
     {
+      "identifier": "kglw2019-07-12",
+      "stability": "good"
+    },
+    {
       "identifier": "kg2021-04-22",
       "stability": "good"
     },
@@ -8139,6 +8147,14 @@
     },
     {
       "identifier": "kg2016-05-01",
+      "stability": "good"
+    },
+    {
+      "identifier": "kglw2014-05-02",
+      "stability": "good"
+    },
+    {
+      "identifier": "kglw2024-06-03.FLAC.bootleggermix",
       "stability": "good"
     },
     {
@@ -8250,10 +8266,6 @@
       "stability": "good"
     },
     {
-      "identifier": "kglw2022-05-24",
-      "stability": "good"
-    },
-    {
       "identifier": "kglw2022-10-19",
       "stability": "good"
     },
@@ -8267,6 +8279,10 @@
     },
     {
       "identifier": "kglw2025-10-31.SBD",
+      "stability": "good"
+    },
+    {
+      "identifier": "kglw2024-08-20.mk4v.cmc1k.sx-r4.flac",
       "stability": "good"
     },
     {
