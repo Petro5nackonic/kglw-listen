@@ -144,6 +144,17 @@ function pickBestArchiveTrackUrl(
   return bestUrl;
 }
 
+function safeSetMediaSessionAction(
+  action: MediaSessionAction,
+  handler: MediaSessionActionHandler | null,
+) {
+  try {
+    navigator.mediaSession.setActionHandler(action, handler);
+  } catch {
+    // Ignore unsupported actions on this platform/browser.
+  }
+}
+
 export function PlayerBar() {
   const router = useRouter();
   const pathname = usePathname();
@@ -703,6 +714,65 @@ export function PlayerBar() {
     if (hasQueue) return;
     setQueueSheetOpen(false);
   }, [hasQueue]);
+
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+    if (!currentTrack) {
+      navigator.mediaSession.metadata = null;
+      navigator.mediaSession.playbackState = "none";
+      return;
+    }
+    const displayTitle = toDisplayTrackTitle(currentTrack.title);
+    const artist = String(currentTrack.venueText || "").trim() || "King Gizzard & The Lizard Wizard";
+    const album = subtitle || "KGLW Listen";
+    const artwork = artworkSrc
+      ? [
+          { src: artworkSrc, sizes: "96x96", type: "image/jpeg" },
+          { src: artworkSrc, sizes: "128x128", type: "image/jpeg" },
+          { src: artworkSrc, sizes: "192x192", type: "image/jpeg" },
+          { src: artworkSrc, sizes: "256x256", type: "image/jpeg" },
+          { src: artworkSrc, sizes: "384x384", type: "image/jpeg" },
+          { src: artworkSrc, sizes: "512x512", type: "image/jpeg" },
+        ]
+      : undefined;
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: displayTitle,
+      artist,
+      album,
+      artwork,
+    });
+    navigator.mediaSession.playbackState = playing ? "playing" : "paused";
+  }, [artworkSrc, currentTrack, playing, subtitle]);
+
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+    safeSetMediaSessionAction("play", () => play?.());
+    safeSetMediaSessionAction("pause", () => pause?.());
+    safeSetMediaSessionAction("nexttrack", () => next?.());
+    safeSetMediaSessionAction("previoustrack", () => onPrevPress());
+    safeSetMediaSessionAction("stop", () => stop?.());
+    return () => {
+      safeSetMediaSessionAction("play", null);
+      safeSetMediaSessionAction("pause", null);
+      safeSetMediaSessionAction("nexttrack", null);
+      safeSetMediaSessionAction("previoustrack", null);
+      safeSetMediaSessionAction("stop", null);
+    };
+  }, [next, pause, play, stop]);
+
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+    if (!src || !Number.isFinite(duration) || duration <= 0) return;
+    try {
+      navigator.mediaSession.setPositionState({
+        duration,
+        position: Math.max(0, Math.min(current, duration)),
+        playbackRate: 1,
+      });
+    } catch {
+      // Ignore browsers that partially implement Media Session.
+    }
+  }, [current, duration, src]);
 
   if (!hasQueue) return null;
 
