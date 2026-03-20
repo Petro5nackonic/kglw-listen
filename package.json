@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "build:prebuilts": "node scripts/build-static-prebuilts-from-local.mjs",
+    "build:prebuilts": "node scripts/build-static-prebuilts-from-local.mjs --legacyDefs --apply --out=data/prebuilt-playlists.static.json",
+    "build:prebuilts:studio:preview": "node scripts/build-static-prebuilts-from-local.mjs --out=data/prebuilt-playlists.generated.json",
+    "build:prebuilts:studio:apply": "node scripts/build-static-prebuilts-from-local.mjs --apply --out=data/prebuilt-playlists.generated.json",
     "test:archive": "node --experimental-strip-types --test src/archive/*.test.ts src/validate/*.test.ts"
   },
   "dependencies": {

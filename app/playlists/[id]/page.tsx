@@ -568,6 +568,31 @@ export default function PlaylistDetailPage() {
     [actionSlotId, playableSlots],
   );
   const activeTrackUrl = playerQueue[playerIndex]?.url || "";
+  const activeQueueTrack = playerQueue[playerIndex] || null;
+  const activeSlotId = useMemo(() => {
+    if (!activeQueueTrack) return "";
+    const queuePlaylistId = String(activeQueueTrack.playlistId || "").trim();
+    if (queuePlaylistId && queuePlaylistId !== playlistId) return "";
+    const activeUrl = String(activeQueueTrack.url || "").trim();
+    if (!activeUrl) return "";
+
+    const urlMatched = playableSlots.filter((item) =>
+      item.slot.variants.some((variant) => String(variant.track.url || "").trim() === activeUrl),
+    );
+    if (urlMatched.length === 0) return "";
+    if (urlMatched.length === 1) return urlMatched[0].slot.id;
+
+    const activeTitleNorm = normalizeLooseText(toDisplayTrackTitle(activeQueueTrack.title || ""));
+    if (activeTitleNorm) {
+      const titleMatched = urlMatched.find((item) => {
+        const slotTitle = toDisplayTrackTitle(item.slot.variants[0]?.track.title || item.track.title);
+        return normalizeLooseText(slotTitle) === activeTitleNorm;
+      });
+      if (titleMatched) return titleMatched.slot.id;
+    }
+
+    return urlMatched[0].slot.id;
+  }, [activeQueueTrack, playableSlots, playlistId]);
   const activeActionTrack = useMemo(() => {
     if (!activeActionItem) return null;
     const activeVariant =
@@ -1251,13 +1276,14 @@ export default function PlaylistDetailPage() {
             {renderItems.map((entry, entryIdx) => {
               if (entry.type === "single") {
                 const { slot, track, idx } = entry.item;
-                const activeVariantTrack =
+                const matchedActiveVariantTrack =
                   slot.variants.find((v) => v.track.url === activeTrackUrl)?.track || null;
+                const isSlotActive = activeSlotId === slot.id;
+                const activeVariantTrack = isSlotActive ? matchedActiveVariantTrack : null;
                 const activeVariantId =
-                  activeVariantTrack
+                  isSlotActive && activeVariantTrack
                     ? slot.variants.find((v) => v.track.url === activeVariantTrack.url)?.id || ""
                     : "";
-                const isSlotActive = Boolean(activeVariantId);
                 return (
                   <div key={slot.id} className="py-[1px]">
                     <div className="flex items-start justify-between gap-3 rounded-[10px] px-2 py-1">
@@ -1347,13 +1373,14 @@ export default function PlaylistDetailPage() {
                 <div key={entry.groupId} className="min-w-0 rounded-[8px]">
                   <div className="space-y-2">
                     {entry.items.map(({ slot, track, idx }, chainIdx) => {
-                        const activeVariantTrack =
+                        const matchedActiveVariantTrack =
                           slot.variants.find((v) => v.track.url === activeTrackUrl)?.track || null;
+                        const isSlotActive = activeSlotId === slot.id;
+                        const activeVariantTrack = isSlotActive ? matchedActiveVariantTrack : null;
                         const activeVariantId =
-                          activeVariantTrack
+                          isSlotActive && activeVariantTrack
                             ? slot.variants.find((v) => v.track.url === activeVariantTrack.url)?.id || ""
                             : "";
-                        const isSlotActive = Boolean(activeVariantId);
                         const isLastInChain = chainIdx === entry.items.length - 1;
                         const versionsExpanded =
                           slot.variants.length > 1 && Boolean(expandedVariants[slot.id]);

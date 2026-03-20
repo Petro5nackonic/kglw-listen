@@ -232,6 +232,10 @@ function formatShowLength(sec?: number | null): string {
   return `${h}h${String(m).padStart(2, "0")}m`;
 }
 
+function isValidShowKey(showKey: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}\|.+/.test(String(showKey || "").trim());
+}
+
 function isAudioName(name: string): boolean {
   const n = name.toLowerCase();
   return (
@@ -288,13 +292,74 @@ function parseLengthToSeconds(raw: unknown): number | null {
   return null;
 }
 
+const CLIENT_API_CACHE_TTL_MS = 1000 * 30;
+const clientApiCache = new Map<string, { expiresAt: number; payload: unknown }>();
+const clientApiInFlight = new Map<string, Promise<unknown>>();
+
+type FetchJsonCachedOptions = {
+  ttlMs?: number;
+  timeoutMs?: number;
+  cacheKey?: string;
+};
+
+async function fetchJsonCached<T>(
+  url: string,
+  options: FetchJsonCachedOptions = {},
+): Promise<T> {
+  const ttlMs = Math.max(0, Number(options.ttlMs ?? CLIENT_API_CACHE_TTL_MS));
+  const timeoutMs = Math.max(1000, Number(options.timeoutMs ?? 12000));
+  const cacheKey = options.cacheKey || url;
+  const now = Date.now();
+  const cached = clientApiCache.get(cacheKey);
+  if (cached && cached.expiresAt > now) {
+    return cached.payload as T;
+  }
+  const inFlight = clientApiInFlight.get(cacheKey);
+  if (inFlight) {
+    return (await inFlight) as T;
+  }
+
+  const task = (async () => {
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    try {
+      const controller = new AbortController();
+      timeout = setTimeout(() => controller.abort(), timeoutMs);
+      const res = await fetch(url, { signal: controller.signal });
+      if (!res.ok) throw new Error(`Request failed (${res.status})`);
+      const payload = (await res.json()) as T;
+      if (ttlMs > 0) {
+        clientApiCache.set(cacheKey, { expiresAt: Date.now() + ttlMs, payload });
+      }
+      return payload;
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
+  })();
+
+  clientApiInFlight.set(cacheKey, task as Promise<unknown>);
+  try {
+    return await task;
+  } finally {
+    clientApiInFlight.delete(cacheKey);
+  }
+}
+
+function isDataSaverEnabled(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const conn = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
+  return Boolean(conn?.saveData);
+}
+
 async function fetchShowPlaybackStatsClient(identifier: string): Promise<ShowPlaybackStats> {
   try {
-    const res = await fetch(`/api/ia/show-stats?identifier=${encodeURIComponent(identifier)}`, {
-      cache: "no-store",
-    });
-    if (!res.ok) return { showLengthSeconds: null, showTrackCount: null };
-    const data = (await res.json()) as ShowPlaybackStats;
+    const data = await fetchJsonCached<ShowPlaybackStats>(
+      `/api/ia/show-stats?identifier=${encodeURIComponent(identifier)}`,
+      {
+        ttlMs: 1000 * 60 * 10,
+        timeoutMs: 10000,
+        cacheKey: `show-stats:${identifier}`,
+      },
+    );
     return {
       showLengthSeconds:
         typeof data?.showLengthSeconds === "number" ? data.showLengthSeconds : null,
@@ -314,17 +379,14 @@ async function fetchShowBoundaryMatchClient(
     const params = new URLSearchParams();
     params.set("identifier", identifier);
     params.set("boundarySong", boundarySong);
-    const res = await fetch(`/api/ia/show-stats?${params.toString()}`, {
-      cache: "no-store",
-    });
-    if (!res.ok) {
-      return {
-        showLengthSeconds: null,
-        showTrackCount: null,
-        boundarySongMatch: false,
-      };
-    }
-    const data = (await res.json()) as ShowBoundaryMatchResponse;
+    const data = await fetchJsonCached<ShowBoundaryMatchResponse>(
+      `/api/ia/show-stats?${params.toString()}`,
+      {
+        ttlMs: 1000 * 60 * 5,
+        timeoutMs: 10000,
+        cacheKey: `show-boundary:${identifier}:${boundarySong.toLowerCase()}`,
+      },
+    );
     return {
       showLengthSeconds:
         typeof data?.showLengthSeconds === "number" ? data.showLengthSeconds : null,
@@ -676,7 +738,7 @@ function MultiSelectDropdown(props: {
             id={`${id}-panel`}
             role="dialog"
             aria-label={`${panelTitle} filter`}
-            className="fixed inset-x-0 bottom-0 z-50 mx-auto w-full max-w-[393px] rounded-t-[16px] border border-white/15 bg-[#080017] px-6 pb-8 pt-4 shadow-[0_-4px_4px_rgba(0,0,0,0.25)] md:inset-y-0 md:right-0 md:left-auto md:mx-0 md:h-screen md:w-[420px] md:max-w-[420px] md:rounded-none md:border-y-0 md:border-r-0 md:border-l md:pt-6 md:pb-6 md:shadow-[-14px_0_36px_rgba(0,0,0,0.42)] md:flex md:flex-col"
+            className="fixed inset-x-0 bottom-0 z-50 mx-auto w-full max-w-[393px] rounded-t-[16px] border border-white/15 bg-[#080017] px-6 pb-8 pt-4 shadow-[0_-4px_4px_rgba(0,0,0,0.25)] md:inset-auto md:top-1/2 md:left-1/2 md:w-[min(92vw,520px)] md:max-w-[520px] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-[16px] md:pt-6 md:pb-6 md:shadow-[0_18px_42px_rgba(0,0,0,0.45)] md:max-h-[80vh] md:flex md:flex-col"
           >
             <div className="mx-auto h-[4px] w-[53px] rounded-[16px] bg-white/30 md:hidden" />
             <div className="mt-6 text-[24px] font-medium text-white [font-family:var(--font-roboto-condensed)]">
@@ -867,6 +929,7 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
   const [songSheetTrack, setSongSheetTrack] = useState<SongSheetTrack | null>(null);
   const [showSongPlaylistPicker, setShowSongPlaylistPicker] = useState(false);
   const [songSearchLoading, setSongSearchLoading] = useState(false);
+  const [songSearchError, setSongSearchError] = useState<string | null>(null);
   const [searchVenueShows, setSearchVenueShows] = useState<ShowItem[]>([]);
   const [randomPickerAdvancedOpen, setRandomPickerAdvancedOpen] = useState(false);
   const [randomPickerLoading, setRandomPickerLoading] = useState(false);
@@ -1054,13 +1117,20 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
 
   async function loadPage(p: number, mode: "append" | "replace") {
     if (loading) return;
+    if (debouncedQuery.length >= 3 && mode === "replace") {
+      // Query mode is driven by song search API requests below.
+      return;
+    }
     setLoading(true);
     setError(null);
 
     try {
-      const res = await fetchShowsWithRetry(buildUrl(p));
-      if (!res) throw new Error("Request failed");
-      const data = (await res.json()) as ShowsResponse;
+      const url = buildUrl(p);
+      const data = await fetchJsonCached<ShowsResponse>(url, {
+        ttlMs: p === 1 ? 1000 * 20 : 0,
+        timeoutMs: 12000,
+        cacheKey: `shows:${url}`,
+      });
       const hasAlbumFacetData =
         Object.keys(data.facets?.albumShowKeys || {}).length > 0;
 
@@ -1114,6 +1184,7 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
         }
       }
     } catch (e: unknown) {
+      console.error("Failed to load shows page", { page: p, mode, error: e });
       if (e instanceof Error) setError(e.message);
       else setError("Failed to load shows");
     } finally {
@@ -1256,7 +1327,7 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
 
   // Debounce search so we don't re-fetch on every single keystroke.
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedQuery(query.trim()), 220);
+    const t = setTimeout(() => setDebouncedQuery(query.trim()), 350);
     return () => clearTimeout(t);
   }, [query]);
 
@@ -1635,16 +1706,20 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
       if (!advancedFiltersOpen) return;
       if (albums.length > 0) return;
       try {
-        const res = await fetchShowsWithRetry(buildAlbumFacetsUrl());
-        if (!res || !alive) return;
-        const data = (await res.json()) as ShowsResponse;
+        const url = buildAlbumFacetsUrl();
+        const data = await fetchJsonCached<ShowsResponse>(url, {
+          ttlMs: 1000 * 30,
+          timeoutMs: 10000,
+          cacheKey: `album-facets:${url}`,
+        });
         if (!alive) return;
         if (data.facets?.cities) setCityFacet(data.facets.cities);
         setCityMetaFacet(data.facets?.citiesMeta || {});
         if (data.facets?.albums) setAlbumFacet(data.facets.albums);
         setAlbumShowKeysFacet(data.facets?.albumShowKeys || {});
         setAlbumUniverseCount(Number(data.facets?.albumUniverseCount || 0));
-      } catch {
+      } catch (e) {
+        console.error("Failed to prefetch album facets", e);
         // Keep current facet state on prefetch failure.
       }
     }
@@ -1671,40 +1746,42 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
       if (!debouncedQuery || debouncedQuery.length < 3) {
         if (!alive) return;
         setSongSearchLoading(false);
+        setSongSearchError(null);
         setSongShows([]);
         setSongTotal(0);
         setSearchVenueShows([]);
         return;
       }
       setSongSearchLoading(true);
+      setSongSearchError(null);
       try {
-        const fastRes = await fetchShowsWithRetry(buildSongSearchUrl(1, true), 5000);
-        let res = fastRes;
-        if (fastRes) {
-          const fastData = (await fastRes.clone().json()) as ShowsResponse;
-          const fastSongTotal = Number(fastData.song?.total || fastData.items?.length || 0);
-          if (fastSongTotal <= 0) {
-            // Fall back to the fuller query when fast mode returns empty.
-            res = await fetchShowsWithRetry(buildSongSearchUrl(1), 10000);
-          }
-        } else {
-          res = await fetchShowsWithRetry(buildSongSearchUrl(1), 10000);
-        }
-        if (!res) {
-          if (alive) setSongSearchLoading(false);
-          return;
-        }
-        const data = (await res.json()) as ShowsResponse;
+        const fastUrl = buildSongSearchUrl(1, true);
+        const fullUrl = buildSongSearchUrl(1);
+        const fastData = await fetchJsonCached<ShowsResponse>(fastUrl, {
+          ttlMs: 1000 * 20,
+          timeoutMs: 7000,
+          cacheKey: `song-fast:${fastUrl}`,
+        });
+        const fastSongTotal = Number(fastData.song?.total || fastData.items?.length || 0);
+        const data =
+          fastSongTotal > 0
+            ? fastData
+            : await fetchJsonCached<ShowsResponse>(fullUrl, {
+                ttlMs: 1000 * 20,
+                timeoutMs: 12000,
+                cacheKey: `song-full:${fullUrl}`,
+              });
         if (!alive) return;
         setSongShows(data.song?.items || data.items || []);
         setSongTotal(data.song?.total || data.items?.length || 0);
         setSearchVenueShows(data.items || []);
-      } catch {
+      } catch (e) {
         if (!alive || controller.signal.aborted) return;
-        if (!alive) return;
         setSongShows([]);
         setSongTotal(0);
         setSearchVenueShows([]);
+        setSongSearchError("Search failed. Please retry.");
+        console.error("Song search request failed", { query: debouncedQuery, error: e });
       } finally {
         if (alive) setSongSearchLoading(false);
       }
@@ -1855,6 +1932,35 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
     if (!current?.showKey) return false;
     return current.showKey === randomPickerActiveShowKey;
   }, [playingIndex, queue, randomPickerActiveShowKey]);
+  const randomPickerHasCustomYearRange = useMemo(() => {
+    if (
+      randomPickerMinBound == null ||
+      randomPickerMaxBound == null ||
+      randomPickerYearMin == null ||
+      randomPickerYearMax == null
+    ) {
+      return false;
+    }
+    return (
+      randomPickerYearMin !== randomPickerMinBound ||
+      randomPickerYearMax !== randomPickerMaxBound
+    );
+  }, [
+    randomPickerMaxBound,
+    randomPickerMinBound,
+    randomPickerYearMax,
+    randomPickerYearMin,
+  ]);
+  const randomPickerSelectionSummary = useMemo(() => {
+    if (randomPickerYearMin == null || randomPickerYearMax == null) return "Years: all";
+    if (!randomPickerHasCustomYearRange) return "Years: all";
+    if (randomPickerYearMin === randomPickerYearMax) return `Years: ${randomPickerYearMin}`;
+    return `Years: ${randomPickerYearMin} - ${randomPickerYearMax}`;
+  }, [
+    randomPickerHasCustomYearRange,
+    randomPickerYearMax,
+    randomPickerYearMin,
+  ]);
   const availableAlbums = useMemo(() => {
     const hasFacetCounts = albumFacet.some((o) => typeof o.count === "number" && o.count > 0);
     const map = new Map<string, number | undefined>();
@@ -2314,7 +2420,7 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
           !Object.prototype.hasOwnProperty.call(statsById, id) &&
           !inFlightStatsIdsRef.current.has(id),
       )
-      .slice(0, 24);
+      .slice(0, 12);
     if (unresolvedIds.length === 0) return;
 
     // Mark these as in-flight up front to prevent duplicate requests across effect reruns.
@@ -2352,22 +2458,24 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
   }, [venueShows, dripDripShows, jamSpamShows, microtonalityShows, metalShows, statsById]);
 
   useEffect(() => {
-    const targets = venueShows.slice(0, 16);
+    if (isDataSaverEnabled()) return;
+    const targets = venueShows.slice(0, 6);
     for (const s of targets) {
       router.prefetch(`/show/${encodeURIComponent(s.showKey)}`);
     }
   }, [venueShows, router]);
 
   useEffect(() => {
+    if (isDataSaverEnabled()) return;
     let cancelled = false;
     const source = showOnlyShows
-      ? venueShows.slice(0, 8)
+      ? venueShows.slice(0, 4)
       : [
-          ...takingFlightShows.slice(0, 3),
-          ...dripDripShows.slice(0, 3),
-          ...jamSpamShows.slice(0, 2),
-          ...microtonalityShows.slice(0, 2),
-          ...metalShows.slice(0, 2),
+          ...takingFlightShows.slice(0, 2),
+          ...dripDripShows.slice(0, 2),
+          ...jamSpamShows.slice(0, 1),
+          ...microtonalityShows.slice(0, 1),
+          ...metalShows.slice(0, 1),
         ];
     const deduped: ShowItem[] = [];
     const seen = new Set<string>();
@@ -2377,13 +2485,26 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
       if (prewarmedShowKeysRef.current.has(s.showKey)) continue;
       deduped.push(s);
     }
-    deduped.forEach((s, idx) => {
-      const delay = 300 + idx * 350;
-      setTimeout(() => {
+    deduped.slice(0, 3).forEach((s, idx) => {
+      const delay = 600 + idx * 500;
+      const run = () => {
         if (cancelled) return;
         prewarmedShowKeysRef.current.add(s.showKey);
         void prewarmShowQueue(s);
-      }, delay);
+      };
+      if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+        setTimeout(
+          () =>
+            (
+              window as Window & {
+                requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+              }
+            ).requestIdleCallback?.(run, { timeout: 1500 }),
+          delay,
+        );
+      } else {
+        setTimeout(run, delay);
+      }
     });
     return () => {
       cancelled = true;
@@ -2817,6 +2938,7 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
   }
 
   function buildShowHref(show: ShowItem): string {
+    if (!isValidShowKey(show.showKey)) return "/";
     const base = `/show/${encodeURIComponent(show.showKey)}`;
     const id = String(show.defaultId || "").trim();
     if (!id) return base;
@@ -3257,30 +3379,50 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
     if (randomPickerLoading) return;
     setRandomPickerError(null);
     setRandomPickerLoading(true);
+    const hasYearFilter =
+      randomPickerMinBound != null &&
+      randomPickerMaxBound != null &&
+      randomPickerYearMin != null &&
+      randomPickerYearMax != null &&
+      (randomPickerYearMin !== randomPickerMinBound || randomPickerYearMax !== randomPickerMaxBound);
+    const inSelectedYearRange = (show: ShowItem | null | undefined) => {
+      if (!show) return false;
+      if (!hasYearFilter) return true;
+      const year = Number(String(show.showDate || "").slice(0, 4));
+      if (!Number.isInteger(year)) return false;
+      return year >= (randomPickerYearMin as number) && year <= (randomPickerYearMax as number);
+    };
     try {
-      const randomRes = await fetchShowsWithRetry(buildRandomPickerPlayUrl(), 9000);
-      if (!randomRes) {
-        setRandomPickerError("Couldn't load shows for the random picker.");
-        return;
+      let totalMatches = 0;
+      let chosen: ShowItem | null = null;
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        const randomRes = await fetchShowsWithRetry(buildRandomPickerPlayUrl(), 9000);
+        if (!randomRes) continue;
+        const randomData = (await randomRes.json()) as ShowsResponse & {
+          item?: ShowItem | null;
+        };
+        const firstItems = Array.isArray(randomData?.items) ? randomData.items : [];
+        totalMatches = Math.max(
+          totalMatches,
+          Math.max(0, Number(randomData?.venueTotal || 0) || firstItems.length),
+        );
+        const candidate =
+          randomData?.item ||
+          firstItems[Math.floor(Math.random() * Math.max(1, firstItems.length))] ||
+          null;
+        if (inSelectedYearRange(candidate)) {
+          chosen = candidate;
+          break;
+        }
       }
-      const randomData = (await randomRes.json()) as ShowsResponse & {
-        item?: ShowItem | null;
-      };
-      const firstItems = Array.isArray(randomData?.items) ? randomData.items : [];
-      const totalMatches = Math.max(
-        0,
-        Number(randomData?.venueTotal || 0) || firstItems.length,
-      );
+
       setRandomPickerMatchCount(totalMatches);
       if (totalMatches <= 0) {
         setRandomPickerError("No shows match those filters.");
         return;
       }
-      const chosen =
-        randomData?.item ||
-        firstItems[Math.floor(Math.random() * Math.max(1, firstItems.length))];
       if (!chosen) {
-        setRandomPickerError("Couldn't pick a random show.");
+        setRandomPickerError("Couldn't pick a random show in that year range.");
         return;
       }
       await playShowFromCard(chosen);
@@ -3292,9 +3434,82 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
       setRandomPickerLoading(false);
     }
   }
+  function resetRandomPickerYearFilters() {
+    if (randomPickerMinBound != null) setRandomPickerYearMin(randomPickerMinBound);
+    if (randomPickerMaxBound != null) setRandomPickerYearMax(randomPickerMaxBound);
+    setRandomPickerError(null);
+  }
 
   return (
     <main className="min-h-screen bg-[#080017] text-white">
+      {!showOnlyShows ? (
+        <section className="random-picker-gradient-animated border-y border-white/12 bg-gradient-to-br from-[#ff8a00]/45 via-[#ff2d55]/35 to-[#7a2cff]/45">
+          <div className="mx-auto w-full max-w-[1140px] px-4 py-8 md:px-6 md:py-10">
+            <div className="mx-auto max-w-4xl text-center">
+              <h2 className="text-[34px] leading-[1.05] font-semibold text-white [font-family:var(--font-roboto-condensed)] md:text-[46px]">
+                Random show picker
+              </h2>
+              <p className="mx-auto mt-2 max-w-2xl text-[14px] text-white/85 [font-family:var(--font-roboto-condensed)] md:text-[16px]">
+                One tap to pull a surprise set from the archive. Keep rolling until you find your next
+                obsession.
+              </p>
+            </div>
+
+            <div className="mx-auto mt-5 flex w-full max-w-4xl flex-col items-center justify-start gap-4 p-2 text-white">
+              <div className="flex w-full flex-col gap-2">
+                <div className="flex flex-col items-center justify-center gap-1 py-1 text-center">
+                  <div className="text-[12px] text-white/75 [font-family:var(--font-roboto-condensed)]">
+                    {randomPickerCountLoading
+                      ? "Loading shows..."
+                      : `${randomPickerMatchCount ?? 0} show${
+                          randomPickerMatchCount === 1 ? "" : "s"
+                        } available${randomPickerHasCustomYearRange ? " for selected years" : ""}`}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="mx-auto inline-flex h-[52px] w-[343px] items-center justify-center gap-2 rounded-[12px] bg-[#4d22c9] px-5 text-[16px] font-medium text-white transition hover:bg-[#5f31de] disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={playRandomShowFromFilters}
+                  disabled={randomPickerLoading || (randomPickerMatchCount ?? 0) <= 0}
+                >
+                  <FontAwesomeIcon
+                    icon={randomPickerLoading ? faSpinner : faCirclePlay}
+                    className={randomPickerLoading ? "animate-spin" : ""}
+                  />
+                  <span>{randomPickerHasActiveShow ? "Randomize" : "Play random show"}</span>
+                </button>
+              </div>
+              {randomPickerHasCustomYearRange ? (
+                <div className="inline-flex items-center gap-2 rounded-full border border-white/30 bg-white/15 px-3 py-1 text-[12px] text-white/90 [font-family:var(--font-roboto-condensed)]">
+                  <span className="w-fit">{randomPickerSelectionSummary}</span>
+                  <button
+                    type="button"
+                    aria-label="Clear year filter"
+                    className="inline-flex size-4 items-center justify-center rounded-full bg-white/20 text-white/90 transition hover:bg-white/35 hover:text-white"
+                    onClick={() => resetRandomPickerYearFilters()}
+                  >
+                    <FontAwesomeIcon icon={faXmark} className="text-[9px]" />
+                  </button>
+                </div>
+              ) : null}
+              <button
+                type="button"
+                className="text-[13px] font-medium text-white/90 underline decoration-white/60 underline-offset-2 transition hover:text-white"
+                onClick={() => setRandomPickerAdvancedOpen(true)}
+              >
+                Advanced filters
+              </button>
+            </div>
+
+            {randomPickerError ? (
+              <div className="mx-auto mt-3 max-w-4xl text-center text-[12px] text-[#ffd4df] [font-family:var(--font-roboto-condensed)]">
+                {randomPickerError}
+              </div>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
+
       <div className="mx-auto w-full max-w-[1140px] px-4 pb-28 pt-6 md:px-6">
         <div className="space-y-10">
           {!showOnlyShows && (readyPrebuiltPlaylists.length > 0 || showPrebuiltSkeleton) ? (
@@ -3318,7 +3533,10 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
                   onPointerCancel={onCompCarouselPointerEnd}
                   onPointerLeave={onCompCarouselPointerEnd}
                 >
-                  <div className="grid w-max auto-cols-[minmax(300px,300px)] grid-flow-col grid-rows-2 gap-3 md:auto-cols-[minmax(343px,343px)]">
+                  <div
+                    className="grid w-max auto-cols-[minmax(300px,300px)] grid-flow-col grid-rows-3 gap-3 md:auto-cols-[minmax(343px,343px)]"
+                    style={{ gridTemplateRows: "repeat(3, minmax(0, 1fr))" }}
+                  >
                     {showPrebuiltSkeleton ? renderPrebuiltSkeletonCards() : readyPrebuiltPlaylists.map((p) => {
                     const versions = p.slots.reduce((sum, slot) => sum + slot.variants.length, 0);
                     const previewThumbs = p.slots
@@ -3440,66 +3658,24 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
             </section>
           ) : null}
 
-          {!showOnlyShows ? (
-            <section>
-              <div className="random-picker-gradient-animated mb-4 rounded-[16px] border border-white/12 bg-gradient-to-br from-[#ff8a00]/45 via-[#ff2d55]/35 to-[#7a2cff]/45 p-4 backdrop-blur-[6px]">
-                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                  <div>
-                    <h2 className="text-[24px] font-semibold [font-family:var(--font-roboto-condensed)]">
-                      Random show picker
-                    </h2>
-                    <button
-                      type="button"
-                      className="mt-1 hidden text-[13px] text-[#b67bff] [font-family:var(--font-roboto-condensed)] hover:text-[#c79aff] md:inline-block"
-                      onClick={() => setRandomPickerAdvancedOpen(true)}
-                    >
-                      Advanced filters
-                    </button>
-                  </div>
-                  <button
-                    type="button"
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-[#6a2fd1] bg-[#5a22c9] px-4 py-2 text-[14px] font-medium text-white transition hover:bg-[#6a2fd1] md:w-auto disabled:cursor-not-allowed disabled:opacity-60"
-                    onClick={playRandomShowFromFilters}
-                    disabled={randomPickerLoading || (randomPickerMatchCount ?? 0) <= 0}
-                  >
-                    <FontAwesomeIcon
-                      icon={randomPickerLoading ? faSpinner : faCirclePlay}
-                      className={randomPickerLoading ? "animate-spin" : ""}
-                    />
-                    <span>{randomPickerHasActiveShow ? "Randomize" : "Play"}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="w-full text-center text-[13px] text-[#b67bff] [font-family:var(--font-roboto-condensed)] hover:text-[#c79aff] md:hidden"
-                    onClick={() => setRandomPickerAdvancedOpen(true)}
-                  >
-                    Advanced filters
-                  </button>
-                </div>
-
-                {randomPickerError ? (
-                  <div className="mt-3 text-[12px] text-[#ff9fb3] [font-family:var(--font-roboto-condensed)]">
-                    {randomPickerError}
-                  </div>
-                ) : null}
-              </div>
-            </section>
-          ) : null}
-
           {randomPickerAdvancedOpen ? (
-            <div className="fixed inset-0 z-[130]">
+            <div
+              className="fixed inset-0 z-[130]"
+              onClick={() => setRandomPickerAdvancedOpen(false)}
+            >
               <button
                 type="button"
                 aria-label="Close random show filters"
-                className="absolute inset-0 bg-black/60"
+                className="fixed inset-0 bg-[rgba(0,0,0,0.7)]"
                 onClick={() => setRandomPickerAdvancedOpen(false)}
               />
               <div
                 role="dialog"
                 aria-label="Random show advanced filters"
-                className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-[393px] rounded-t-[16px] border border-white/15 bg-[#080017] px-6 pb-8 pt-4 shadow-[0_-4px_4px_rgba(0,0,0,0.25)]"
+                className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-[393px] rounded-t-[16px] border border-white/15 bg-[#080017] px-6 pb-8 pt-4 shadow-[0_-4px_4px_rgba(0,0,0,0.25)] md:inset-x-auto md:bottom-auto md:top-1/2 md:left-1/2 md:w-[min(92vw,520px)] md:max-w-[520px] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-t-[16px] md:rounded-b-[16px] md:pb-6 md:shadow-[0_18px_42px_rgba(0,0,0,0.45)] md:max-h-[80vh] md:overflow-y-auto"
+                onClick={(e) => e.stopPropagation()}
               >
-                <div className="mx-auto h-[4px] w-[53px] rounded-[16px] bg-white/30" />
+                <div className="mx-auto h-[4px] w-[53px] rounded-[16px] bg-white/30 md:hidden" />
                 <div className="mt-6 text-[24px] font-medium text-white [font-family:var(--font-roboto-condensed)]">
                   Advanced filters
                 </div>
@@ -3609,11 +3785,7 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
                   <button
                     type="button"
                     className="w-full text-center text-[13px] text-[#b67bff] [font-family:var(--font-roboto-condensed)] hover:text-[#c79aff]"
-                    onClick={() => {
-                      if (randomPickerMinBound != null) setRandomPickerYearMin(randomPickerMinBound);
-                      if (randomPickerMaxBound != null) setRandomPickerYearMax(randomPickerMaxBound);
-                      setRandomPickerError(null);
-                    }}
+                    onClick={() => resetRandomPickerYearFilters()}
                   >
                     Reset filters
                   </button>
@@ -3874,7 +4046,10 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
                   {songSearchLoading && songSuggestionsForDisplay.length === 0 ? (
                     <div className="px-4 pb-3 text-[12px] text-white/60">Searching songs...</div>
                   ) : null}
-                  {!songSearchLoading && songSuggestionsForDisplay.length === 0 ? (
+                  {!songSearchLoading && songSearchError ? (
+                    <div className="px-4 pb-3 text-[12px] text-rose-200">{songSearchError}</div>
+                  ) : null}
+                  {!songSearchLoading && !songSearchError && songSuggestionsForDisplay.length === 0 ? (
                     <div className="px-4 pb-3 text-[12px] text-white/60">No matching songs yet.</div>
                   ) : null}
                   <div className="mt-1 px-4 pb-1 pt-2 text-[11px] tracking-[0.2px] text-white/70 uppercase">
@@ -3890,7 +4065,11 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
                       className="mx-1 block w-[calc(100%-8px)] rounded-[10px] px-3 py-2.5 text-left transition hover:bg-white/10"
                       onClick={() => {
                         rememberRecentShow(suggestion.showKey);
-                        router.push(`/show/${encodeURIComponent(suggestion.showKey)}`);
+                        router.push(
+                          isValidShowKey(suggestion.showKey)
+                            ? `/show/${encodeURIComponent(suggestion.showKey)}`
+                            : "/",
+                        );
                       }}
                     >
                       <div className="truncate text-[14px] leading-[1.15] text-white">{suggestion.title}</div>
@@ -4337,6 +4516,11 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
                     No shows found for this filter.
                   </div>
                 )}
+                {!loading && !error && debouncedQuery.length >= 3 && songSearchError ? (
+                  <div className="mt-3 rounded-xl border border-rose-300/30 bg-rose-600/15 p-4 text-sm text-rose-100">
+                    {songSearchError}
+                  </div>
+                ) : null}
               </>
             )}
 
@@ -4452,7 +4636,7 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
           onClick={() => closeSongSheet()}
         >
           <div
-            className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-[393px] rounded-t-2xl border border-white/15 bg-[#080017] px-6 pb-10 pt-6 shadow-[0_-4px_16px_rgba(0,0,0,0.4)]"
+            className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-[393px] rounded-t-2xl border border-white/15 bg-[#080017] px-6 pb-10 pt-6 shadow-[0_-4px_16px_rgba(0,0,0,0.4)] md:inset-x-auto md:bottom-auto md:top-1/2 md:left-1/2 md:w-[min(92vw,520px)] md:max-w-[520px] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-[16px] md:pb-8 md:shadow-[0_18px_42px_rgba(0,0,0,0.45)] md:max-h-[80vh] md:overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             {!showSongPlaylistPicker ? (

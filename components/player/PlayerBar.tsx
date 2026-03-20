@@ -1062,7 +1062,7 @@ export function PlayerBar() {
           </div>
         </div>
       ) : null}
-      <div className="fixed right-0 bottom-[52px] left-0 z-30 bg-[#080017]/95 backdrop-blur">
+      <div className="fixed inset-x-0 bottom-[52px] z-30 bg-[#080017]/95 backdrop-blur md:bottom-0">
         <div className="mx-auto w-full max-w-[1140px] px-4 pb-4 pt-3 [font-family:var(--font-roboto-condensed)] md:px-6">
           {isBuffering && playing && src ? (
             <div className="mb-2">

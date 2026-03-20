@@ -29,7 +29,18 @@ type MetaResponse = {
 };
 
 const ITEM_CACHE_TTL_MS = 1000 * 60 * 10;
+const SUCCESS_CACHE_HEADERS = {
+  "Cache-Control": "public, s-maxage=120, stale-while-revalidate=300",
+};
 const itemCache = new Map<string, { expiresAt: number; payload: unknown }>();
+
+function isValidArchiveTrackName(name: string): boolean {
+  const clean = String(name || "").trim();
+  if (!clean) return false;
+  if (clean.includes("..")) return false;
+  if (/[?#]/.test(clean)) return false;
+  return true;
+}
 
 export async function GET(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id");
@@ -37,7 +48,7 @@ export async function GET(req: NextRequest) {
 
   const cached = itemCache.get(id);
   if (cached && cached.expiresAt > Date.now()) {
-    return Response.json(cached.payload);
+    return Response.json(cached.payload, { headers: SUCCESS_CACHE_HEADERS });
   }
 
   let timeout: ReturnType<typeof setTimeout> | null = null;
@@ -68,18 +79,40 @@ export async function GET(req: NextRequest) {
       if (name.endsWith(".mp3") === false) return false;
       return PLAYABLE_FORMATS.has(fmt) || fmt.includes("MP3");
     })
-    .map((f) => {
+    .map((f): {
+      name: string;
+      title: string;
+      track: string | undefined;
+      length: string | null;
+      format: string | undefined;
+      source: string | undefined;
+      url: string;
+    } | null => {
       const fileName = f.name || "";
+      if (!isValidArchiveTrackName(fileName)) return null;
       return {
         name: fileName,
         title: f.title || fileName,
         track: f.track,
-        length: formatDuration(f.length),
+        length: formatDuration(f.length) || null,
         format: f.format,
         source: f.source,
         url: `https://archive.org/download/${encodeURIComponent(id)}/${encodeURIComponent(fileName)}`,
       };
-    });
+    })
+    .filter(
+      (
+        track,
+      ): track is {
+        name: string;
+        title: string;
+        track: string | undefined;
+        length: string | null;
+        format: string | undefined;
+        source: string | undefined;
+        url: string;
+      } => Boolean(track),
+    );
 
   // Keep deterministic order
   tracks.sort((a, b) => {
@@ -98,5 +131,5 @@ export async function GET(req: NextRequest) {
     tracks,
   };
   itemCache.set(id, { expiresAt: Date.now() + ITEM_CACHE_TTL_MS, payload });
-  return Response.json(payload);
+  return Response.json(payload, { headers: SUCCESS_CACHE_HEADERS });
 }
