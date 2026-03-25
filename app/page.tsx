@@ -1038,7 +1038,6 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
   const [songSearchLoading, setSongSearchLoading] = useState(false);
   const [songSearchError, setSongSearchError] = useState<string | null>(null);
   const [searchVenueShows, setSearchVenueShows] = useState<ShowItem[]>([]);
-  const [randomPickerAdvancedOpen, setRandomPickerAdvancedOpen] = useState(false);
   const [randomPickerLoading, setRandomPickerLoading] = useState(false);
   const [randomPickerError, setRandomPickerError] = useState<string | null>(null);
   const [randomPickerActiveShowKey, setRandomPickerActiveShowKey] = useState<string | null>(null);
@@ -3553,6 +3552,106 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
     setRandomPickerError(null);
   }
 
+  function renderRandomPickerYearFilters() {
+    return (
+      <div className="mx-auto mt-4 w-full max-w-4xl px-2">
+        <div className="mb-2 text-left text-[13px] text-white/85 [font-family:var(--font-roboto-condensed)]">
+          Years
+        </div>
+        {randomPickerYears.length > 0 ? (
+          <>
+            <div className="flex h-[64px] items-end gap-[3px] rounded-[10px] border border-white/10 bg-[#0b0320]/70 px-2 py-2">
+              {randomPickerYears.map((year) => {
+                const count = randomPickerCountsByYear.get(year) || 0;
+                const inRange =
+                  randomPickerYearMin != null &&
+                  randomPickerYearMax != null &&
+                  year >= randomPickerYearMin &&
+                  year <= randomPickerYearMax;
+                const height = Math.max(
+                  4,
+                  Math.round((count / randomPickerHistogramMax) * 46),
+                );
+                return (
+                  <div
+                    key={`random-year-bar-inline-${year}`}
+                    title={`${year}: ${count}`}
+                    className={`min-w-0 flex-1 rounded-[2px] ${inRange ? "bg-[#7a45e5]" : "bg-white/20"}`}
+                    style={{ height }}
+                  />
+                );
+              })}
+            </div>
+            <div className="mt-2 flex items-center justify-between text-[12px] text-white/75 [font-family:var(--font-roboto-condensed)]">
+              <span>{randomPickerYearMin ?? randomPickerMinBound ?? "—"}</span>
+              <span>{randomPickerYearMax ?? randomPickerMaxBound ?? "—"}</span>
+            </div>
+            {randomPickerMinBound != null && randomPickerMaxBound != null ? (
+              <div className="mt-2">
+                <div className="relative h-7">
+                  <div className="absolute top-1/2 h-[4px] w-full -translate-y-1/2 rounded-full bg-white/20" />
+                  <div
+                    className="absolute top-1/2 h-[4px] -translate-y-1/2 rounded-full bg-[#7a45e5]"
+                    style={{
+                      left: `${(
+                        ((randomPickerYearMin ?? randomPickerMinBound) - randomPickerMinBound) /
+                        Math.max(1, randomPickerMaxBound - randomPickerMinBound)
+                      ) * 100}%`,
+                      width: `${(
+                        ((randomPickerYearMax ?? randomPickerMaxBound) -
+                          (randomPickerYearMin ?? randomPickerMinBound)) /
+                        Math.max(1, randomPickerMaxBound - randomPickerMinBound)
+                      ) * 100}%`,
+                    }}
+                  />
+                  <input
+                    type="range"
+                    min={randomPickerMinBound}
+                    max={randomPickerMaxBound}
+                    value={randomPickerYearMin ?? randomPickerMinBound}
+                    className="pointer-events-none absolute inset-0 w-full appearance-none bg-transparent [&::-webkit-slider-runnable-track]:h-[4px] [&::-webkit-slider-runnable-track]:bg-transparent [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:mt-[-8px] [&::-webkit-slider-thumb]:size-5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-white/20 [&::-webkit-slider-thumb]:bg-[#f2f5ff] [&::-moz-range-track]:h-[4px] [&::-moz-range-track]:bg-transparent [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:size-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-white/20 [&::-moz-range-thumb]:bg-[#f2f5ff]"
+                    onChange={(e) => {
+                      const next = Number(e.target.value);
+                      setRandomPickerYearMin(
+                        Math.min(next, randomPickerYearMax ?? randomPickerMaxBound),
+                      );
+                    }}
+                  />
+                  <input
+                    type="range"
+                    min={randomPickerMinBound}
+                    max={randomPickerMaxBound}
+                    value={randomPickerYearMax ?? randomPickerMaxBound}
+                    className="pointer-events-none absolute inset-0 w-full appearance-none bg-transparent [&::-webkit-slider-runnable-track]:h-[4px] [&::-webkit-slider-runnable-track]:bg-transparent [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:mt-[-8px] [&::-webkit-slider-thumb]:size-5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-white/20 [&::-webkit-slider-thumb]:bg-[#f2f5ff] [&::-moz-range-track]:h-[4px] [&::-moz-range-track]:bg-transparent [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:size-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-white/20 [&::-moz-range-thumb]:bg-[#f2f5ff]"
+                    onChange={(e) => {
+                      const next = Number(e.target.value);
+                      setRandomPickerYearMax(
+                        Math.max(next, randomPickerYearMin ?? randomPickerMinBound),
+                      );
+                    }}
+                  />
+                </div>
+              </div>
+            ) : null}
+            <div className="mt-3 text-center">
+              <button
+                type="button"
+                className="text-[13px] text-[#b67bff] [font-family:var(--font-roboto-condensed)] hover:text-[#c79aff]"
+                onClick={() => resetRandomPickerYearFilters()}
+              >
+                Reset filters
+              </button>
+            </div>
+          </>
+        ) : (
+          <div className="text-[12px] text-white/65 [font-family:var(--font-roboto-condensed)]">
+            Year data is still loading.
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-[#080017] text-white">
       {!showOnlyShows ? (
@@ -3563,6 +3662,8 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
                 Random show picker
               </h2>
             </div>
+
+            {renderRandomPickerYearFilters()}
 
             <div className="mx-auto mt-5 flex w-full max-w-4xl flex-col items-center justify-start gap-4 p-2 text-white">
               <div className="flex w-full flex-col gap-2">
@@ -3601,13 +3702,6 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
                   </button>
                 </div>
               ) : null}
-              <button
-                type="button"
-                className="text-[13px] font-medium text-white/90 underline decoration-white/60 underline-offset-2 transition hover:text-white"
-                onClick={() => setRandomPickerAdvancedOpen(true)}
-              >
-                Advanced filters
-              </button>
             </div>
 
             {randomPickerError ? (
@@ -3756,142 +3850,6 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
               ) : null}
               </div>
             </section>
-          ) : null}
-
-          {randomPickerAdvancedOpen ? (
-            <div
-              className="fixed inset-0 z-[130]"
-              onClick={() => setRandomPickerAdvancedOpen(false)}
-            >
-              <button
-                type="button"
-                aria-label="Close random show filters"
-                className="fixed inset-0 bg-[rgba(0,0,0,0.7)]"
-                onClick={() => setRandomPickerAdvancedOpen(false)}
-              />
-              <div
-                role="dialog"
-                aria-label="Random show advanced filters"
-                className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-[393px] rounded-t-[16px] border border-white/15 bg-[#080017] px-6 pb-8 pt-4 shadow-[0_-4px_4px_rgba(0,0,0,0.25)] md:inset-x-auto md:bottom-auto md:top-1/2 md:left-1/2 md:w-[min(92vw,520px)] md:max-w-[520px] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-t-[16px] md:rounded-b-[16px] md:pb-6 md:shadow-[0_18px_42px_rgba(0,0,0,0.45)] md:max-h-[80vh] md:overflow-y-auto"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="mx-auto h-[4px] w-[53px] rounded-[16px] bg-white/30 md:hidden" />
-                <div className="mt-6 text-[24px] font-medium text-white [font-family:var(--font-roboto-condensed)]">
-                  Advanced filters
-                </div>
-
-                <div className="mt-4 space-y-5">
-                  <div>
-                    <div className="mb-2 text-[13px] text-white/85 [font-family:var(--font-roboto-condensed)]">
-                      Years
-                    </div>
-                    {randomPickerYears.length > 0 ? (
-                      <>
-                        <div className="flex h-[64px] items-end gap-[3px] rounded-[10px] border border-white/10 bg-[#0b0320]/70 px-2 py-2">
-                          {randomPickerYears.map((year) => {
-                            const count = randomPickerCountsByYear.get(year) || 0;
-                            const inRange =
-                              randomPickerYearMin != null &&
-                              randomPickerYearMax != null &&
-                              year >= randomPickerYearMin &&
-                              year <= randomPickerYearMax;
-                            const height = Math.max(
-                              4,
-                              Math.round((count / randomPickerHistogramMax) * 46),
-                            );
-                            return (
-                              <div
-                                key={`random-year-bar-${year}`}
-                                title={`${year}: ${count}`}
-                                  className={`min-w-0 flex-1 rounded-[2px] ${inRange ? "bg-[#7a45e5]" : "bg-white/20"}`}
-                                style={{ height }}
-                              />
-                            );
-                          })}
-                        </div>
-                        <div className="mt-2 flex items-center justify-between text-[12px] text-white/75 [font-family:var(--font-roboto-condensed)]">
-                          <span>{randomPickerYearMin ?? randomPickerMinBound ?? "—"}</span>
-                          <span>{randomPickerYearMax ?? randomPickerMaxBound ?? "—"}</span>
-                        </div>
-                        {randomPickerMinBound != null && randomPickerMaxBound != null ? (
-                          <div className="mt-2">
-                            <div className="relative h-7">
-                              <div className="absolute top-1/2 h-[4px] w-full -translate-y-1/2 rounded-full bg-white/20" />
-                              <div
-                                className="absolute top-1/2 h-[4px] -translate-y-1/2 rounded-full bg-[#7a45e5]"
-                                style={{
-                                  left: `${(
-                                    ((randomPickerYearMin ?? randomPickerMinBound) - randomPickerMinBound) /
-                                    Math.max(1, randomPickerMaxBound - randomPickerMinBound)
-                                  ) * 100}%`,
-                                  width: `${(
-                                    ((randomPickerYearMax ?? randomPickerMaxBound) -
-                                      (randomPickerYearMin ?? randomPickerMinBound)) /
-                                    Math.max(1, randomPickerMaxBound - randomPickerMinBound)
-                                  ) * 100}%`,
-                                }}
-                              />
-                              <input
-                                type="range"
-                                min={randomPickerMinBound}
-                                max={randomPickerMaxBound}
-                                value={randomPickerYearMin ?? randomPickerMinBound}
-                                className="pointer-events-none absolute inset-0 w-full appearance-none bg-transparent [&::-webkit-slider-runnable-track]:h-[4px] [&::-webkit-slider-runnable-track]:bg-transparent [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:mt-[-8px] [&::-webkit-slider-thumb]:size-5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-white/20 [&::-webkit-slider-thumb]:bg-[#f2f5ff] [&::-moz-range-track]:h-[4px] [&::-moz-range-track]:bg-transparent [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:size-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-white/20 [&::-moz-range-thumb]:bg-[#f2f5ff]"
-                                onChange={(e) => {
-                                  const next = Number(e.target.value);
-                                  setRandomPickerYearMin(
-                                    Math.min(next, randomPickerYearMax ?? randomPickerMaxBound),
-                                  );
-                                }}
-                              />
-                              <input
-                                type="range"
-                                min={randomPickerMinBound}
-                                max={randomPickerMaxBound}
-                                value={randomPickerYearMax ?? randomPickerMaxBound}
-                                className="pointer-events-none absolute inset-0 w-full appearance-none bg-transparent [&::-webkit-slider-runnable-track]:h-[4px] [&::-webkit-slider-runnable-track]:bg-transparent [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:mt-[-8px] [&::-webkit-slider-thumb]:size-5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-white/20 [&::-webkit-slider-thumb]:bg-[#f2f5ff] [&::-moz-range-track]:h-[4px] [&::-moz-range-track]:bg-transparent [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:size-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-white/20 [&::-moz-range-thumb]:bg-[#f2f5ff]"
-                                onChange={(e) => {
-                                  const next = Number(e.target.value);
-                                  setRandomPickerYearMax(
-                                    Math.max(next, randomPickerYearMin ?? randomPickerMinBound),
-                                  );
-                                }}
-                              />
-                            </div>
-                          </div>
-                        ) : null}
-                      </>
-                    ) : (
-                      <div className="text-[12px] text-white/65 [font-family:var(--font-roboto-condensed)]">
-                        Year data is still loading.
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="text-center text-[13px] text-white/70 [font-family:var(--font-roboto-condensed)]">
-                    {randomPickerCountLoading
-                      ? "Updating..."
-                      : `${randomPickerMatchCount ?? 0} show${
-                          randomPickerMatchCount === 1 ? "" : "s"
-                        }`}
-                  </div>
-                  <button
-                    type="button"
-                    className="flex h-[48px] w-full items-center justify-center rounded-[12px] bg-[#5a22c9] px-4 text-[16px] font-semibold text-white [font-family:var(--font-roboto-condensed)]"
-                    onClick={() => setRandomPickerAdvancedOpen(false)}
-                  >
-                    Done
-                  </button>
-                  <button
-                    type="button"
-                    className="w-full text-center text-[13px] text-[#b67bff] [font-family:var(--font-roboto-condensed)] hover:text-[#c79aff]"
-                    onClick={() => resetRandomPickerYearFilters()}
-                  >
-                    Reset filters
-                  </button>
-                </div>
-              </div>
-            </div>
           ) : null}
 
           {!showOnlyShows ? (
