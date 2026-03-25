@@ -3562,10 +3562,6 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
               <h2 className="text-[34px] leading-[1.05] font-semibold text-white [font-family:var(--font-roboto-condensed)] md:text-[46px]">
                 Random show picker
               </h2>
-              <p className="mx-auto mt-2 max-w-2xl text-[14px] text-white/85 [font-family:var(--font-roboto-condensed)] md:text-[16px]">
-                One tap to pull a surprise set from the archive. Keep rolling until you find your next
-                obsession.
-              </p>
             </div>
 
             <div className="mx-auto mt-5 flex w-full max-w-4xl flex-col items-center justify-start gap-4 p-2 text-white">
