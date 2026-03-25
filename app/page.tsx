@@ -71,6 +71,11 @@ type ShowPlaybackStats = {
   showLengthSeconds: number | null;
   showTrackCount: number | null;
 };
+type ShowBoundaryMatchResponse = ShowPlaybackStats & {
+  firstTrackTitle?: string | null;
+  lastTrackTitle?: string | null;
+  boundarySongMatch?: boolean;
+};
 type IaMetadataFile = {
   name?: string;
   title?: string;
@@ -470,6 +475,40 @@ async function fetchShowPlaybackStatsClient(identifier: string): Promise<ShowPla
     };
   } catch {
     return { showLengthSeconds: null, showTrackCount: null };
+  }
+}
+
+async function fetchShowBoundaryMatchClient(
+  identifier: string,
+  boundarySong: string,
+): Promise<ShowBoundaryMatchResponse> {
+  try {
+    const params = new URLSearchParams();
+    params.set("identifier", identifier);
+    params.set("boundarySong", boundarySong);
+    const data = await fetchJsonCached<ShowBoundaryMatchResponse>(
+      `/api/ia/show-stats?${params.toString()}`,
+      {
+        ttlMs: 1000 * 60 * 5,
+        timeoutMs: 10000,
+        cacheKey: `show-boundary:${identifier}:${boundarySong.toLowerCase()}`,
+      },
+    );
+    return {
+      showLengthSeconds:
+        typeof data?.showLengthSeconds === "number" ? data.showLengthSeconds : null,
+      showTrackCount: typeof data?.showTrackCount === "number" ? data.showTrackCount : null,
+      firstTrackTitle:
+        typeof data?.firstTrackTitle === "string" ? data.firstTrackTitle : null,
+      lastTrackTitle: typeof data?.lastTrackTitle === "string" ? data.lastTrackTitle : null,
+      boundarySongMatch: Boolean(data?.boundarySongMatch),
+    };
+  } catch {
+    return {
+      showLengthSeconds: null,
+      showTrackCount: null,
+      boundarySongMatch: false,
+    };
   }
 }
 
@@ -1545,11 +1584,26 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
             ).values(),
           ),
         );
-        const withMatchedUrl = unique.filter((item) =>
-          Boolean(String(item.matchedSongUrl || "").trim()),
-        );
-        const pool = withMatchedUrl.length > 0 ? withMatchedUrl : unique;
-        return shuffleArray(pool).slice(0, limit);
+        const matches: ShowItem[] = [];
+        const maxChecks = Math.min(unique.length, 28);
+        const candidateSlice = unique.slice(0, maxChecks);
+        for (let i = 0; i < candidateSlice.length; i += 6) {
+          const batch = candidateSlice.slice(i, i + 6);
+          const checked = await Promise.all(
+            batch.map(async (item) => {
+              const id = String(item.defaultId || "").trim();
+              if (!id) return null;
+              const info = await fetchShowBoundaryMatchClient(id, songTitle);
+              return info.boundarySongMatch ? item : null;
+            }),
+          );
+          for (const result of checked) {
+            if (!result) continue;
+            matches.push(result);
+          }
+          if (matches.length >= limit) break;
+        }
+        return shuffleArray(matches).slice(0, limit);
       };
 
       const pickMarathonShows = async (
