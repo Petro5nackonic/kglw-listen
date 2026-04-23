@@ -2,7 +2,8 @@ import { NextRequest } from "next/server";
 import { formatDuration } from "@/utils/formatDuration";
 import { inferCountryFromVenueName } from "@/utils/venueCountryMap";
 
-export const dynamic = "force-dynamic";
+// Route is inherently dynamic (reads search params); keep it cache-friendly
+// via the Cache-Control headers below rather than force-dynamic.
 export const maxDuration = 60;
 const SHOWS_RESPONSE_CACHE_TTL_MS = 1000 * 60 * 10;
 const UPSTREAM_TIMEOUT_MS = 10000;

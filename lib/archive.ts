@@ -53,6 +53,17 @@ const REMOTE_DOCS_CACHE_TTL_MS = 1000 * 60 * 12;
 /** If IA returns nothing (transient failure), retry soon instead of caching empties for 12h. */
 const REMOTE_DOCS_EMPTY_RETRY_TTL_MS = 1000 * 90;
 
+// Next.js Data Cache revalidation windows. In-memory caches above cover
+// single-instance hot paths; these let the cache persist across cold lambdas
+// and are invalidated on demand via /api/revalidate tag-based purges.
+const IA_SEARCH_DATA_CACHE_REVALIDATE_SECONDS = 60 * 60 * 6; // 6h
+const IA_ITEM_DATA_CACHE_REVALIDATE_SECONDS = 60 * 60 * 24; // 24h
+export const IA_SEARCH_DOCS_TAG = "ia:search-docs";
+export const IA_ITEM_TAG = "ia:item";
+export function iaItemTag(identifier: string): string {
+  return `ia:item:${String(identifier || "").trim()}`;
+}
+
 const IA_FETCH_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
 
@@ -111,7 +122,10 @@ async function fetchRemoteArchiveSearchDocsOnce(): Promise<IaDoc[]> {
       const controller = new AbortController();
       timeout = setTimeout(() => controller.abort(), IA_SEARCH_TIMEOUT_MS);
       res = await fetch(url, {
-        cache: "no-store",
+        next: {
+          revalidate: IA_SEARCH_DATA_CACHE_REVALIDATE_SECONDS,
+          tags: [IA_SEARCH_DOCS_TAG],
+        },
         signal: controller.signal,
         headers: {
           Accept: "application/json",
@@ -217,7 +231,10 @@ export async function getArchiveFilesWithRemoteFallback(
     const controller = new AbortController();
     timeout = setTimeout(() => controller.abort(), 14000);
     const res = await fetch(`https://archive.org/metadata/${encodeURIComponent(id)}`, {
-      cache: "no-store",
+      next: {
+        revalidate: IA_ITEM_DATA_CACHE_REVALIDATE_SECONDS,
+        tags: [IA_ITEM_TAG, iaItemTag(id)],
+      },
       signal: controller.signal,
     });
     if (!res.ok) return null;

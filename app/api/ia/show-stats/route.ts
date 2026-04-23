@@ -1,6 +1,11 @@
 import { NextRequest } from "next/server";
 
-export const dynamic = "force-dynamic";
+// Route is inherently dynamic (reads search params); keep it cache-friendly
+// via Next's Data Cache on the upstream fetch rather than force-dynamic.
+
+// Archive.org item metadata changes rarely — cache for 24h and let
+// /api/revalidate purge the "ia:item" / "ia:item:{id}" tag on demand.
+const IA_ITEM_REVALIDATE_SECONDS = 60 * 60 * 24;
 
 type IaMetadataFile = {
   name?: string;
@@ -79,7 +84,13 @@ async function fetchMetadataWithTimeout(identifier: string, timeoutMs: number) {
     timeout = setTimeout(() => controller.abort(), timeoutMs);
     const res = await fetch(
       `https://archive.org/metadata/${encodeURIComponent(identifier)}`,
-      { cache: "no-store", signal: controller.signal },
+      {
+        next: {
+          revalidate: IA_ITEM_REVALIDATE_SECONDS,
+          tags: ["ia:item", `ia:item:${identifier}`],
+        },
+        signal: controller.signal,
+      },
     );
     if (!res.ok) return null;
     return (await res.json()) as { files?: IaMetadataFile[] };

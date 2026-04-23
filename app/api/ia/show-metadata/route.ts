@@ -1,9 +1,14 @@
 import { NextRequest } from "next/server";
 
-export const dynamic = "force-dynamic";
+// Route is inherently dynamic (reads search params) but we want the
+// response to be CDN-cacheable via the Cache-Control header below, so we
+// intentionally do NOT set dynamic = "force-dynamic".
 export const maxDuration = 60;
 const SHOW_METADATA_CACHE_TTL_MS = 1000 * 60 * 5;
 const SHOW_METADATA_TIMEOUTS_MS = [8000, 12000, 18000];
+// Archive.org item metadata changes rarely; cache 24h and let /api/revalidate
+// purge via the "ia:item" / "ia:item:{id}" tags when needed.
+const IA_ITEM_REVALIDATE_SECONDS = 60 * 60 * 24;
 const SUCCESS_CACHE_HEADERS = {
   "Cache-Control": "public, s-maxage=120, stale-while-revalidate=300",
 };
@@ -37,7 +42,10 @@ async function fetchArchiveMetadata(id: string, timeoutMs: number): Promise<IaMe
     const controller = new AbortController();
     timeout = setTimeout(() => controller.abort(), timeoutMs);
     const res = await fetch(`https://archive.org/metadata/${encodeURIComponent(id)}`, {
-      cache: "no-store",
+      next: {
+        revalidate: IA_ITEM_REVALIDATE_SECONDS,
+        tags: ["ia:item", `ia:item:${id}`],
+      },
       signal: controller.signal,
     });
     if (!res.ok) return null;

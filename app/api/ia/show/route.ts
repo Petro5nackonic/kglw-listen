@@ -1,12 +1,16 @@
 import { NextRequest } from "next/server";
 
-export const dynamic = "force-dynamic";
+// Route is inherently dynamic (reads search params); keep it cache-friendly
+// via Cache-Control headers rather than force-dynamic.
 export const maxDuration = 60;
 const SHOW_DETAIL_CACHE_TTL_MS = 1000 * 60 * 5;
 const SUCCESS_CACHE_HEADERS = {
   "Cache-Control": "public, s-maxage=120, stale-while-revalidate=300",
 };
 const UPSTREAM_TIMEOUTS_MS = [7000, 10000, 14000];
+// Archive.org advancedsearch results for a given identifier are stable over
+// hours; cache 6h and purge via the "ia:search-docs" tag on demand.
+const IA_SEARCH_REVALIDATE_SECONDS = 60 * 60 * 6;
 const DEGRADED_CACHE_HEADERS = {
   "Cache-Control": "public, s-maxage=20, stale-while-revalidate=40",
 };
@@ -122,7 +126,13 @@ export async function GET(req: NextRequest) {
     try {
       const controller = new AbortController();
       timeout = setTimeout(() => controller.abort(), timeoutMs);
-      const candidate = await fetch(url, { cache: "no-store", signal: controller.signal });
+      const candidate = await fetch(url, {
+        next: {
+          revalidate: IA_SEARCH_REVALIDATE_SECONDS,
+          tags: ["ia:search-docs"],
+        },
+        signal: controller.signal,
+      });
       if (!candidate.ok) continue;
       res = candidate;
       break;
