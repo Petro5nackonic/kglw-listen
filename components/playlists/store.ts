@@ -217,6 +217,88 @@ function normalizeSongToken(input: string): string {
     .trim();
 }
 
+function compactSongToken(input: string): string {
+  return String(input || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
+const SONG_MATCH_NOISE_WORDS = new Set([
+  "live",
+  "version",
+  "edit",
+  "take",
+  "intro",
+  "outro",
+  "part",
+  "pt",
+  "feat",
+  "the",
+  "and",
+]);
+
+function escapeRegexToken(input: string): string {
+  return String(input || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function hasTokenWord(haystack: string, token: string): boolean {
+  if (!haystack || !token) return false;
+  const re = new RegExp(`(^|\\s)${escapeRegexToken(token)}(\\s|$)`, "i");
+  return re.test(haystack);
+}
+
+// Strong match means we're confident the file actually contains the requested
+// song — not a looks-alike short-token collision. Keep this in sync with the
+// equivalent helper in app/api/prebuilt-playlists/route.ts.
+function songMatchStats(songName: string, haystack: string): {
+  strong: boolean;
+  tokenHits: number;
+  hitRatio: number;
+  phraseMatch: boolean;
+  compactMatch: boolean;
+} {
+  const needle = normalizeSongToken(songName);
+  const hay = normalizeSongToken(haystack);
+  const needleCompact = compactSongToken(songName);
+  const hayCompact = compactSongToken(haystack);
+  const tokens = needle
+    .split(" ")
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 2 && !SONG_MATCH_NOISE_WORDS.has(token));
+  const tokenHits = tokens.reduce((sum, token) => (hasTokenWord(hay, token) ? sum + 1 : sum), 0);
+  const phraseMatch = Boolean(needle) && hay.includes(needle);
+  const compactMatch = needleCompact.length >= 4 && hayCompact.includes(needleCompact);
+  const hitRatio = tokens.length > 0 ? tokenHits / tokens.length : 0;
+  const strong =
+    phraseMatch ||
+    compactMatch ||
+    (tokens.length === 1
+      ? tokenHits === 1
+      : tokenHits >= Math.max(2, Math.ceil(tokens.length * 0.67)));
+  return { strong, tokenHits, hitRatio, phraseMatch, compactMatch };
+}
+
+function isCompactTrackNumberName(nameOrUrl: string): boolean {
+  const raw = String(nameOrUrl || "");
+  const base = raw.split("/").pop() || raw;
+  const decoded = decodeURIComponent(base).toLowerCase();
+  const noExt = decoded.replace(/\.[a-z0-9]+$/i, "");
+  return /(?:^|[._-])t?\d{1,3}[a-z]?$/.test(noExt);
+}
+
+// Runtime safety net that mirrors scripts/sanitize-prebuilt-manifest.mjs.
+// Drops variants whose URL filename does not plausibly match the slot title,
+// unless the filename is a compact track-number style (which legitimately
+// relies on sidecar title metadata to identify the song).
+function isVariantUrlPlausible(songName: string, variantUrl: string): boolean {
+  const url = String(variantUrl || "").trim();
+  if (!url) return false;
+  const file = decodeURIComponent(url.split("/").pop() || "");
+  if (!file) return false;
+  if (songMatchStats(songName, file).strong) return true;
+  return isCompactTrackNumberName(file);
+}
+
 type LegacyPlaylistTrack = {
   id: string;
   addedAt: number;
@@ -673,7 +755,14 @@ export const usePlaylists = create<PlaylistsState>()(
             const chainGroupIds = new Map<string, string>();
             const slots: PlaylistSlot[] = rawSlots
               .map((slot, slotIdx) => {
-                const variants = Array.isArray(slot?.variants) ? slot.variants : [];
+                const slotTitle = String(slot?.canonicalTitle || "").trim();
+                const rawVariants = Array.isArray(slot?.variants) ? slot.variants : [];
+                const variants = rawVariants.filter((track) =>
+                  isVariantUrlPlausible(
+                    slotTitle || String(track?.title || ""),
+                    String(track?.url || ""),
+                  ),
+                );
                 if (variants.length === 0) return null;
                 const chainKey = String(slot?.chainGroup || "").trim();
                 const linkGroupId = chainKey
@@ -772,11 +861,18 @@ export const usePlaylists = create<PlaylistsState>()(
                     );
                   });
                   if (audio.length === 0) return null;
-                  const exact =
-                    audio.find((f) => {
-                      const hay = normalizeSongToken(`${f?.title || ""} ${f?.name || ""}`);
-                      return token && hay && (hay.includes(token) || token.includes(hay));
-                    }) || audio[0];
+                  // Strict: require a real filename match, or a track-number-style filename
+                  // whose sidecar title strongly matches. Never fall back to audio[0] — that
+                  // was the source of "correct song name, wrong audio" bugs.
+                  void token;
+                  const exact = audio.find((f) => {
+                    const fileStats = songMatchStats(preferredTitle, `${f?.name || ""}`);
+                    if (fileStats.strong) return true;
+                    if (!isCompactTrackNumberName(String(f?.name || ""))) return false;
+                    const titleStats = songMatchStats(preferredTitle, `${f?.title || ""}`);
+                    return titleStats.strong;
+                  });
+                  if (!exact) return null;
                   const fileName = String(exact?.name || "").trim();
                   if (!fileName) return null;
                   return {
@@ -852,30 +948,22 @@ export const usePlaylists = create<PlaylistsState>()(
               const merged = strong.concat(weak).slice(0, 5);
               if (merged.length >= 2) return merged;
 
-              // Fallback: direct IA identifier search by song text, then resolve playable URL.
+              // Fallback: use local cached shows API (no direct Archive search).
               const firstToken = queryToken.split(" ").filter(Boolean)[0] || queryToken;
               if (!firstToken) return merged;
-              const q = [
-                "mediatype:(audio OR etree)",
-                "(collection:(KingGizzardAndTheLizardWizard) OR identifier:(kglw*))",
-                `text:${firstToken}*`,
-              ].join(" AND ");
-              const searchUrl =
-                "https://archive.org/advancedsearch.php" +
-                `?q=${encodeURIComponent(q)}` +
-                "&fl[]=identifier&rows=60&page=1&output=json&sort[]=downloads%20desc";
+              const searchUrl = `/api/ia/shows?page=1&sort=most_played&fast=1&query=${encodeURIComponent(firstToken)}`;
               const searchRes = await fetch(searchUrl, { cache: "no-store" });
               if (!searchRes.ok) return merged;
               const searchData = (await searchRes.json()) as {
-                response?: { docs?: Array<{ identifier?: string }> };
+                song?: { items?: Array<{ defaultId?: string }> };
               };
-              const docs = Array.isArray(searchData?.response?.docs)
-                ? searchData.response.docs
+              const songItems = Array.isArray(searchData?.song?.items)
+                ? searchData.song.items
                 : [];
               const fallbackOut = merged.slice();
-              for (const doc of docs) {
+              for (const item of songItems) {
                 if (fallbackOut.length >= 5) break;
-                const identifier = String(doc?.identifier || "").trim();
+                const identifier = String(item?.defaultId || "").trim();
                 if (!identifier) continue;
                 const fallback = await resolvePlayableUrl(identifier, songName);
                 if (!fallback?.url || seenUrl.has(fallback.url)) continue;
@@ -998,11 +1086,17 @@ export const usePlaylists = create<PlaylistsState>()(
                     );
                   });
                   if (audio.length === 0) return null;
-                  const best =
-                    audio.find((f) => {
-                      const hay = normalizeSongToken(`${f?.title || ""} ${f?.name || ""}`);
-                      return token && hay && (hay.includes(token) || token.includes(hay));
-                    }) || audio[0];
+                  // Strict: require a real filename match, or a track-number-style filename
+                  // whose sidecar title strongly matches. Never fall back to audio[0].
+                  void token;
+                  const best = audio.find((f) => {
+                    const fileStats = songMatchStats(preferredTitle, `${f?.name || ""}`);
+                    if (fileStats.strong) return true;
+                    if (!isCompactTrackNumberName(String(f?.name || ""))) return false;
+                    const titleStats = songMatchStats(preferredTitle, `${f?.title || ""}`);
+                    return titleStats.strong;
+                  });
+                  if (!best) return null;
                   const fileName = String(best?.name || "").trim();
                   if (!fileName) return null;
                   return {
@@ -1244,11 +1338,17 @@ export const usePlaylists = create<PlaylistsState>()(
                     );
                   });
                   if (audio.length === 0) return null;
-                  const best =
-                    audio.find((f) => {
-                      const hay = normalizeSongToken(`${f?.title || ""} ${f?.name || ""}`);
-                      return token && hay && (hay.includes(token) || token.includes(hay));
-                    }) || audio[0];
+                  // Strict: require a real filename match, or a track-number-style filename
+                  // whose sidecar title strongly matches. Never fall back to audio[0].
+                  void token;
+                  const best = audio.find((f) => {
+                    const fileStats = songMatchStats(preferredTitle, `${f?.name || ""}`);
+                    if (fileStats.strong) return true;
+                    if (!isCompactTrackNumberName(String(f?.name || ""))) return false;
+                    const titleStats = songMatchStats(preferredTitle, `${f?.title || ""}`);
+                    return titleStats.strong;
+                  });
+                  if (!best) return null;
                   const fileName = String(best?.name || "").trim();
                   if (!fileName) return null;
                   return {

@@ -3,6 +3,7 @@ import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 
 import type { Track } from "@/components/player/store";
+import { loadArchiveDataset } from "@/lib/archive";
 
 type ApiPrebuiltSlot = {
   canonicalTitle: string;
@@ -413,16 +414,17 @@ async function resolvePlayableUrl(
       );
     });
     if (audio.length === 0) return null;
-    const best =
-      audio.find((f) => {
-        const stats = songMatchStats(preferredTitle, `${f?.name || ""}`);
-        const titleStats = songMatchStats(preferredTitle, `${f?.title || ""}`);
-        if (stats.strong) return true;
-        // Track-number filenames can rely on title metadata when available.
-        const name = String(f?.name || "");
-        const trackNumberStyle = isCompactTrackNumberName(name);
-        return trackNumberStyle && titleStats.strong;
-      }) || audio[0];
+    // Require a real match against the filename OR a track-number-style filename
+    // whose sidecar title strongly matches. Never silently fall back to audio[0],
+    // which was the root cause of "correct song name, wrong audio" bugs.
+    const best = audio.find((f) => {
+      const fileStats = songMatchStats(preferredTitle, `${f?.name || ""}`);
+      if (fileStats.strong) return true;
+      const name = String(f?.name || "");
+      if (!isCompactTrackNumberName(name)) return false;
+      const titleStats = songMatchStats(preferredTitle, `${f?.title || ""}`);
+      return titleStats.strong;
+    });
     const fileName = String(best?.name || "").trim();
     if (!fileName) return null;
     return {
@@ -514,24 +516,24 @@ async function fetchLiveVariants(origin: string, songName: string): Promise<Trac
       }
     }
 
-    // Last-chance fallback: one direct IA identifier search, then resolve one playable URL.
+    // Last-chance fallback: scan cached Archive dataset for a token match.
     const token = normalizeSongToken(songName).split(" ").find(Boolean) || "";
     if (!token) return [];
-    const q = [
-      "mediatype:(audio OR etree)",
-      "(collection:(KingGizzardAndTheLizardWizard) OR identifier:(kglw*))",
-      `text:${token}*`,
-    ].join(" AND ");
-    const searchUrl =
-      "https://archive.org/advancedsearch.php" +
-      `?q=${encodeURIComponent(q)}` +
-      "&fl[]=identifier&fl[]=title&rows=1&page=1&output=json&sort[]=downloads%20desc";
-    const searchRes = await fetch(searchUrl, { cache: "no-store" });
-    if (!searchRes.ok) return [];
-    const searchData = (await searchRes.json()) as {
-      response?: { docs?: Array<{ identifier?: string; title?: string }> };
-    };
-    const doc = Array.isArray(searchData?.response?.docs) ? searchData.response.docs[0] : undefined;
+    const ds = await loadArchiveDataset();
+    const docs = ds?.docs || [];
+    const archiveItems = ds?.itemsByIdentifier || {};
+    let doc: { identifier?: string; title?: string } | undefined;
+    for (const d of docs) {
+      const id = String(d.identifier || "").trim();
+      if (!id) continue;
+      const hay = (
+        archiveItems[id]?.searchText || `${d.title || ""} ${id}`.toLowerCase()
+      ).toLowerCase();
+      if (hay.includes(token.toLowerCase())) {
+        doc = d;
+        break;
+      }
+    }
     const id = String(doc?.identifier || "").trim();
     if (!id) return [];
     const resolved = await resolvePlayableUrl(origin, id, songName);

@@ -7,10 +7,13 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "build:prebuilts": "node scripts/build-static-prebuilts-from-local.mjs --legacyDefs --apply --out=data/prebuilt-playlists.static.json",
+    "build:prebuilts": "node scripts/build-static-prebuilts-from-local.mjs --legacyDefs --apply --out=data/prebuilt-playlists.static.json && npm run prebuilts:sanitize && npm run prebuilts:audit",
     "build:prebuilts:studio:preview": "node scripts/build-static-prebuilts-from-local.mjs --out=data/prebuilt-playlists.generated.json",
-    "build:prebuilts:studio:apply": "node scripts/build-static-prebuilts-from-local.mjs --apply --out=data/prebuilt-playlists.generated.json",
-    "test:archive": "node --experimental-strip-types --test src/archive/*.test.ts src/validate/*.test.ts"
+    "build:prebuilts:studio:apply": "node scripts/build-static-prebuilts-from-local.mjs --apply --out=data/prebuilt-playlists.generated.json && npm run prebuilts:sanitize && npm run prebuilts:audit",
+    "prebuilts:sanitize": "node scripts/sanitize-prebuilt-manifest.mjs --in=data/prebuilt-playlists.static.json",
+    "prebuilts:audit": "node scripts/audit-prebuilt-all.mjs",
+    "test:archive": "node --experimental-strip-types --test src/archive/*.test.ts src/validate/*.test.ts",
+    "sync:archive": "npx tsx scripts/syncArchive.ts"
   },
   "dependencies": {
     "@fortawesome/fontawesome-svg-core": "^7.2.0",
@@ -31,6 +34,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",
+    "tsx": "^4.20.3",
     "typescript": "^5"
   }
 }

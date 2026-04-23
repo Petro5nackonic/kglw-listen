@@ -379,9 +379,21 @@ function buildMp3Candidates(identifier, files) {
 function scoreCandidate(songName, candidate) {
   const fileStats = getSongMatchStats(songName, candidate.fileName || "");
   const titleStats = getSongMatchStats(songName, candidate.title || "");
+  const songTokens = getSongTokens(songName);
+  // For short/ambiguous song names (single non-noise token like "Set", "Empty",
+  // "Hell", "Dragon"), token-hit heuristics produce false positives. Require
+  // a phrase or compact match in that case on either the filename or the title.
+  const filenameRealMatch =
+    fileStats.phraseMatch ||
+    fileStats.compactMatch ||
+    (songTokens.length >= 2 && fileStats.strong);
+  const titleRealMatch =
+    titleStats.phraseMatch ||
+    titleStats.compactMatch ||
+    (songTokens.length >= 2 && titleStats.strong);
   const allowTitleOnly =
-    candidate.isTrackNumberStyle && candidate.hasTrackMapping && titleStats.strong;
-  if (!fileStats.strong && !allowTitleOnly) return Number.NEGATIVE_INFINITY;
+    candidate.isTrackNumberStyle && candidate.hasTrackMapping && titleRealMatch;
+  if (!filenameRealMatch && !allowTitleOnly) return Number.NEGATIVE_INFINITY;
   let score = fileStats.tokenHits * 14;
   if (fileStats.phraseMatch) score += 34;
   if (fileStats.compactMatch) score += 14;
@@ -393,9 +405,8 @@ function scoreCandidate(songName, candidate) {
   }
   const fileNorm = normalize(candidate.fileName);
   const titleNorm = normalize(candidate.title || "");
-  const tokens = getSongTokens(songName);
-  if (tokens.length > 0 && tokens.every((t) => fileNorm.includes(t))) score += 40;
-  if (tokens.length > 0 && tokens.every((t) => titleNorm.includes(t))) score += 20;
+  if (songTokens.length > 0 && songTokens.every((t) => fileNorm.includes(t))) score += 40;
+  if (songTokens.length > 0 && songTokens.every((t) => titleNorm.includes(t))) score += 20;
   if (candidate.isTrackNumberStyle && !candidate.hasTrackMapping) score -= 25;
   else if (candidate.isTrackNumberStyle) score -= 5;
   return score;
