@@ -1,46 +1,15 @@
 import { NextRequest } from "next/server";
-import { formatDuration } from "@/utils/formatDuration";
 
-const PLAYABLE_FORMATS = new Set([
-  "VBR MP3",
-  "MP3",
-  "64Kbps MP3",
-  "128Kbps MP3",
-  "256Kbps MP3",
-]);
-
-type MetaFile = {
-  name?: string;
-  format?: string;
-  title?: string;
-  track?: string;
-  length?: string | number;
-  source?: string;
-};
-
-type MetaResponse = {
-  metadata?: {
-    title?: string;
-    creator?: string | string[];
-    date?: string;
-    venue?: string;
-  };
-  files?: MetaFile[];
-};
+import {
+  buildItemPayloadFromArchive,
+  getArchiveItemWithRemoteFallback,
+} from "@/lib/archive";
 
 const ITEM_CACHE_TTL_MS = 1000 * 60 * 10;
 const SUCCESS_CACHE_HEADERS = {
-  "Cache-Control": "public, s-maxage=120, stale-while-revalidate=300",
+  "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=604800",
 };
 const itemCache = new Map<string, { expiresAt: number; payload: unknown }>();
-
-function isValidArchiveTrackName(name: string): boolean {
-  const clean = String(name || "").trim();
-  if (!clean) return false;
-  if (clean.includes("..")) return false;
-  if (/[?#]/.test(clean)) return false;
-  return true;
-}
 
 export async function GET(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id");
@@ -51,85 +20,15 @@ export async function GET(req: NextRequest) {
     return Response.json(cached.payload, { headers: SUCCESS_CACHE_HEADERS });
   }
 
-  let timeout: ReturnType<typeof setTimeout> | null = null;
-  let metaRes: Response;
-  try {
-    const controller = new AbortController();
-    timeout = setTimeout(() => controller.abort(), 8000);
-    metaRes = await fetch(`https://archive.org/metadata/${encodeURIComponent(id)}`, {
-      cache: "no-store",
-      signal: controller.signal,
-    });
-  } catch {
-    return Response.json({ error: "Metadata fetch timed out" }, { status: 504 });
-  } finally {
-    if (timeout) clearTimeout(timeout);
-  }
-  if (!metaRes.ok) return Response.json({ error: "Metadata fetch failed" }, { status: 502 });
-
-  const meta = (await metaRes.json()) as MetaResponse;
-  const files = Array.isArray(meta?.files) ? meta.files : [];
-  const md = meta?.metadata || {};
-
-  const tracks = files
-    .filter((f) => {
-      const fmt = String(f.format || "");
-      const name = String(f.name || "");
-      if (!name) return false;
-      if (name.endsWith(".mp3") === false) return false;
-      return PLAYABLE_FORMATS.has(fmt) || fmt.includes("MP3");
-    })
-    .map((f): {
-      name: string;
-      title: string;
-      track: string | undefined;
-      length: string | null;
-      format: string | undefined;
-      source: string | undefined;
-      url: string;
-    } | null => {
-      const fileName = f.name || "";
-      if (!isValidArchiveTrackName(fileName)) return null;
-      return {
-        name: fileName,
-        title: f.title || fileName,
-        track: f.track,
-        length: formatDuration(f.length) || null,
-        format: f.format,
-        source: f.source,
-        url: `https://archive.org/download/${encodeURIComponent(id)}/${encodeURIComponent(fileName)}`,
-      };
-    })
-    .filter(
-      (
-        track,
-      ): track is {
-        name: string;
-        title: string;
-        track: string | undefined;
-        length: string | null;
-        format: string | undefined;
-        source: string | undefined;
-        url: string;
-      } => Boolean(track),
+  const item = await getArchiveItemWithRemoteFallback(id);
+  const payload = buildItemPayloadFromArchive(id, item);
+  if (!payload) {
+    return Response.json(
+      { identifier: id, tracks: [], missing: true },
+      { headers: SUCCESS_CACHE_HEADERS },
     );
+  }
 
-  // Keep deterministic order
-  tracks.sort((a, b) => {
-    const at = Number(a.track);
-    const bt = Number(b.track);
-    if (!Number.isNaN(at) && !Number.isNaN(bt)) return at - bt;
-    return String(a.name).localeCompare(String(b.name));
-  });
-
-  const payload = {
-    identifier: id,
-    title: md.title,
-    creator: md.creator,
-    date: md.date,
-    venue: md.venue,
-    tracks,
-  };
   itemCache.set(id, { expiresAt: Date.now() + ITEM_CACHE_TTL_MS, payload });
   return Response.json(payload, { headers: SUCCESS_CACHE_HEADERS });
 }

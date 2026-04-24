@@ -1,61 +1,23 @@
 import { NextRequest } from "next/server";
 
+import {
+  getArchiveItemWithRemoteFallback,
+  getShowMetadataResponsePayload,
+} from "@/lib/archive";
+
 // Route is inherently dynamic (reads search params) but we want the
 // response to be CDN-cacheable via the Cache-Control header below, so we
 // intentionally do NOT set dynamic = "force-dynamic".
 export const maxDuration = 60;
 const SHOW_METADATA_CACHE_TTL_MS = 1000 * 60 * 5;
-const SHOW_METADATA_TIMEOUTS_MS = [8000, 12000, 18000];
-// Archive.org item metadata changes rarely; cache 24h and let /api/revalidate
-// purge via the "ia:item" / "ia:item:{id}" tags when needed.
-const IA_ITEM_REVALIDATE_SECONDS = 60 * 60 * 24;
 const SUCCESS_CACHE_HEADERS = {
-  "Cache-Control": "public, s-maxage=120, stale-while-revalidate=300",
-};
-
-type IaMetadataFile = {
-  name?: string;
-  format?: string;
-  title?: string;
-  track?: string;
-  length?: string;
-};
-
-type IaMetadataResponse = {
-  metadata?: {
-    title?: string;
-    venue?: string;
-    coverage?: string;
-    description?: string;
-  };
-  files?: IaMetadataFile[];
+  "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=604800",
 };
 
 const showMetadataCache = new Map<
   string,
-  { expiresAt: number; payload: IaMetadataResponse }
+  { expiresAt: number; payload: unknown }
 >();
-
-async function fetchArchiveMetadata(id: string, timeoutMs: number): Promise<IaMetadataResponse | null> {
-  let timeout: ReturnType<typeof setTimeout> | null = null;
-  try {
-    const controller = new AbortController();
-    timeout = setTimeout(() => controller.abort(), timeoutMs);
-    const res = await fetch(`https://archive.org/metadata/${encodeURIComponent(id)}`, {
-      next: {
-        revalidate: IA_ITEM_REVALIDATE_SECONDS,
-        tags: ["ia:item", `ia:item:${id}`],
-      },
-      signal: controller.signal,
-    });
-    if (!res.ok) return null;
-    return (await res.json()) as IaMetadataResponse;
-  } catch {
-    return null;
-  } finally {
-    if (timeout) clearTimeout(timeout);
-  }
-}
 
 export async function GET(req: NextRequest) {
   const id = (req.nextUrl.searchParams.get("id") || "").trim();
@@ -68,18 +30,12 @@ export async function GET(req: NextRequest) {
     return Response.json(cached.payload, { headers: SUCCESS_CACHE_HEADERS });
   }
 
-  let payload: IaMetadataResponse | null = null;
-  for (const timeoutMs of SHOW_METADATA_TIMEOUTS_MS) {
-    payload = await fetchArchiveMetadata(id, timeoutMs);
-    if (payload) break;
-  }
+  const item = await getArchiveItemWithRemoteFallback(id);
+  const payload = getShowMetadataResponsePayload(item);
   if (!payload) {
-    if (cached?.payload) {
-      // Serve stale cached metadata when Archive is slow/unavailable.
-      return Response.json(cached.payload, { headers: SUCCESS_CACHE_HEADERS });
-    }
-    return Response.json({ error: "Archive metadata failed" }, { status: 502 });
+    return Response.json({ files: [], missing: true }, { headers: SUCCESS_CACHE_HEADERS });
   }
+
   showMetadataCache.set(id, {
     expiresAt: Date.now() + SHOW_METADATA_CACHE_TTL_MS,
     payload,

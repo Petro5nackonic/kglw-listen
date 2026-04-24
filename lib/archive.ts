@@ -214,18 +214,11 @@ export function buildLocalSearchBlobForDoc(
   return head.toLowerCase();
 }
 
-/**
- * When an identifier is missing from local JSON (or has no files), fetch metadata once from Archive.org.
- * Used server-side only so discovery features keep working if the sync was partial.
- */
-export async function getArchiveFilesWithRemoteFallback(
+async function fetchArchiveItemFromRemote(
   identifier: string,
-): Promise<ArchiveItemFile[] | null> {
+): Promise<ArchiveItemPayload | null> {
   const id = String(identifier || "").trim();
   if (!id) return null;
-  const local = await getArchiveItem(id);
-  if (local?.files?.length) return local.files;
-
   let timeout: ReturnType<typeof setTimeout> | null = null;
   try {
     const controller = new AbortController();
@@ -238,13 +231,55 @@ export async function getArchiveFilesWithRemoteFallback(
       signal: controller.signal,
     });
     if (!res.ok) return null;
-    const data = (await res.json()) as { files?: ArchiveItemFile[] };
-    return Array.isArray(data.files) && data.files.length > 0 ? data.files : null;
+    const data = (await res.json()) as ArchiveItemPayload;
+    const files = Array.isArray(data?.files) ? data.files : [];
+    const metadata = data?.metadata;
+    if (files.length === 0 && !metadata) return null;
+    return { metadata, files };
   } catch {
     return null;
   } finally {
     if (timeout) clearTimeout(timeout);
   }
+}
+
+/**
+ * When an identifier is missing from local JSON (or has no files), fetch metadata once from Archive.org.
+ * Used server-side only so discovery features keep working if the sync was partial.
+ */
+export async function getArchiveFilesWithRemoteFallback(
+  identifier: string,
+): Promise<ArchiveItemFile[] | null> {
+  const id = String(identifier || "").trim();
+  if (!id) return null;
+  const local = await getArchiveItem(id);
+  if (local?.files?.length) return local.files;
+
+  const remote = await fetchArchiveItemFromRemote(id);
+  const files = remote?.files;
+  return Array.isArray(files) && files.length > 0 ? files : null;
+}
+
+/**
+ * Full item payload (metadata + files) preferring local dataset and falling back
+ * to a one-off Archive.org fetch when local is missing/incomplete.
+ */
+export async function getArchiveItemWithRemoteFallback(
+  identifier: string,
+): Promise<ArchiveItemPayload | null> {
+  const id = String(identifier || "").trim();
+  if (!id) return null;
+  const local = await getArchiveItem(id);
+  if (local?.files?.length) return local;
+
+  const remote = await fetchArchiveItemFromRemote(id);
+  if (remote?.files?.length || remote?.metadata) {
+    return {
+      metadata: remote.metadata ?? local?.metadata,
+      files: remote.files ?? local?.files,
+    };
+  }
+  return local || null;
 }
 
 /** Prefer `searchText` on each item; fallback to identifier + doc fields. */
