@@ -203,7 +203,14 @@ function getSongMatchStats(songName, haystackText) {
 }
 const STUDIO_ALBUM_ALLOWLIST_SET = new Set(STUDIO_ALBUM_ALLOWLIST.map((name) => normalize(name)));
 
+// Caches the raw mp3 candidate file list per identifier, independent of the
+// song we're currently resolving. Scoring must happen per-song on every call;
+// previously this cache stored already-filtered/sorted candidates scored for
+// the first song that queried an identifier, which caused subsequent songs to
+// reuse candidates scored for an unrelated song (mismatched audio).
 const identifierCache = new Map();
+// Per-URL validation cache so we don't re-range-GET the same file twice across songs.
+const urlValidationCache = new Map();
 
 async function fetchJson(url, timeoutMs = 15000) {
   const controller = new AbortController();
@@ -415,57 +422,71 @@ function scoreCandidate(songName, candidate) {
 async function resolveIdentifierCandidates(identifier, songName) {
   const id = String(identifier || "").trim();
   if (!id) return [];
-  const cached = identifierCache.get(id);
-  if (cached?.stability === "restricted") return [];
-  if (cached?.stability === "unstable" && !ALLOW_UNSTABLE) return [];
-  if (Array.isArray(cached?.candidates) && cached.candidates.length > 0) {
-    return cached.candidates;
-  }
-
-  const metaRes = await fetchJson(`https://archive.org/metadata/${encodeURIComponent(id)}`, 12000);
-  if (!metaRes.ok) {
-    if (metaRes.status === 401 || metaRes.status === 403) {
-      identifierCache.set(id, { stability: "restricted", candidates: [] });
+  let cached = identifierCache.get(id);
+  if (!cached) {
+    const metaRes = await fetchJson(
+      `https://archive.org/metadata/${encodeURIComponent(id)}`,
+      12000,
+    );
+    if (!metaRes.ok) {
+      if (metaRes.status === 401 || metaRes.status === 403) {
+        identifierCache.set(id, { stability: "restricted", candidates: [] });
+        return [];
+      }
+      if (metaRes.status === 503) {
+        identifierCache.set(id, { stability: "unstable", candidates: [] });
+        return [];
+      }
       return [];
     }
-    if (metaRes.status === 503) {
-      identifierCache.set(id, { stability: "unstable", candidates: [] });
-      return [];
-    }
-    return [];
+    cached = {
+      stability: "unknown",
+      candidates: buildMp3Candidates(id, metaRes.data?.files || []),
+    };
+    identifierCache.set(id, cached);
   }
 
-  const rawCandidates = buildMp3Candidates(id, metaRes.data?.files || [])
+  if (cached.stability === "restricted") return [];
+  if (cached.stability === "unstable" && !ALLOW_UNSTABLE) return [];
+
+  const scored = cached.candidates
     .map((candidate) => ({ candidate, score: scoreCandidate(songName, candidate) }))
     .filter((entry) => Number.isFinite(entry.score))
     .sort((a, b) => b.score - a.score)
     .map((entry) => entry.candidate);
 
-  if (SKIP_VALIDATION) {
-    const quick = rawCandidates.slice(0, Math.max(1, VERSIONS_PER_TRACK));
-    identifierCache.set(id, { stability: "good", candidates: quick });
-    return quick;
-  }
+  if (scored.length === 0) return [];
+
+  if (SKIP_VALIDATION) return scored.slice(0, Math.max(1, VERSIONS_PER_TRACK));
 
   const validated = [];
   let sawUnstable = false;
-  for (const candidate of rawCandidates) {
-    const check = await validateRangeGet(candidate.url);
-    if (check.ok) {
-      validated.push(candidate);
-      continue;
+  for (const candidate of scored) {
+    let status = urlValidationCache.get(candidate.url);
+    if (!status) {
+      const check = await validateRangeGet(candidate.url);
+      if (check.ok) {
+        status = "ok";
+      } else if (check.kind === "restricted") {
+        cached.stability = "restricted";
+        urlValidationCache.set(candidate.url, "bad");
+        return [];
+      } else {
+        if (check.kind === "unstable") sawUnstable = true;
+        status = "bad";
+      }
+      urlValidationCache.set(candidate.url, status);
     }
-    if (check.kind === "restricted") {
-      identifierCache.set(id, { stability: "restricted", candidates: [] });
-      return [];
-    }
-    if (check.kind === "unstable") sawUnstable = true;
+    if (status === "ok") validated.push(candidate);
   }
 
-  const stability = sawUnstable && validated.length === 0 ? "unstable" : "good";
-  const usable = stability === "unstable" && !ALLOW_UNSTABLE ? [] : validated;
-  identifierCache.set(id, { stability, candidates: usable });
-  return usable;
+  if (validated.length > 0) {
+    if (cached.stability !== "restricted") cached.stability = "good";
+  } else if (sawUnstable && cached.stability === "unknown") {
+    cached.stability = "unstable";
+    if (!ALLOW_UNSTABLE) return [];
+  }
+  return validated;
 }
 
 function toTrack(songName, item, candidate) {
