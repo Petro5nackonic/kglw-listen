@@ -24,8 +24,11 @@ type CachedPayload = {
 };
 
 const CACHE_TTL_MS = 1000 * 60 * 60 * 6;
+// The static manifest is regenerated and committed at build time, so the CDN
+// can hold the response for a full day and background-refresh for a week.
+// /api/revalidate tag purges still invalidate instantly on demand.
 const SUCCESS_CACHE_HEADERS = {
-  "Cache-Control": "public, s-maxage=600, stale-while-revalidate=3600",
+  "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=604800",
 };
 
 const PREBUILT_DEFS: Array<{ name: string; tracks: string[]; chainFirstCount?: number }> = [
