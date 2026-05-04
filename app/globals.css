@@ -65,25 +65,45 @@ nextjs-portal {
   }
 }
 
-@keyframes gradient-pan {
-  0% {
-    background-position: 0% 50%;
+/* Random picker: gradient on ::before + transform animation (avoids Tailwind/bg conflicts & minifier quirks). */
+@keyframes randomPickerGradientPan {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
   }
   50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
+    transform: translate3d(-14%, 7%, 0) scale(1.1);
   }
 }
 
-.random-picker-gradient-animated {
-  background-size: 220% 220%;
-  animation: gradient-pan 8s ease-in-out infinite;
+section[data-random-picker] {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+section[data-random-picker]::before {
+  content: "";
+  position: absolute;
+  inset: -35%;
+  z-index: 0;
+  background: linear-gradient(
+    128deg,
+    rgb(22 10 48 / 0.98) 0%,
+    rgb(44 22 92 / 0.97) 18%,
+    rgb(32 18 72 / 0.96) 34%,
+    rgb(16 44 92 / 0.93) 52%,
+    rgb(72 28 88 / 0.95) 72%,
+    rgb(28 12 58 / 0.98) 100%
+  );
+  pointer-events: none;
+  will-change: transform;
+  animation: randomPickerGradientPan 8s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .random-picker-gradient-animated {
+  section[data-random-picker]::before {
     animation: none;
+    transform: none;
   }
 }

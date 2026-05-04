@@ -864,10 +864,9 @@ export default function PlaylistDetailPage() {
       await Promise.all(
         missing.map(async (id) => {
           try {
-            const res = await fetch(
-              `https://archive.org/metadata/${encodeURIComponent(id)}`,
-              { cache: "force-cache" },
-            );
+            const res = await fetch(`/api/ia/show-metadata?id=${encodeURIComponent(id)}`, {
+              cache: "force-cache",
+            });
             if (!res.ok) return;
             const data = (await res.json()) as {
               metadata?: { title?: string; venue?: string; date?: string };

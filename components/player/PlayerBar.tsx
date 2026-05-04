@@ -20,6 +20,19 @@ import { faHeart as faHeartRegular } from "@fortawesome/free-regular-svg-icons";
 import { usePlayer } from "@/components/player/store";
 import { usePlaylists } from "@/components/playlists/store";
 import { toDisplayTrackTitle } from "@/utils/displayTitle";
+import {
+  type PlaybackContext,
+  trackLoveSong,
+  trackNextVersion,
+  trackOpenQueueSheet,
+  trackOpenSongSheet,
+  trackPauseTrack,
+  trackPlayTrack,
+  trackSeek,
+  trackShareSong,
+  trackTrackComplete,
+  trackTrackSkip,
+} from "@/utils/analytics";
 
 const LOVED_SONGS_PLAYLIST_NAME = "Loved Songs";
 
@@ -144,6 +157,31 @@ function pickBestArchiveTrackUrl(
   return bestUrl;
 }
 
+function buildPlaybackContext(
+  track: {
+    title?: string;
+    url?: string;
+    showKey?: string;
+    showDate?: string;
+    venueText?: string;
+    playlistId?: string;
+    playlistSource?: "user" | "prebuilt";
+  } | null | undefined,
+  playlistName?: string,
+): PlaybackContext {
+  if (!track) return {};
+  return {
+    songTitle: toDisplayTrackTitle(String(track.title || "")) || undefined,
+    showKey: String(track.showKey || "").trim() || undefined,
+    showDate: String(track.showDate || "").trim() || undefined,
+    venue: String(track.venueText || "").trim() || undefined,
+    trackUrl: String(track.url || "").trim() || undefined,
+    playlistId: String(track.playlistId || "").trim() || undefined,
+    playlistName: playlistName,
+    playlistSource: track.playlistSource,
+  };
+}
+
 function safeSetMediaSessionAction(
   action: MediaSessionAction,
   handler: MediaSessionActionHandler | null,
@@ -163,6 +201,10 @@ export function PlayerBar() {
   const createPlaylist = usePlaylists((s) => s.createPlaylist);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const preloadAudioRef = useRef<HTMLAudioElement | null>(null);
+  // Tracks the URL we've already reported a `play_track` event for, so we
+  // don't double-count when the same track resumes from pause / buffering.
+  const reportedPlayUrlRef = useRef<string>("");
+  const lastSeekTimeRef = useRef<number>(0);
   const fallbackTriedRef = useRef<Set<string>>(new Set());
   const failedSourceRef = useRef<Set<string>>(new Set());
   const archiveResolvedRef = useRef<Map<string, string>>(new Map());
@@ -478,6 +520,9 @@ export function PlayerBar() {
     audio.src = src;
     audio.load();
     setCurrent(0);
+    // New src means we should treat this as a fresh play_track when audio
+    // actually starts producing sound (onPlaying handler).
+    reportedPlayUrlRef.current = "";
     fallbackTriedRef.current.delete(src);
     failedSourceRef.current.clear();
 
@@ -529,12 +574,36 @@ export function PlayerBar() {
     }
   }, [playing, src, next, currentTrack]);
 
+  function getCurrentPlaybackContext(): PlaybackContext {
+    const track = currentTrackRef.current;
+    const id = String(track?.playlistId || "").trim();
+    const name = id
+      ? playlists.find((p) => p.id === id)?.name
+      : undefined;
+    return buildPlaybackContext(track, name);
+  }
+
+  function trackSkipFromCurrent(direction: "next" | "prev" | "stop") {
+    const audio = audioRef.current;
+    const position = audio?.currentTime || 0;
+    const dur = audio?.duration || 0;
+    trackTrackSkip(getCurrentPlaybackContext(), position, dur, direction);
+  }
+
   function onScrub(e: React.ChangeEvent<HTMLInputElement>) {
     const audio = audioRef.current;
     if (!audio) return;
     const v = Number(e.target.value);
+    const previous = audio.currentTime || 0;
     audio.currentTime = v;
     setCurrent(v);
+    // Throttle seek events to one per ~750ms so a long drag of the scrubber
+    // doesn't fan out into dozens of GA hits.
+    const now = Date.now();
+    if (now - lastSeekTimeRef.current > 750) {
+      lastSeekTimeRef.current = now;
+      trackSeek(getCurrentPlaybackContext(), previous, v);
+    }
   }
 
   function onPrevPress() {
@@ -542,11 +611,29 @@ export function PlayerBar() {
     // First press while the current song has progressed: restart same song.
     // A second press (now near 0:00) moves to the previous song.
     if (audio && Number.isFinite(audio.currentTime) && audio.currentTime > 0.75) {
+      trackSeek(getCurrentPlaybackContext(), audio.currentTime, 0);
       audio.currentTime = 0;
       setCurrent(0);
       return;
     }
+    trackSkipFromCurrent("prev");
     prev?.();
+  }
+
+  function onNextPress() {
+    trackSkipFromCurrent("next");
+    next?.();
+  }
+
+  function onStopPress() {
+    trackSkipFromCurrent("stop");
+    stop?.();
+  }
+
+  function onPausePress() {
+    const audio = audioRef.current;
+    trackPauseTrack(getCurrentPlaybackContext(), audio?.currentTime || 0);
+    pause?.();
   }
 
   const title = useMemo(() => {
@@ -668,6 +755,9 @@ export function PlayerBar() {
     );
     const randomized = choices[Math.floor(Math.random() * choices.length)];
     if (!randomized?.url) return;
+    trackNextVersion(getCurrentPlaybackContext());
+    // Force the next play_track to fire for the swapped variant.
+    reportedPlayUrlRef.current = "";
     const nextQueue = queue.slice();
     nextQueue[index] = {
       ...currentTrack,
@@ -697,6 +787,7 @@ export function PlayerBar() {
 
   function addCurrentSongToLovedSongsPlaylist() {
     if (!currentTrack?.url) return;
+    trackLoveSong(getCurrentPlaybackContext());
     const id = getOrCreateLovedSongsPlaylistId();
     addTrackToPlaylist(id, {
       title: toDisplayTrackTitle(currentTrack.title),
@@ -724,7 +815,7 @@ export function PlayerBar() {
     }
     const displayTitle = toDisplayTrackTitle(currentTrack.title);
     const artist = String(currentTrack.venueText || "").trim() || "King Gizzard & The Lizard Wizard";
-    const album = subtitle || "KGLW Listen";
+    const album = subtitle || "KGLW FM";
     const artwork = artworkSrc
       ? [
           { src: artworkSrc, sizes: "96x96", type: "image/jpeg" },
@@ -792,7 +883,13 @@ export function PlayerBar() {
           if (t > 0) setIsBuffering(false);
         }}
         onLoadedMetadata={(e) => setDuration((e.target as HTMLAudioElement).duration || 0)}
-        onEnded={() => next?.()}
+        onEnded={() => {
+          const audio = audioRef.current;
+          trackTrackComplete(getCurrentPlaybackContext(), audio?.duration || 0);
+          // Reset so the auto-advanced track will fire its own play_track.
+          reportedPlayUrlRef.current = "";
+          next?.();
+        }}
         onLoadStart={() => {
           if (playingRef.current) setIsBuffering(true);
         }}
@@ -808,6 +905,11 @@ export function PlayerBar() {
         }}
         onPlaying={() => {
           setIsBuffering(false);
+          const url = audioRef.current?.currentSrc || src;
+          if (url && reportedPlayUrlRef.current !== url) {
+            reportedPlayUrlRef.current = url;
+            trackPlayTrack(getCurrentPlaybackContext(), "audio_play");
+          }
         }}
         onError={() => {
           const a = audioRef.current;
@@ -994,9 +1096,11 @@ export function PlayerBar() {
                           const songUrl = `${window.location.origin}/show/${encodeURIComponent(currentTrack.showKey)}?song=${encodeURIComponent(toDisplayTrackTitle(currentTrack.title))}`;
                           await navigator.clipboard.writeText(songUrl);
                           setSongShareState("copied");
+                          trackShareSong(getCurrentPlaybackContext(), "copied");
                           setTimeout(() => setSongShareState("idle"), 1500);
                         } catch {
                           setSongShareState("error");
+                          trackShareSong(getCurrentPlaybackContext(), "error");
                           setTimeout(() => setSongShareState("idle"), 1500);
                         }
                       }}
@@ -1183,6 +1287,7 @@ export function PlayerBar() {
                 type="button"
                 className="text-[22px] text-white/85 hover:text-white disabled:opacity-40"
                 onClick={() => {
+                  trackOpenSongSheet(getCurrentPlaybackContext());
                   setSongSheetOpen(true);
                   setShowSongPlaylistPicker(false);
                   setSongShareState("idle");
@@ -1206,7 +1311,10 @@ export function PlayerBar() {
               <button
                 type="button"
                 className="text-[22px] text-white/95 hover:text-white disabled:opacity-40"
-                onClick={() => setQueueSheetOpen(true)}
+                onClick={() => {
+                  trackOpenQueueSheet(getCurrentPlaybackContext(), queue.length);
+                  setQueueSheetOpen(true);
+                }}
                 disabled={!hasQueue}
                 title="Queue"
               >
@@ -1255,7 +1363,7 @@ export function PlayerBar() {
               {playing ? (
                 <button
                   className="leading-none disabled:opacity-40"
-                  onClick={() => pause?.()}
+                  onClick={onPausePress}
                   disabled={!hasQueue}
                   title="Pause"
                 >
@@ -1274,7 +1382,7 @@ export function PlayerBar() {
 
               <button
                 className="leading-none disabled:opacity-40"
-                onClick={() => next?.()}
+                onClick={onNextPress}
                 disabled={!hasQueue}
                 title="Next"
               >
@@ -1284,7 +1392,7 @@ export function PlayerBar() {
             <button
               type="button"
               className="absolute left-0 top-1/2 -translate-y-1/2 text-[19px] text-white/95 hover:text-white disabled:opacity-40"
-              onClick={() => stop?.()}
+              onClick={onStopPress}
               disabled={!hasQueue}
               title="Stop playback"
             >

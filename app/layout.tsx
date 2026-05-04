@@ -3,6 +3,7 @@ import "@fortawesome/fontawesome-svg-core/styles.css";
 import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
 import { PlayerBar } from "@/components/player/PlayerBar";
 import { BottomNav } from "@/components/navigation/BottomNav";
+import { Footer } from "@/components/footer/Footer";
 import { PrebuiltPlaylistsSync } from "@/components/playlists/PrebuiltPlaylistsSync";
 import { config } from "@fortawesome/fontawesome-svg-core";
 import type { Viewport } from "next";
@@ -23,7 +24,7 @@ const robotoCondensed = Roboto_Condensed({
 });
 
 export const metadata = {
-  title: "KGLW-Listen",
+  title: "KGLW FM",
   description: "Live archive player for King Gizzard & The Lizard Wizard",
 };
 
@@ -40,7 +41,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         className={`${roboto.variable} ${robotoCondensed.variable} min-h-screen bg-[#080017] text-white`}
       >
         <PrebuiltPlaylistsSync />
-        <div className="w-full bg-[#080017] pb-44 md:pt-16">{children}</div>
+        <div className="w-full bg-[#080017] pb-44 md:pt-16">
+          {children}
+          <Footer />
+        </div>
         <BottomNav />
         <PlayerBar />
         <GoogleAnalytics measurementId={gaMeasurementId} />

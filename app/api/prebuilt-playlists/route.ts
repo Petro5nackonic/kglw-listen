@@ -362,7 +362,7 @@ async function resolveTrackFromItemApi(
     const id = String(identifier || "").trim();
     if (!id) return null;
     const res = await fetch(`${origin}/api/ia/item?id=${encodeURIComponent(id)}`, {
-      cache: "no-store",
+      next: { revalidate: 60 * 60 * 12, tags: ["ia:item", `ia:item:${id}`] },
     });
     if (!res.ok) return null;
     const data = (await res.json()) as {
@@ -398,7 +398,7 @@ async function resolvePlayableUrl(
     const id = String(identifier || "").trim();
     if (!id) return null;
     const res = await fetch(`${origin}/api/ia/show-metadata?id=${encodeURIComponent(id)}`, {
-      cache: "no-store",
+      next: { revalidate: 60 * 60 * 12, tags: ["ia:item", `ia:item:${id}`] },
     });
     if (!res.ok) return null;
     const data = (await res.json()) as {
@@ -442,7 +442,12 @@ async function resolvePlayableUrl(
 async function fetchLiveVariants(origin: string, songName: string): Promise<Track[]> {
   try {
     const url = `${origin}/api/ia/shows?page=1&sort=most_played&fast=1&query=${encodeURIComponent(songName)}`;
-    const res = await fetch(url, { cache: "no-store" });
+    const res = await fetch(url, {
+      next: {
+        revalidate: 60 * 60 * 6,
+        tags: ["prebuilt-playlists", `prebuilt-song:${songName.toLowerCase()}`],
+      },
+    });
     if (!res.ok) return [];
     const data = (await res.json()) as {
       song?: {

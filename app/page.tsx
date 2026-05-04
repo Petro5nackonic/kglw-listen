@@ -31,6 +31,7 @@ import { usePlaylists } from "@/components/playlists/store";
 import { toDisplayTitle, toDisplayTrackTitle } from "@/utils/displayTitle";
 import { shouldUseDefaultArtwork } from "@/utils/archiveArtwork";
 import { logPlayedPlaylist, logPlayedShow, logPlayedSong } from "@/utils/activityFeed";
+import { idbGet, idbSet, migrateLocalStorageToIdb } from "@/utils/clientIdbCache";
 
 type Continent =
   | "North America"
@@ -176,11 +177,16 @@ const FAVORITE_SHOWS_KEY = "kglw.favoriteShows.v1";
 const RECENT_SHOWS_KEY = "kglw.recentShows.v1";
 const HEARD_SHOWS_KEY = "kglw.heardShows.v1";
 const LOVED_SONGS_PLAYLIST_NAME = "Loved Songs";
-const SHOW_STATS_CACHE_KEY = "kglw.showStats.v3";
-const HOME_SHOWS_CACHE_KEY = "kglw.homeShows.v3";
+const SHOW_STATS_CACHE_KEY = "kglw.showStats.v4";
+const HOME_SHOWS_CACHE_KEY = "kglw.homeShows.v4";
 const HOME_SHOWS_CACHE_MAX_AGE_MS = 1000 * 60 * 10;
-const DISCOVERY_ROWS_CACHE_KEY = "kglw.discoveryRows.v7";
+/** Stale-but-usable home snapshot: paint from IndexedDB, then refresh in the background. */
+const HOME_SHOWS_STALE_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 7;
+const DISCOVERY_ROWS_CACHE_KEY = "kglw.discoveryRows.v9";
 const DISCOVERY_ROWS_CACHE_MAX_AGE_MS = 1000 * 60 * 10;
+const LEGACY_HOME_SHOWS_LS = "kglw.homeShows.v3";
+const LEGACY_DISCOVERY_ROWS_LS = "kglw.discoveryRows.v8";
+const LEGACY_SHOW_STATS_LS = "kglw.showStats.v3";
 const DEFAULT_ARTWORK_SRC = "/api/default-artwork";
 const PREBUILT_PLAYLIST_NAME_SET = new Set([
   "flight b741 live comp.",
@@ -464,7 +470,7 @@ async function fetchShowPlaybackStatsClient(identifier: string): Promise<ShowPla
       {
         ttlMs: 1000 * 60 * 10,
         timeoutMs: 10000,
-        cacheKey: `show-stats:${identifier}`,
+        cacheKey: `show-stats:v2:${identifier}`,
       },
     );
     return {
@@ -491,7 +497,7 @@ async function fetchShowBoundaryMatchClient(
       {
         ttlMs: 1000 * 60 * 5,
         timeoutMs: 10000,
-        cacheKey: `show-boundary:${identifier}:${boundarySong.toLowerCase()}`,
+        cacheKey: `show-boundary:v2:${identifier}:${boundarySong.toLowerCase()}`,
       },
     );
     return {
@@ -1221,14 +1227,21 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
     return null;
   }
 
-  async function loadPage(p: number, mode: "append" | "replace") {
-    if (loading) return;
+  async function loadPage(
+    p: number,
+    mode: "append" | "replace",
+    options?: { background?: boolean },
+  ) {
+    const background = Boolean(options?.background);
+    if (loading && !background) return;
     if (debouncedQuery.length >= 3 && mode === "replace") {
       // Query mode is driven by song search API requests below.
       return;
     }
-    setLoading(true);
-    setError(null);
+    if (!background) {
+      setLoading(true);
+      setError(null);
+    }
 
     try {
       const url = buildUrl(p);
@@ -1283,18 +1296,16 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
           songTotal: data.song?.total || 0,
           facets: data.facets,
         };
-        try {
-          localStorage.setItem(HOME_SHOWS_CACHE_KEY, JSON.stringify(payload));
-        } catch {
-          // Ignore storage quota / serialization errors.
-        }
+        void idbSet(HOME_SHOWS_CACHE_KEY, payload);
       }
     } catch (e: unknown) {
-      console.error("Failed to load shows page", { page: p, mode, error: e });
-      if (e instanceof Error) setError(e.message);
-      else setError("Failed to load shows");
+      if (!background) {
+        console.error("Failed to load shows page", { page: p, mode, error: e });
+        if (e instanceof Error) setError(e.message);
+        else setError("Failed to load shows");
+      }
     } finally {
-      setLoading(false);
+      if (!background) setLoading(false);
     }
   }
 
@@ -1315,46 +1326,64 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
       return;
     }
     didHydrateInitialShowsRef.current = true;
-    let hydrated = false;
-    try {
-      const raw = localStorage.getItem(HOME_SHOWS_CACHE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as HomeShowsCachePayload;
-        const isFresh =
-          typeof parsed?.savedAt === "number" &&
-          Date.now() - parsed.savedAt <= HOME_SHOWS_CACHE_MAX_AGE_MS;
-        const validItems = Array.isArray(parsed?.items) ? parsed.items : [];
+    let cancelled = false;
+
+    function applyHomeSnapshot(parsed: HomeShowsCachePayload) {
+      const validItems = Array.isArray(parsed?.items) ? parsed.items : [];
+      const hasAlbumFacetData =
+        Object.keys(parsed.facets?.albumShowKeys || {}).length > 0;
+      setShows(validItems);
+      setHasMore(Boolean(parsed.hasMore));
+      setPage(1);
+      setVenueTotal(Number(parsed.venueTotal || 0));
+      setSongShows(Array.isArray(parsed.songItems) ? parsed.songItems : []);
+      setSongTotal(Number(parsed.songTotal || 0));
+      if (parsed.facets?.years) setYearFacet(parsed.facets.years);
+      if (parsed.facets?.continents) setContinentFacet(parsed.facets.continents);
+      if (parsed.facets?.cities) setCityFacet(parsed.facets.cities);
+      setCityMetaFacet(parsed.facets?.citiesMeta || {});
+      if (parsed.facets?.showTypes) setShowTypeFacet(parsed.facets.showTypes);
+      if (hasAlbumFacetData) {
+        if (parsed.facets?.albums) setAlbumFacet(parsed.facets.albums);
+        setAlbumShowKeysFacet(parsed.facets?.albumShowKeys || {});
+        setAlbumUniverseCount(Number(parsed.facets?.albumUniverseCount || 0));
+      }
+    }
+
+    void (async () => {
+      let hydrated = false;
+      try {
+        await migrateLocalStorageToIdb(LEGACY_HOME_SHOWS_LS, HOME_SHOWS_CACHE_KEY);
+        const parsed = await idbGet<HomeShowsCachePayload>(HOME_SHOWS_CACHE_KEY);
         if (
-          isFresh &&
+          parsed &&
           parsed?.sort === "newest" &&
-          validItems.length > 0 &&
-          canUseHomeCacheForCurrentFilters()
+          Array.isArray(parsed?.items) &&
+          parsed.items.length > 0 &&
+          canUseHomeCacheForCurrentFilters() &&
+          typeof parsed.savedAt === "number"
         ) {
-          const hasAlbumFacetData =
-            Object.keys(parsed.facets?.albumShowKeys || {}).length > 0;
-          hydrated = true;
-          setShows(validItems);
-          setHasMore(Boolean(parsed.hasMore));
-          setPage(1);
-          setVenueTotal(Number(parsed.venueTotal || 0));
-          setSongShows(Array.isArray(parsed.songItems) ? parsed.songItems : []);
-          setSongTotal(Number(parsed.songTotal || 0));
-          if (parsed.facets?.years) setYearFacet(parsed.facets.years);
-          if (parsed.facets?.continents) setContinentFacet(parsed.facets.continents);
-          if (parsed.facets?.cities) setCityFacet(parsed.facets.cities);
-          setCityMetaFacet(parsed.facets?.citiesMeta || {});
-          if (parsed.facets?.showTypes) setShowTypeFacet(parsed.facets.showTypes);
-          if (hasAlbumFacetData) {
-            if (parsed.facets?.albums) setAlbumFacet(parsed.facets.albums);
-            setAlbumShowKeysFacet(parsed.facets?.albumShowKeys || {});
-            setAlbumUniverseCount(Number(parsed.facets?.albumUniverseCount || 0));
+          const age = Date.now() - parsed.savedAt;
+          const isFresh = age <= HOME_SHOWS_CACHE_MAX_AGE_MS;
+          const isStaleButUsable = age <= HOME_SHOWS_STALE_MAX_AGE_MS;
+          if (isFresh || isStaleButUsable) {
+            applyHomeSnapshot(parsed);
+            hydrated = true;
+            if (isStaleButUsable && !isFresh) {
+              void loadPage(1, "replace", { background: true });
+            }
           }
         }
+      } catch {
+        // Ignore bad cache payload and fetch normally.
       }
-    } catch {
-      // Ignore bad cache payload and fetch normally.
-    }
-    if (!hydrated) loadPage(1, "replace");
+      if (cancelled) return;
+      if (!hydrated) loadPage(1, "replace");
+    })();
+
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1377,58 +1406,61 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
   }, []);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(SHOW_STATS_CACHE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as unknown;
-      if (!parsed || typeof parsed !== "object") return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        await migrateLocalStorageToIdb(LEGACY_SHOW_STATS_LS, SHOW_STATS_CACHE_KEY);
+        const parsed = await idbGet<Record<string, unknown>>(SHOW_STATS_CACHE_KEY);
+        if (cancelled || !parsed || typeof parsed !== "object") return;
 
-      const cleaned: Record<string, ShowPlaybackStats> = {};
-      for (const [id, value] of Object.entries(parsed as Record<string, unknown>)) {
-        if (!value || typeof value !== "object") continue;
-        const maybe = value as {
-          showLengthSeconds?: unknown;
-          showTrackCount?: unknown;
-        };
-        const showLengthSeconds =
-          typeof maybe.showLengthSeconds === "number" &&
-          Number.isFinite(maybe.showLengthSeconds)
-            ? maybe.showLengthSeconds
-            : null;
-        const showTrackCount =
-          typeof maybe.showTrackCount === "number" &&
-          Number.isFinite(maybe.showTrackCount)
-            ? maybe.showTrackCount
-            : null;
-        if (showLengthSeconds == null && showTrackCount == null) continue;
-        cleaned[id] = { showLengthSeconds, showTrackCount };
+        const cleaned: Record<string, ShowPlaybackStats> = {};
+        for (const [id, value] of Object.entries(parsed)) {
+          if (!value || typeof value !== "object") continue;
+          const maybe = value as {
+            showLengthSeconds?: unknown;
+            showTrackCount?: unknown;
+          };
+          const showLengthSeconds =
+            typeof maybe.showLengthSeconds === "number" &&
+            Number.isFinite(maybe.showLengthSeconds)
+              ? maybe.showLengthSeconds
+              : null;
+          const showTrackCount =
+            typeof maybe.showTrackCount === "number" &&
+            Number.isFinite(maybe.showTrackCount)
+              ? maybe.showTrackCount
+              : null;
+          if (showLengthSeconds == null && showTrackCount == null) continue;
+          cleaned[id] = { showLengthSeconds, showTrackCount };
+        }
+        if (Object.keys(cleaned).length > 0) {
+          setStatsById((prev) => ({ ...cleaned, ...prev }));
+        }
+      } catch {
+        // Ignore bad cache payloads and continue normally.
       }
-      if (Object.keys(cleaned).length > 0) {
-        setStatsById((prev) => ({ ...cleaned, ...prev }));
-      }
-    } catch {
-      // Ignore bad cache payloads and continue normally.
-    }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
-    try {
-      // Persist only computed values so transient nulls don't get stuck forever.
-      const persistable = Object.fromEntries(
-        Object.entries(statsById).filter(([, stats]) => {
-          const hasLength =
-            typeof stats?.showLengthSeconds === "number" &&
-            Number.isFinite(stats.showLengthSeconds);
-          const hasTrackCount =
-            typeof stats?.showTrackCount === "number" &&
-            Number.isFinite(stats.showTrackCount);
-          return hasLength || hasTrackCount;
-        }),
-      );
-      localStorage.setItem(SHOW_STATS_CACHE_KEY, JSON.stringify(persistable));
-    } catch {
-      // Ignore storage quota / serialization errors.
-    }
+    const persistable = Object.fromEntries(
+      Object.entries(statsById).filter(([, stats]) => {
+        const hasLength =
+          typeof stats?.showLengthSeconds === "number" &&
+          Number.isFinite(stats.showLengthSeconds);
+        const hasTrackCount =
+          typeof stats?.showTrackCount === "number" &&
+          Number.isFinite(stats.showTrackCount);
+        return hasLength || hasTrackCount;
+      }),
+    );
+    const t = window.setTimeout(() => {
+      void idbSet(SHOW_STATS_CACHE_KEY, persistable);
+    }, 450);
+    return () => window.clearTimeout(t);
   }, [statsById]);
 
   // Debounce search so we don't re-fetch on every single keystroke.
@@ -1464,10 +1496,14 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
       setMicrotonalityLoading(false);
       return;
     }
-    try {
-      const raw = localStorage.getItem(DISCOVERY_ROWS_CACHE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as DiscoveryRowsCachePayload;
+    let alive = true;
+
+    void (async () => {
+      try {
+        await migrateLocalStorageToIdb(LEGACY_DISCOVERY_ROWS_LS, DISCOVERY_ROWS_CACHE_KEY);
+        if (!alive) return;
+        const parsed = await idbGet<DiscoveryRowsCachePayload>(DISCOVERY_ROWS_CACHE_KEY);
+        if (parsed) {
         const isFresh =
           typeof parsed?.savedAt === "number" &&
           Date.now() - parsed.savedAt <= DISCOVERY_ROWS_CACHE_MAX_AGE_MS;
@@ -1485,13 +1521,11 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
             ? parsed.microtonalityShows
             : [];
           const cachedMetal = Array.isArray(parsed?.metalShows) ? parsed.metalShows : [];
-          if (
-            cachedTakingFlight.length > 0 ||
-            cachedDripDrip.length > 0 ||
-            cachedJamSpam.length > 0 ||
-            cachedMicrotonality.length > 0 ||
-            cachedMetal.length > 0
-          ) {
+          const dripOk = cachedDripDrip.length > 0;
+          const jamOk = cachedJamSpam.length > 0;
+          const microOk = !SHOW_MICROTONALITY_SECTION || cachedMicrotonality.length > 0;
+          const metalOk = !SHOW_METAL_SECTION || cachedMetal.length > 0;
+          if (dripOk && jamOk && microOk && metalOk) {
             setTakingFlightShows(cachedTakingFlight);
             setDripDripShows(cachedDripDrip);
             setJamSpamShows(cachedJamSpam);
@@ -1505,11 +1539,13 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
             return;
           }
         }
+        }
+      } catch {
+        // Ignore bad cache payload and fetch normally.
       }
-    } catch {
-      // Ignore bad cache payload and fetch normally.
-    }
-    let alive = true;
+      if (alive) void loadDiscoveryRows();
+    })();
+
     async function loadDiscoveryRows() {
       setTakingFlightLoading(true);
       setDripDripLoading(true);
@@ -1768,21 +1804,17 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
         setMetalLoading(false);
       }
       if (!alive) return;
-      try {
-        const payload: DiscoveryRowsCachePayload = {
-          savedAt: Date.now(),
-          takingFlightShows: nextTakingFlightShows,
-          dripDripShows: nextDripDripShows,
-          jamSpamShows: nextJamSpamShows,
-          microtonalityShows: nextMicrotonalityShows,
-          metalShows: nextMetalShows,
-        };
-        localStorage.setItem(DISCOVERY_ROWS_CACHE_KEY, JSON.stringify(payload));
-      } catch {
-        // Ignore storage errors.
-      }
+      const payload: DiscoveryRowsCachePayload = {
+        savedAt: Date.now(),
+        takingFlightShows: nextTakingFlightShows,
+        dripDripShows: nextDripDripShows,
+        jamSpamShows: nextJamSpamShows,
+        microtonalityShows: nextMicrotonalityShows,
+        metalShows: nextMetalShows,
+      };
+      void idbSet(DISCOVERY_ROWS_CACHE_KEY, payload);
     }
-    void loadDiscoveryRows();
+
     return () => {
       alive = false;
     };
@@ -3554,13 +3586,13 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
 
   function renderRandomPickerYearFilters() {
     return (
-      <div className="mx-auto mt-4 w-full max-w-4xl px-2">
+      <div className="mx-auto mt-4 w-full max-w-xl px-2">
         <div className="mb-2 text-left text-[13px] text-white/85 [font-family:var(--font-roboto-condensed)]">
           Years
         </div>
         {randomPickerYears.length > 0 ? (
           <>
-            <div className="flex h-[64px] items-end gap-[3px] rounded-[10px] border border-white/10 bg-[#0b0320]/70 px-2 py-2">
+            <div className="flex h-[64px] items-end gap-[3px] rounded-[10px] border border-white/10 bg-white/10 px-2 py-2">
               {randomPickerYears.map((year) => {
                 const count = randomPickerCountsByYear.get(year) || 0;
                 const inRange =
@@ -3633,15 +3665,17 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
                 </div>
               </div>
             ) : null}
-            <div className="mt-3 text-center">
-              <button
-                type="button"
-                className="text-[13px] text-[#b67bff] [font-family:var(--font-roboto-condensed)] hover:text-[#c79aff]"
-                onClick={() => resetRandomPickerYearFilters()}
-              >
-                Reset filters
-              </button>
-            </div>
+            {randomPickerHasCustomYearRange ? (
+              <div className="mt-3 text-center">
+                <button
+                  type="button"
+                  className="text-[13px] text-[#b67bff] [font-family:var(--font-roboto-condensed)] hover:text-[#c79aff]"
+                  onClick={() => resetRandomPickerYearFilters()}
+                >
+                  Reset filters
+                </button>
+              </div>
+            ) : null}
           </>
         ) : (
           <div className="text-[12px] text-white/65 [font-family:var(--font-roboto-condensed)]">
@@ -3655,8 +3689,8 @@ export function HomePage({ showOnlyShows = false }: { showOnlyShows?: boolean })
   return (
     <main className="min-h-screen bg-[#080017] text-white">
       {!showOnlyShows ? (
-        <section className="random-picker-gradient-animated border-y border-white/12 bg-gradient-to-br from-[#ff8a00]/45 via-[#ff2d55]/35 to-[#7a2cff]/45">
-          <div className="mx-auto w-full max-w-[1140px] px-4 py-8 md:px-6 md:py-10">
+        <section data-random-picker className="border-y border-white/12">
+          <div className="relative z-10 mx-auto w-full max-w-[1140px] px-4 py-8 md:px-6 md:py-10">
             <div className="mx-auto max-w-4xl text-center">
               <h2 className="text-[34px] leading-[1.05] font-semibold text-white [font-family:var(--font-roboto-condensed)] md:text-[46px]">
                 Random show picker

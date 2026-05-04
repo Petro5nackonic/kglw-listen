@@ -1,17 +1,23 @@
 import { NextRequest } from "next/server";
 
+import {
+  computeShowPlaybackStatsFromFiles,
+  getArchiveFilesWithRemoteFallback,
+} from "@/lib/archive";
+
 // Route is inherently dynamic (reads search params); keep it cache-friendly
-// via Next's Data Cache on the upstream fetch rather than force-dynamic.
+// via Cache-Control headers rather than force-dynamic.
 
-// Archive.org item metadata changes rarely — cache for 24h and let
-// /api/revalidate purge the "ia:item" / "ia:item:{id}" tag on demand.
-const IA_ITEM_REVALIDATE_SECONDS = 60 * 60 * 24;
+const SUCCESS_CACHE_HEADERS = {
+  "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=604800",
+};
 
-type IaMetadataFile = {
-  name?: string;
-  title?: string;
-  track?: string;
-  length?: string | number;
+const EMPTY_STATS = {
+  showLengthSeconds: null as number | null,
+  showTrackCount: null as number | null,
+  firstTrackTitle: null as string | null,
+  lastTrackTitle: null as string | null,
+  boundarySongMatch: false,
 };
 
 function normalizeSongText(v: string): string {
@@ -50,7 +56,9 @@ function trackSetRank(fileName: string): number {
   if (n.includes("audience") || n.includes("matrix") || n.includes("soundboard")) return 3;
   if (n.includes("og")) return 10;
   if (n.includes("original")) return 11;
-  if (n.includes("4ch") || n.includes("4-ch") || n.includes("4 channel") || n.includes("4-channel")) return 12;
+  if (n.includes("4ch") || n.includes("4-ch") || n.includes("4 channel") || n.includes("4-channel")) {
+    return 12;
+  }
   return 5;
 }
 
@@ -60,72 +68,32 @@ function parseTrackNum(t?: string): number {
   return m ? Number(m[1]) : Number.POSITIVE_INFINITY;
 }
 
-function parseLengthToSeconds(raw: unknown): number | null {
-  if (raw == null) return null;
-  const s = String(raw).trim();
-  if (!s) return null;
-  if (/^\d+(\.\d+)?$/.test(s)) {
-    const n = Number(s);
-    if (Number.isFinite(n) && n >= 0) return Math.floor(n);
-  }
-  const parts = s.split(":").map((p) => p.trim());
-  if (parts.some((p) => p === "" || !/^\d+$/.test(p))) return null;
-  if (parts.length === 2) return Number(parts[0]) * 60 + Number(parts[1]);
-  if (parts.length === 3) {
-    return Number(parts[0]) * 3600 + Number(parts[1]) * 60 + Number(parts[2]);
-  }
-  return null;
-}
-
-async function fetchMetadataWithTimeout(identifier: string, timeoutMs: number) {
-  let timeout: ReturnType<typeof setTimeout> | null = null;
-  try {
-    const controller = new AbortController();
-    timeout = setTimeout(() => controller.abort(), timeoutMs);
-    const res = await fetch(
-      `https://archive.org/metadata/${encodeURIComponent(identifier)}`,
-      {
-        next: {
-          revalidate: IA_ITEM_REVALIDATE_SECONDS,
-          tags: ["ia:item", `ia:item:${identifier}`],
-        },
-        signal: controller.signal,
-      },
-    );
-    if (!res.ok) return null;
-    return (await res.json()) as { files?: IaMetadataFile[] };
-  } catch {
-    return null;
-  } finally {
-    if (timeout) clearTimeout(timeout);
-  }
-}
-
 export async function GET(req: NextRequest) {
   const identifier = (req.nextUrl.searchParams.get("identifier") || "").trim();
   const boundarySong = (req.nextUrl.searchParams.get("boundarySong") || "").trim();
   const normalizedBoundarySong = normalizeSongText(boundarySong);
   if (!identifier) {
     return Response.json(
-      { showLengthSeconds: null, showTrackCount: null, error: "Missing identifier" },
+      { ...EMPTY_STATS, error: "Missing identifier" },
       { status: 400 },
     );
   }
 
-  const metadata =
-    (await fetchMetadataWithTimeout(identifier, 5000)) ||
-    (await fetchMetadataWithTimeout(identifier, 9000));
-  if (!metadata) {
-    return Response.json({ showLengthSeconds: null, showTrackCount: null });
+  const files =
+    (await getArchiveFilesWithRemoteFallback(identifier)) ||
+    null;
+
+  if (!files?.length) {
+    return Response.json(EMPTY_STATS, { headers: SUCCESS_CACHE_HEADERS });
   }
 
-  const files = Array.isArray(metadata.files) ? metadata.files : [];
+  const stats = computeShowPlaybackStatsFromFiles(files);
   const audioAll = files.filter((f) => {
     const name = String(f?.name || "");
     return Boolean(name) && isAudioName(name);
   });
   if (audioAll.length === 0) {
-    return Response.json({ showLengthSeconds: null, showTrackCount: null });
+    return Response.json(EMPTY_STATS, { headers: SUCCESS_CACHE_HEADERS });
   }
 
   const bestSet = Math.min(...audioAll.map((f) => trackSetRank(String(f?.name || ""))));
@@ -142,7 +110,6 @@ export async function GET(req: NextRequest) {
 
   const seen = new Set<string>();
   const orderedTrackTitles: string[] = [];
-  let total = 0;
   for (const f of picked) {
     const title = String(f?.title || f?.name || "");
     const lenRaw = String(f?.length || "");
@@ -150,8 +117,6 @@ export async function GET(req: NextRequest) {
     if (seen.has(key)) continue;
     seen.add(key);
     orderedTrackTitles.push(title);
-    const sec = parseLengthToSeconds(f?.length);
-    if (sec != null) total += sec;
   }
 
   const firstTrackTitle = orderedTrackTitles[0] || null;
@@ -166,11 +131,14 @@ export async function GET(req: NextRequest) {
       (lastNorm.includes(normalizedBoundarySong) ||
         normalizedBoundarySong.includes(lastNorm)));
 
-  return Response.json({
-    showLengthSeconds: total > 0 ? total : null,
-    showTrackCount: seen.size > 0 ? seen.size : null,
-    firstTrackTitle,
-    lastTrackTitle,
-    boundarySongMatch,
-  });
+  return Response.json(
+    {
+      showLengthSeconds: stats.showLengthSeconds,
+      showTrackCount: stats.showTrackCount,
+      firstTrackTitle,
+      lastTrackTitle,
+      boundarySongMatch,
+    },
+    { headers: SUCCESS_CACHE_HEADERS },
+  );
 }

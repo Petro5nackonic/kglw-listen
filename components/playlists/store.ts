@@ -5,6 +5,17 @@ import type { Track } from "@/components/player/store";
 import type { Playlist, PlaylistSlot } from "@/components/playlists/types";
 import { moveItem, safeUUID } from "@/components/playlists/utils";
 import { toDisplayTrackTitle } from "@/utils/displayTitle";
+import {
+  trackChainCreate,
+  trackChainRemove,
+  trackPlaylistCreate,
+  trackPlaylistDelete,
+  trackPlaylistDuplicate,
+  trackPlaylistRename,
+  trackSlotVariantsSet,
+  trackTrackAddToPlaylist,
+  trackTrackRemoveFromPlaylist,
+} from "@/utils/analytics";
 import staticPrebuiltManifest from "@/data/prebuilt-playlists.static.json";
 
 type PlaylistsState = {
@@ -551,18 +562,24 @@ export const usePlaylists = create<PlaylistsState>()(
         const normalized = normalizeName(name);
         const id = safeUUID();
         const now = Date.now();
+        const source = options?.source || "user";
 
         const playlist: Playlist = {
           id,
           name: normalized || "New playlist",
           createdAt: now,
           updatedAt: now,
-          source: options?.source || "user",
+          source,
           prebuiltKind: options?.prebuiltKind,
           slots: [],
         };
 
         set({ playlists: [playlist, ...get().playlists] });
+        // Only count user-initiated creations; prebuilt seeders fire on app
+        // startup and would otherwise pollute the metric.
+        if (source === "user") {
+          trackPlaylistCreate(playlist.name, source);
+        }
         return id;
       },
 
@@ -718,6 +735,7 @@ export const usePlaylists = create<PlaylistsState>()(
           slots,
         };
         set({ playlists: [duplicate, ...get().playlists] });
+        trackPlaylistDuplicate(source.name, normalizedName);
         return id;
       },
 
@@ -1654,6 +1672,7 @@ export const usePlaylists = create<PlaylistsState>()(
         const normalized = normalizeName(name);
         if (!normalized) return;
 
+        const previous = get().playlists.find((p) => p.id === playlistId);
         set({
           playlists: get().playlists.map((p) =>
             p.id === playlistId
@@ -1661,6 +1680,9 @@ export const usePlaylists = create<PlaylistsState>()(
               : p,
           ),
         });
+        if (previous && previous.name !== normalized) {
+          trackPlaylistRename(playlistId, previous.name, normalized);
+        }
       },
 
       deletePlaylist: (playlistId) => {
@@ -1674,10 +1696,14 @@ export const usePlaylists = create<PlaylistsState>()(
           playlists: get().playlists.filter((p) => p.id !== playlistId),
           dismissedPrebuiltNames: nextDismissed,
         });
+        if (target) {
+          trackPlaylistDelete(target.name, target.source, target.slots.length);
+        }
       },
 
       addTrack: (playlistId, track) => {
         let result: "added" | "fused" | "exists" = "exists";
+        const before = get().playlists.find((p) => p.id === playlistId);
         set({
           playlists: get().playlists.map((p) => {
             if (p.id !== playlistId) return p;
@@ -1725,6 +1751,17 @@ export const usePlaylists = create<PlaylistsState>()(
             };
           }),
         });
+        // Prebuilt seeders call addTrack thousands of times during background
+        // hydration; only emit analytics for user-owned playlists.
+        if (before && !isPrebuiltPlaylist(before)) {
+          trackTrackAddToPlaylist({
+            playlistName: before.name,
+            playlistSource: before.source,
+            songTitle: toDisplayTrackTitle(track.title),
+            showKey: track.showKey,
+            result,
+          });
+        }
         return result;
       },
 
@@ -1734,6 +1771,7 @@ export const usePlaylists = create<PlaylistsState>()(
       },
 
       removeTrack: (playlistId, playlistSlotId) => {
+        const before = get().playlists.find((p) => p.id === playlistId);
         set({
           playlists: get().playlists.map((p) =>
             p.id === playlistId
@@ -1745,6 +1783,9 @@ export const usePlaylists = create<PlaylistsState>()(
               : p,
           ),
         });
+        if (before && !isPrebuiltPlaylist(before)) {
+          trackTrackRemoveFromPlaylist(before.name);
+        }
       },
       removeTrackVariantByUrl: (playlistId, trackUrl) => {
         const targetUrl = String(trackUrl || "").trim();
@@ -1785,6 +1826,10 @@ export const usePlaylists = create<PlaylistsState>()(
         return removed;
       },
       setSlotVariants: (playlistId, playlistSlotId, tracks) => {
+        const target = get().playlists.find((p) => p.id === playlistId);
+        if (target && !isPrebuiltPlaylist(target)) {
+          trackSlotVariantsSet(target.name, Array.isArray(tracks) ? tracks.length : 0);
+        }
         const cleaned = Array.isArray(tracks)
           ? tracks.filter((track) => Boolean(String(track?.url || "").trim()))
           : [];
@@ -1923,6 +1968,10 @@ export const usePlaylists = create<PlaylistsState>()(
       setChain: (playlistId, slotIds) => {
         const unique = Array.from(new Set(slotIds.filter(Boolean)));
         if (unique.length < 2) return;
+        const target = get().playlists.find((p) => p.id === playlistId);
+        if (target && !isPrebuiltPlaylist(target)) {
+          trackChainCreate(target.name, unique.length);
+        }
 
         set({
           playlists: get().playlists.map((p) => {
@@ -2018,6 +2067,10 @@ export const usePlaylists = create<PlaylistsState>()(
 
       snapChain: (playlistId, groupId) => {
         if (!groupId) return;
+        const target = get().playlists.find((p) => p.id === playlistId);
+        if (target && !isPrebuiltPlaylist(target)) {
+          trackChainRemove(target.name);
+        }
         set({
           playlists: get().playlists.map((p) => {
             if (p.id !== playlistId) return p;

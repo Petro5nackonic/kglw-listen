@@ -10,6 +10,7 @@ import {
   faMusicMagnifyingGlass,
 } from "@fortawesome/pro-solid-svg-icons";
 import { usePlaylists } from "@/components/playlists/store";
+import { trackNavClick } from "@/utils/analytics";
 
 export function BottomNav() {
   const pathname = usePathname();
@@ -52,6 +53,7 @@ export function BottomNav() {
               key={item.href}
               href={item.href}
               aria-label={item.label}
+              onClick={() => trackNavClick(item.label, item.href)}
               className={`flex h-[36px] flex-1 flex-col items-center justify-center gap-1 rounded-[24px] px-2 text-white transition-colors md:h-10 md:min-w-[112px] md:flex-row md:gap-2 md:rounded-[12px] md:px-4 ${
                 item.active
                   ? "bg-[#351574] shadow-[1px_2px_8px_0px_rgba(0,0,0,0.22)]"
